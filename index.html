@@ -5836,7 +5836,7 @@ document.addEventListener('click', function(e) {
 // 单个商品进销存计算
 function invCalc(item, type) {
     // 总入库数量（采购/进货）
-    var tp = item.purchases.reduce(function(s, p) { return s + p.qty; }, 0);
+    var tp = item.purchases.filter(function(p) { return p.qty > 0; }).reduce(function(s, p) { return s + p.qty; }, 0);
 
     // ===== 茗茶计算 =====
     // 茗茶比较特殊：按杯/壶卖，按克/包进货
