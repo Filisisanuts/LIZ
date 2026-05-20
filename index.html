@@ -5919,55 +5919,104 @@ function invCalcMon(item, type, ym) {
 // 仓库管理界面
 function rWH() {
     var items = DB.whItems || [];
+    var cats = getWHCats();
     var lowCount = items.filter(function(i) {
         return i.safeStock > 0 && i.stock <= i.safeStock;
     }).length;
 
-    // 顶部按钮
     var h = '<div class="brow" style="margin-bottom:16px">';
     h += '<button class="btn" onclick="showAddWH()">+添加</button> ';
     h += '<button class="btn g" onclick="whMoveAll(1)">入库</button> ';
-    h += '<button class="btn" onclick="whMoveAll(-1)">出库</button>';
+    h += '<button class="btn" onclick="whMoveAll(-1)">出库</button> ';
+    h += '<button class="btn" onclick="showWHCats()">分类管理</button>';
     h += '</div>';
 
-    // 汇总卡片
     h += '<div class="cards">';
     h += '<div class="card"><div class="card-l">品类</div><div class="card-v ac">' + items.length + '</div></div>';
     h += '<div class="card"><div class="card-l">低库存预警</div>';
     h += '<div class="card-v ' + (lowCount > 0 ? 'rd' : 'gn') + '">' + lowCount + '</div></div>';
     h += '</div>';
 
-    // 列表
     if (!items.length) {
         h += '<div style="text-align:center;padding:30px;color:var(--tx-m)">暂无</div>';
     } else {
-        h += '<div class="tw"><table>';
-        h += '<tr><th>品名</th><th>分类</th><th>单位</th><th>库存</th><th>安全库存</th><th>状态</th><th>操作</th></tr>';
-
+        // 按分类分组
+        var groups = {};
         items.forEach(function(item) {
-            var status = '-';
-            if (item.safeStock > 0) {
-                status = item.stock <= item.safeStock
-                    ? '<span class="badge rd">低</span>'
-                    : '<span class="badge gn">正常</span>';
-            }
-
-            h += '<tr>';
-            h += '<td>' + item.name + '</td>';
-            h += '<td>' + (item.category || '-') + '</td>';
-            h += '<td>' + (item.unit || '-') + '</td>';
-            h += '<td class="nr">' + item.stock + '</td>';
-            h += '<td class="nr">' + (item.safeStock || '-') + '</td>';
-            h += '<td>' + status + '</td>';
-            h += '<td>';
-            h += '<button class="btn s" onclick="showEditWH(\'' + item.id + '\')">编</button> ';
-            h += '<button class="btn s" onclick="whDetail(\'' + item.id + '\')">详</button> ';
-            h += '<button class="btn s d" onclick="delWH(\'' + item.id + '\')">×</button>';
-            h += '</td>';
-            h += '</tr>';
+            var cat = item.category || '未分类';
+            if (!groups[cat]) groups[cat] = [];
+            groups[cat].push(item);
         });
 
-        h += '</table></div>';
+        // 分为有低库存的分类和无低库存的分类
+        var lowCats = [];
+        var normalCats = [];
+
+        Object.keys(groups).forEach(function(cat) {
+            var hasLow = groups[cat].some(function(i) { return i.safeStock > 0 && i.stock <= i.safeStock; });
+            if (hasLow) lowCats.push(cat);
+            else normalCats.push(cat);
+        });
+
+        // 有低库存的分类：按低库存数量降序
+        lowCats.sort(function(a, b) {
+            var aLow = groups[a].filter(function(i) { return i.safeStock > 0 && i.stock <= i.safeStock; }).length;
+            var bLow = groups[b].filter(function(i) { return i.safeStock > 0 && i.stock <= i.safeStock; }).length;
+            return bLow - aLow;
+        });
+
+        // 无低库存的分类：按物品数量降序
+        normalCats.sort(function(a, b) {
+            return groups[b].length - groups[a].length;
+        });
+
+        // 有低库存的分类排最前面，无低库存的排后面
+        var sortedCats = lowCats.concat(normalCats);
+
+        // 渲染每个分类
+        sortedCats.forEach(function(cat) {
+            var catItems = groups[cat];
+            var catLow = catItems.filter(function(i) { return i.safeStock > 0 && i.stock <= i.safeStock; }).length;
+
+            // 组内排序：低库存排前面，同状态按库存数量降序
+            catItems.sort(function(a, b) {
+                var aLow = (a.safeStock > 0 && a.stock <= a.safeStock) ? 0 : 1;
+                var bLow = (b.safeStock > 0 && b.stock <= b.safeStock) ? 0 : 1;
+                if (aLow !== bLow) return aLow - bLow;
+                return b.stock - a.stock;
+            });
+
+            h += '<div style="margin-bottom:16px">';
+            h += '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:' + (catLow > 0 ? 'rgba(199,84,80,0.06)' : 'var(--card-h)') + ';border:1px solid ' + (catLow > 0 ? 'var(--rd)' : 'var(--bd)') + ';border-radius:8px;margin-bottom:6px">';
+            h += '<span style="font-size:.84rem;font-weight:700;color:' + (catLow > 0 ? 'var(--rd)' : 'var(--ac)') + '">' + cat + ' <span style="font-size:.72rem;color:var(--tx-m);font-weight:400">' + catItems.length + '项</span></span>';
+            if (catLow > 0) h += '<span class="badge rd">' + catLow + '项低库存</span>';
+            h += '</div>';
+
+            h += '<div class="tw"><table>';
+            h += '<tr><th>品名</th><th>单位</th><th>库存</th><th>安全库存</th><th>状态</th><th>操作</th></tr>';
+
+            catItems.forEach(function(item) {
+                var isLow = item.safeStock > 0 && item.stock <= item.safeStock;
+                var status = '-';
+                if (item.safeStock > 0) {
+                    status = isLow ? '<span class="badge rd">低</span>' : '<span class="badge gn">正常</span>';
+                }
+
+                h += '<tr' + (isLow ? ' style="background:rgba(199,84,80,0.04)"' : '') + '>';
+                h += '<td>' + item.name + '</td>';
+                h += '<td>' + (item.unit || '-') + '</td>';
+                h += '<td class="nr">' + item.stock + '</td>';
+                h += '<td class="nr">' + (item.safeStock || '-') + '</td>';
+                h += '<td>' + status + '</td>';
+                h += '<td>';
+                h += '<button class="btn s" onclick="showEditWH(\'' + item.id + '\')">编</button> ';
+                h += '<button class="btn s" onclick="whDetail(\'' + item.id + '\')">详</button> ';
+                h += '<button class="btn s d" onclick="delWH(\'' + item.id + '\')">×</button>';
+                h += '</td></tr>';
+            });
+
+            h += '</table></div></div>';
+        });
     }
 
     setMain('仓库管理', h);
@@ -5975,13 +6024,16 @@ function rWH() {
 
 // 仓库物品添加
 function showAddWH() {
+    var cats = getWHCats();
     var h = '<h3>添加仓库物品</h3>';
     h += '<div class="hrow">';
     h += '<label>品名</label><input class="inp" id="wh_n" style="flex:2">';
     h += '</div>';
     h += '<div class="hrow">';
-    h += '<label>分类</label><input class="inp" id="wh_c" list="whCatDL" style="max-width:120px">';
-    h += '<datalist id="whCatDL"><option>包装</option><option>调料</option><option>清洁</option><option>耗材</option><option>设备</option></datalist>';
+    h += '<label>分类</label><select class="inp" id="wh_c" style="max-width:120px">';
+    cats.forEach(function(c) { h += '<option>' + c + '</option>'; });
+    h += '<option value="_new">+新建分类</option></select>';
+    h += '<input class="inp" id="wh_c_new" placeholder="新分类名" style="display:none;max-width:120px">';
     h += '<label>单位</label><input class="inp" id="wh_u" placeholder="个/箱/袋/瓶" style="max-width:100px">';
     h += '</div>';
     h += '<div class="hrow">';
@@ -5991,23 +6043,39 @@ function showAddWH() {
     h += '</div>';
     h += '<div class="brow" style="margin-top:12px;justify-content:flex-end">';
     h += '<button class="btn p" onclick="doAddWH()">添加</button>';
-    h += '<button class="btn" onclick="closeModal()">取消</button>';
-    h += '</div>';
+    h += '<button class="btn" onclick="closeModal()">取消</button></div>';
     showModal(h);
+
+    // 新建分类联动
+    $id('wh_c').onchange = function() {
+        var isNew = this.value === '_new';
+        $id('wh_c_new').style.display = isNew ? '' : 'none';
+    };
 }
 
 // 保存新添加的仓库物品
 function doAddWH() {
-    var n = document.getElementById('wh_n').value.trim();
+    var n = $id('wh_n').value.trim();
     if (!n) { toast('填品名'); return; }
+    var cat = $id('wh_c').value;
+    if (cat === '_new') {
+        cat = $id('wh_c_new').value.trim();
+        if (!cat) { toast('填分类名'); return; }
+        // 自动加入分类列表
+        var cats = getWHCats();
+        if (cats.indexOf(cat) < 0) {
+            cats.push(cat);
+            upd(function(db) { db.whCats = cats; });
+        }
+    }
     upd(function(db) {
         db.whItems.push({
             id: 'wh_' + Date.now(),
             name: n,
-            category: document.getElementById('wh_c').value.trim() || '未分类',
-            unit: document.getElementById('wh_u').value.trim() || '个',
-            stock: parseInt(document.getElementById('wh_s').value) || 0,
-            safeStock: parseInt(document.getElementById('wh_ss').value) || 0,
+            category: cat || '未分类',
+            unit: $id('wh_u').value.trim() || '个',
+            stock: parseInt($id('wh_s').value) || 0,
+            safeStock: parseInt($id('wh_ss').value) || 0,
             movements: []
         });
     });
@@ -6016,18 +6084,120 @@ function doAddWH() {
     rWH();
 }
 
+// 仓库分类管理
+function getWHCats() {
+    return DB.whCats || ['包装', '调料', '清洁', '耗材', '设备', '其他'];
+}
+
+// 显示分类管理界面
+function showWHCats() {
+    var cats = getWHCats();
+    var h = '<h3>仓库分类管理</h3>';
+    h += '<div style="max-height:50vh;overflow-y:auto;padding-right:4px">';
+    cats.forEach(function(c, i) {
+        var count = (DB.whItems || []).filter(function(item) { return (item.category || '未分类') === c; }).length;
+        h += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:4px;background:var(--card-h);border:1px solid var(--bd);border-radius:6px">';
+        h += '<span style="font-size:.72rem;color:var(--tx-m);width:20px">' + (i + 1) + '</span>';
+        h += '<span style="flex:1;font-size:.84rem;font-weight:600">' + c + '</span>';
+        h += '<span class="badge">' + count + '项</span>';
+        if (i > 0) h += '<button class="btn s" onclick="moveWHCat(' + i + ',-1)">▲</button>';
+        if (i < cats.length - 1) h += '<button class="btn s" onclick="moveWHCat(' + i + ',1)">▼</button>';
+        h += '<button class="btn s" onclick="editWHCat(' + i + ')">编</button>';
+        h += '<button class="btn s d" onclick="delWHCat(' + i + ')">×</button>';
+        h += '</div>';
+    });
+    h += '</div>';
+    h += '<div class="hrow" style="margin-top:12px">';
+    h += '<input class="inp" id="newWHCat" placeholder="新分类名称" style="flex:1">';
+    h += '<button class="btn p" onclick="addWHCat()">添加</button></div>';
+    h += '<div class="brow" style="margin-top:12px;justify-content:flex-end"><button class="btn" onclick="closeModal();rWH()">完成</button></div>';
+    showModal(h, 450);
+}
+
+// 添加新分类
+function addWHCat() {
+    var name = $id('newWHCat').value.trim();
+    if (!name) { toast('填分类名'); return; }
+    var cats = getWHCats();
+    if (cats.indexOf(name) >= 0) { toast('已存在'); return; }
+    cats.push(name);
+    upd(function(db) { db.whCats = cats; });
+    toast('已添加');
+    showWHCats();
+}
+
+//  编辑分类名（同步更新物品分类）
+function editWHCat(index) {
+    var cats = getWHCats();
+    var old = cats[index];
+    var h = '<h3>编辑分类</h3>';
+    h += '<div class="hrow"><label>分类名</label><input class="inp" id="editCatName" value="' + old + '" style="flex:2"></div>';
+    h += '<div class="brow" style="margin-top:12px;justify-content:flex-end">';
+    h += '<button class="btn p" onclick="doEditWHCat(' + index + ')">保存</button>';
+    h += '<button class="btn" onclick="closeModal();showWHCats()">取消</button></div>';
+    showModal(h, 400);
+}
+
+// 删除分类（物品分类变为"未分类"）
+function delWHCat(index) {
+    var cats = getWHCats();
+    var name = cats[index];
+    var count = (DB.whItems || []).filter(function(item) { return (item.category || '未分类') === name; }).length;
+    if (!confirm('删除分类「' + name + '」？' + (count > 0 ? '\n' + count + '个物品会变为"未分类"' : ''))) return;
+    cats.splice(index, 1);
+    upd(function(db) {
+        db.whCats = cats;
+        db.whItems.forEach(function(item) {
+            if (item.category === name) item.category = '未分类';
+        });
+    });
+    toast('已删除');
+    showWHCats();
+}
+
+// 分类上下移动
+function moveWHCat(index, dir) {
+    var cats = getWHCats();
+    var target = index + dir;
+    if (target < 0 || target >= cats.length) return;
+    var temp = cats[index];
+    cats[index] = cats[target];
+    cats[target] = temp;
+    upd(function(db) { db.whCats = cats; });
+    showWHCats();
+}
+
+// 保存编辑后的分类名，并同步更新物品分类
+function doEditWHCat(index) {
+    var cats = getWHCats();
+    var old = cats[index];
+    var name = $id('editCatName').value.trim();
+    if (!name || name === old) { closeModal(); showWHCats(); return; }
+    cats[index] = name;
+    upd(function(db) {
+        db.whCats = cats;
+        db.whItems.forEach(function(item) {
+            if (item.category === old) item.category = name;
+        });
+    });
+    toast('已修改');
+    showWHCats();
+}
+
 // 仓库物品编辑
 function showEditWH(id) {
     var item = DB.whItems.find(function(i) { return i.id === id; });
     if (!item) return;
+    var cats = getWHCats();
 
     var h = '<h3>编辑仓库物品</h3>';
     h += '<div class="hrow">';
     h += '<label>品名</label><input class="inp" id="ewh_n" style="flex:2" value="' + item.name.replace(/"/g, '&quot;') + '">';
     h += '</div>';
     h += '<div class="hrow">';
-    h += '<label>分类</label><input class="inp" id="ewh_c" list="ewhCatDL2" style="max-width:120px" value="' + (item.category || '') + '">';
-    h += '<datalist id="ewhCatDL2"><option>包装</option><option>调料</option><option>清洁</option><option>耗材</option><option>设备</option></datalist>';
+    h += '<label>分类</label><select class="inp" id="ewh_c" style="max-width:120px">';
+    cats.forEach(function(c) { h += '<option' + (item.category === c ? ' selected' : '') + '>' + c + '</option>'; });
+    h += '</select>';
     h += '<label>单位</label><input class="inp" id="ewh_u" style="max-width:80px" value="' + (item.unit || '') + '">';
     h += '</div>';
     h += '<div class="hrow">';
@@ -6037,8 +6207,7 @@ function showEditWH(id) {
     h += '</div>';
     h += '<div class="brow" style="margin-top:12px;justify-content:flex-end">';
     h += '<button class="btn p" onclick="doEditWH(\'' + id + '\')">保存</button>';
-    h += '<button class="btn" onclick="closeModal()">取消</button>';
-    h += '</div>';
+    h += '<button class="btn" onclick="closeModal()">取消</button></div>';
     showModal(h);
 }
 
@@ -6220,6 +6389,7 @@ function delWHMove(id, idx) {
     toast('已删除');
     setTimeout(function() { whDetail(id); }, 100);
 }
+
 
 // ==================== 12. 报损 ====================
 // 报损页面的照片数据（Base64，用于拍照记录报损物品）
@@ -7738,218 +7908,6 @@ function updSyncInd() {
         : '<span class="sync-dot" style="background:var(--tx-m)"></span>本地';
 }
 
-// ==================== 17. GitHub 同步 ====================
-
-// 存储键名
-var GH_KEY = 'ax_gh_cfg';
-
-// 全局同步状态
-// token: GitHub Token
-// gistId: 数据 Gist 的 ID
-// mediaGistId: 媒体文件 Gist 的 ID（预留）
-// ready: 是否已连接
-// saving: 是否正在保存（防止重复请求）
-var _gh = { token: '', gistId: '', mediaGistId: '', ready: false, saving: false };
-
-// ---------- 读取本地配置 ----------
-function ghGetCfg() {
-    try { return JSON.parse(localStorage.getItem(GH_KEY)) || {}; }
-    catch (e) { return {}; }
-}
-
-// ---------- 保存本地配置 ----------
-function ghSaveCfg(c) {
-    localStorage.setItem(GH_KEY, JSON.stringify(c));
-}
-
-// ---------- 初始化同步 ----------
-// 从 localStorage 读取 Token，如果存在则标记为已连接
-function ghInit() {
-    var c = ghGetCfg();
-    if (!c.token) return false;
-    _gh.token = c.token;
-    _gh.gistId = c.gistId || '';
-    _gh.mediaGistId = c.mediaGistId || '';
-    _gh.ready = true;
-    return true;
-}
-
-// ---------- 搜索已有 Gist ----------
-// 遍历用户的 Gist 列表（最多5页），找到描述为 'ax_cafe_data' 的
-async function ghFindGist() {
-    if (!_gh.ready) return null;
-    try {
-        var pg = 1;
-        while (pg <= 5) {
-            var r = await fetch('https://api.github.com/gists?per_page=100&page=' + pg, {
-                headers: { 'Authorization': 'token ' + _gh.token }
-            });
-            if (!r.ok) return null;
-            var gs = await r.json();
-            if (!gs.length) break;
-            for (var i = 0; i < gs.length; i++) {
-                if (gs[i].description === 'ax_cafe_data') return gs[i];
-            }
-            pg++;
-        }
-        return null;
-    } catch (e) { return null; }
-}
-
-// ---------- 从 GitHub 下载数据 ----------
-// 只有远程数据更新时间（_ts）比本地新时才返回数据
-async function ghLoad() {
-    if (!_gh.ready || !_gh.gistId) return null;
-    try {
-        var r = await fetch('https://api.github.com/gists/' + _gh.gistId, {
-            headers: { 'Authorization': 'token ' + _gh.token }
-        });
-        if (!r.ok) return null;
-        var g = await r.json();
-        var f = g.files && g.files['ax_cafe_data.json'];
-        if (f && f.content) {
-            var d = JSON.parse(f.content);
-            if (d._ts && d._ts > (DB._ts || 0)) return d;
-        }
-    } catch (e) {}
-    return null;
-}
-
-// ---------- 上传数据到 GitHub ----------
-// 有 gistId 就更新，没有就新建
-// saving 锁防止重复提交
-async function ghSave() {
-    if (!_gh.ready || !_gh.token || _gh.saving) return;
-    _gh.saving = true;
-    updSyncInd();
-    DB._ts = Date.now();
-
-    try {
-        var url = _gh.gistId
-            ? 'https://api.github.com/gists/' + _gh.gistId
-            : 'https://api.github.com/gists';
-        var r = await fetch(url, {
-            method: _gh.gistId ? 'PATCH' : 'POST',
-            headers: {
-                'Authorization': 'token ' + _gh.token,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                description: 'ax_cafe_data',
-                files: { 'ax_cafe_data.json': { content: JSON.stringify(DB) } }
-            })
-        });
-        if (r.ok) {
-            var g = await r.json();
-            // 新建的 Gist，保存 gistId
-            if (!_gh.gistId) {
-                _gh.gistId = g.id;
-                var c = ghGetCfg();
-                c.gistId = g.id;
-                ghSaveCfg(c);
-            }
-        }
-    } catch (e) {}
-
-    _gh.saving = false;
-    updSyncInd();
-}
-
-// ---------- 启动时同步 ----------
-// 优先下载远程数据（如果远程更新的话），否则上传本地数据
-async function ghSyncOnStart() {
-    if (!_gh.ready) return;
-    var cur = curPage;
-    var remote = await ghLoad();
-    if (remote) {
-        DB = remote;
-        saveDB(DB);
-        toast('云端已加载');
-    } else if (DB.dailyReports.length) {
-        await ghSave();
-        toast('已上传');
-    }
-    // 同步完成后恢复当前页面
-    if (cur) {
-        curPage = cur;
-        _curPage = cur;
-        renderNav();
-    }
-}
-
-// ---------- 设置 Token 并连接 ----------
-// 流程：保存Token → 尝试已存gistId → 搜索已有Gist → 新建Gist
-async function ghSetToken(t) {
-    t = t.trim();
-    if (!t) return;
-
-    _gh.token = t;
-    _gh.ready = true;
-    var c = ghGetCfg();
-    c.token = t;
-    ghSaveCfg(c);
-    _gh.gistId = c.gistId || '';
-    _gh.mediaGistId = c.mediaGistId || '';
-
-    toast('连接中...');
-
-    // 第一步：尝试已保存的 gistId
-    if (_gh.gistId) {
-        try {
-            var r = await fetch('https://api.github.com/gists/' + _gh.gistId, {
-                headers: { 'Authorization': 'token ' + _gh.token }
-            });
-            if (r.ok) {
-                toast('已找到数据');
-                await ghSyncOnStart();
-                updSyncInd();
-                rData();
-                return;
-            }
-        } catch (e) {}
-    }
-
-    // 第二步：搜索用户所有 Gist 找已有的
-    var ex = await ghFindGist();
-    if (ex) {
-        _gh.gistId = ex.id;
-        c = ghGetCfg();
-        c.gistId = ex.id;
-        ghSaveCfg(c);
-        toast('找到已有数据');
-        await ghSyncOnStart();
-    } else {
-        // 第三步：都没找到，新建一个
-        await ghSave();
-        c = ghGetCfg();
-        c.gistId = _gh.gistId;
-        ghSaveCfg(c);
-        toast('已连接');
-    }
-
-    updSyncInd();
-    rData();
-}
-
-// ---------- 断开连接 ----------
-function ghDisconnect() {
-    if (!confirm('断开？')) return;
-    localStorage.removeItem(GH_KEY);
-    _gh = { token: '', gistId: '', mediaGistId: '', ready: false, saving: false };
-    updSyncInd();
-    rData();
-    toast('已断开');
-}
-
-
-// ---------- 延迟保存（防抖）----------
-// 数据变化后等 1.5 秒再上传，避免频繁请求
-var _ghTimer = null;
-function sbScheduleSave() {
-    if (!_gh.ready) return;
-    if (_ghTimer) clearTimeout(_ghTimer);
-    _ghTimer = setTimeout(ghSave, 1500);
-}
 
 // ==================== 18. 同步码 ====================
 // ---------- 生成同步码 ----------
