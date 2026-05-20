@@ -34,7 +34,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
 .hrow{display:flex;gap:6px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
 .hrow label{font-size:.78rem;color:var(--tx-s);white-space:nowrap;flex-shrink:0;min-width:36px}
 #syncInd{display:flex;align-items:center;gap:4px;cursor:pointer;padding:3px 8px;border-radius:12px}
-.sync-dot{width:6px;height:6px;border-radius:50%}
+.sync-dot {display: inline-block;width: 6px;height: 6px;border-radius: 50%;}
 .search-toggle{cursor:pointer;padding:6px;border-radius:6px;transition:background .2s}
 .search-toggle:hover{background:var(--card-h)}
 .search-bar{background:var(--card);border-bottom:1px solid var(--bd);padding:10px 0;display:none;animation:slideDown .2s ease}
@@ -207,6 +207,7 @@ select.inp option{background:var(--card);color:var(--tx)}
 .dp-month.dp-today{font-weight:700;color:var(--ac)}
 .dp-month.dp-selected{background:var(--ac);color:#fff;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,.15);box-shadow:0 2px 8px rgba(161,193,161,.35)}
 .dp-month.dp-selected:hover{background:var(--ac)}
+
 </style>
 <!-- 遮罩层 -->
 <div class="toolbar-mask" id="toolbarMask" onclick="toggleToolbar()"></div>
@@ -221,7 +222,7 @@ select.inp option{background:var(--card);color:var(--tx)}
   <div class="toolbar-group" id="toolbarInv"></div>
   <div class="toolbar-divider"></div>
   <div class="toolbar-group" id="toolbarReport"></div>
-  <div class="toolbar-bottom">
+  <div class="toolbar-divider"></div>
     <div class="toolbar-group">
       <button class="toolbar-btn" data-page="settings" onclick="goPage('settings')" title="设置">
         <span class="ticon">⚙️</span><span class="tlabel">设置</span>
@@ -271,14 +272,20 @@ var INV = {
 
 // 导航配置
 var NAV = [
-    { id: 'dash',label: '总览',icon: '📊'},{ id: 'daily',label: '日报',icon: '📝'},
-    { id: 'purchase',label: '采购',icon: '🛒'},{ id: 'expense',label: '费用',icon: '💰'},
+    { id: 'dash',label: '总览',icon: '📊'},
+    { id: 'daily',label: '日报',icon: '📝'},
+    { id: 'purchase',label: '采购',icon: '🛒'},
+    { id: 'expense',label: '费用',icon: '💰'},
     { sep: true },
-    { id: 'tea',label: '茗茶',icon: '🍵'},{ id: 'cig',label: '香烟',icon: '🚬'},
-    { id: 'alc',label: '酒类',icon: '🍺'},{ sep: true },
-    { id: 'wh',label: '仓库',icon: '📦'},{ id: 'damage',label: '报损',icon: '⚠️'},
+    { id: 'tea',label: '茗茶',icon: '🍵'},
+    { id: 'cig',label: '香烟',icon: '🚬'},
+    { id: 'alc',label: '酒类',icon: '🍺'},
     { sep: true },
-    { id: 'report',label: '报表',icon: '📈'},{ id: 'gen',label: '汇报',icon: '📄'},
+    { id: 'wh',label: '仓库',icon: '📦'},
+    { id: 'damage',label: '报损',icon: '⚠️'},
+    { sep: true },
+    { id: 'report',label: '报表',icon: '📈'},
+    { id: 'gen',label: '汇报',icon: '📄'},
     { sep: true },
     { id: 'data',label: '设置',icon: '⚙️'}
 ];
@@ -345,14 +352,35 @@ function extN(s){var m=s.match(/([\d,]+\.?\d*)/);return m?parseFloat(m[0].replac
 function toast(m){var t=$id('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show')},2200)}
 
 // 弹窗
-function showModal(content,width){
-    var m=$id('modal'),o=$id('overlay');
-    m.innerHTML=content;m.style.maxWidth=(width||560)+'px';
-    m.classList.add('show');o.classList.add('show');
-    m.style.position='fixed';m.style.overflowY='auto';
-    o.onclick=function(e){if(e.target===o)closeModal()};
-    m.onclick=function(e){e.stopPropagation()};
+function showModal(content, width) {
+    var m = $id('modal'), o = $id('overlay');
+    m.innerHTML = content;
+    m.style.maxWidth = (width || 560) + 'px';
+    m.classList.add('show');
+    o.classList.add('show');
+    m.style.position = 'fixed';
+    m.style.overflowY = 'auto';
+    o.onclick = function(e) {
+        if (e.target !== o) return;
+        var dp = document.getElementById('datePicker');
+        if (dp && dp.style.display !== 'none' && dp.style.display !== '') {
+            _dpClose();
+            return;
+        }
+        closeModal();
+    };
+    m.onclick = function(e) {
+        // 点击输入框、按钮、下拉框时不关日期选择器
+        var tag = e.target.tagName;
+        if (tag === 'INPUT' || tag === 'SELECT' || tag === 'BUTTON' || tag === 'OPTION') return;
+        var dp = document.getElementById('datePicker');
+        if (dp && dp.style.display !== 'none' && dp.style.display !== '') {
+            _dpClose();
+        }
+        e.stopPropagation();
+    };
 }
+
 function closeModal(){var m=$id('modal'),o=$id('overlay');if(m)m.classList.remove('show');if(o){o.classList.remove('show');o.onclick=null}}
 
 // 获取某月全部日报
@@ -443,7 +471,14 @@ function doAIParseGo(){
 var _dpTarget=null,_dpDate=null,_dpSelected=null;
 function _dpOpen(inputId){var input=document.getElementById(inputId);if(!input)return;_dpTarget=input;var val=input.value;if(val&&/^\d{4}-\d{2}-\d{2}$/.test(val)){var parts=val.split('-');_dpDate=new Date(parseInt(parts[0]),parseInt(parts[1])-1,1);_dpSelected=val}else{_dpDate=new Date();_dpDate.setDate(1);_dpSelected=null}_dpRender();var el=document.getElementById('datePicker');el.style.display='block';var rect=input.getBoundingClientRect();el.style.top=(rect.bottom+window.scrollY+6)+'px';var left=rect.left+window.scrollX;if(left+300>window.innerWidth)left=window.innerWidth-310;if(left<8)left=8;el.style.left=left+'px';setTimeout(function(){document.addEventListener('click',_dpOutside)},50)}
 function _dpClose(){var el=document.getElementById('datePicker');if(el)el.style.display='none';_dpTarget=null;document.removeEventListener('click',_dpOutside)}
-function _dpOutside(e){var el=document.getElementById('datePicker');if(!el)return;var rect=el.getBoundingClientRect();if(e.clientX<rect.left||e.clientX>rect.right||e.clientY<rect.top||e.clientY>rect.bottom)_dpClose()}
+function _dpOutside(e) {
+    if (e.target.id === 'overlay') return;
+    var el = document.getElementById('datePicker');
+    if (!el) return;
+    var rect = el.getBoundingClientRect();
+    if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom)
+        _dpClose();
+}
 function _dpNav(dir){_dpDate.setMonth(_dpDate.getMonth()+dir);_dpRender()}
 function _dpSel(dateStr){_dpSelected=dateStr;if(_dpTarget){_dpTarget.value=dateStr;_dpTarget.dispatchEvent(new Event('change',{bubbles:true}));_dpTarget.dispatchEvent(new Event('input',{bubbles:true}))}_dpClose()}
 function _dpToday(){var now=new Date();var y=now.getFullYear(),m=String(now.getMonth()+1).padStart(2,'0'),d=String(now.getDate()).padStart(2,'0');_dpSel(y+'-'+m+'-'+d)}
@@ -3237,10 +3272,15 @@ function editPurByDate(date, name) {
 
     var secs = ['厨房', '吧台', '外场'];
     var cats = getPurCats(found.section);
+    var sources = ['岸香贸易', '外购', '其他'];
+    var curSource = found.source || foundP.source || '外购';
 
     var h = '<h3>编辑物品</h3>';
     h += '<div class="hrow"><label>日期</label><input class="inp" id="epi_date" type="text" readonly placeholder="选择日期" value="' + foundP.date + '" onclick="_dpOpen(\'epi_date\')" style="max-width:160px;cursor:pointer"></div>';
     h += '<div class="hrow"><label>品名</label><input class="inp" id="epi_name" style="flex:2" value="' + found.name.replace(/"/g, '&quot;') + '"></div>';
+    h += '<div class="hrow"><label>来源</label><select class="inp" id="epi_source" style="max-width:140px">';
+    sources.forEach(function(s) { h += '<option' + (curSource === s ? ' selected' : '') + '>' + s + '</option>'; });
+    h += '</select></div>';
     h += '<div class="hrow"><label>区域</label><select class="inp" id="epi_sec" style="max-width:110px" onchange="epiSecChanged(this)">';
     h += '<option value="">-</option>';
     secs.forEach(function(s) { h += '<option' + (found.section === s ? ' selected' : '') + '>' + s + '</option>'; });
@@ -3279,28 +3319,59 @@ function epiCalcTotal() {
 // 保存编辑的物品
 function doEditPurItem(date, origName) {
     var newDate = $id('epi_date').value;
+    var newSource = $id('epi_source') ? $id('epi_source').value : '';
+
+    // 先构建更新后的物品
+    var updatedItem = {
+        name: $id('epi_name').value.trim() || origName,
+        source: newSource || '外购',
+        section: $id('epi_sec').value,
+        category: $id('epi_cat').value,
+        qty: parseFloat($id('epi_qty').value) || 0,
+        unit: $id('epi_unit').value.trim(),
+        unitPrice: parseFloat($id('epi_up').value) || 0,
+        total: parseFloat($id('epi_total').value) || 0
+    };
+
     upd(function(db) {
+        // 1. 从原日期采购单中移除该物品
+        var removedFrom = null;
         db.purchases.forEach(function(p) {
             if (p.date !== date) return;
             for (var k = 0; k < p.items.length; k++) {
-                var item = p.items[k];
-                if (item.name !== origName) continue;
-                item.name = $id('epi_name').value.trim() || item.name;
-                item.section = $id('epi_sec').value;
-                item.category = $id('epi_cat').value;
-                item.qty = parseFloat($id('epi_qty').value) || 0;
-                item.unit = $id('epi_unit').value.trim();
-                item.unitPrice = parseFloat($id('epi_up').value) || 0;
-                item.total = parseFloat($id('epi_total').value) || 0;
+                if (p.items[k].name === origName) {
+                    removedFrom = p.source || newSource || '外购';
+                    p.items.splice(k, 1);
+                    break;
+                }
+            }
+        });
+        if (!updatedItem.source || updatedItem.source === '外购') {
+            updatedItem.source = removedFrom || newSource || '外购';
+        }
+
+        // 2. 清理空采购单
+        db.purchases = db.purchases.filter(function(p) { return p.items.length > 0; });
+
+        // 3. 找到或创建新日期的采购单（同供应商）
+        var target = null;
+        for (var i = 0; i < db.purchases.length; i++) {
+            if (db.purchases[i].date === newDate && db.purchases[i].source === updatedItem.source) {
+                target = db.purchases[i];
                 break;
             }
-            if (newDate && newDate !== date) p.date = newDate;
-        });
+        }
+        if (!target) {
+            target = { id: 'p_' + Date.now(), date: newDate, source: updatedItem.source, items: [] };
+            db.purchases.push(target);
+        }
+        target.items.push(updatedItem);
     });
-    var showDate = (newDate && newDate !== date) ? newDate : date;
+
     closeModal();
     toast('已更新');
-    setTimeout(function() { showPurDayModal(showDate); }, 100);
+    setTimeout(function() { showPurDayModal(newDate); }, 100);
+    renderPHist();
 }
 
 // ------ 采购明细日历 ------
@@ -3336,13 +3407,19 @@ function renderPHist() {
 
     var h = '';
     if (grandTotal > 0) {
+        var ansiang = srcTotals['岸香贸易'] || 0;
+        var waigou = srcTotals['外购'] || 0;
+        var tuihuo = srcTotals['退货'] || 0;
+
         h += '<div class="cards">';
         h += '<div class="card"><div class="card-l">本月采购</div><div class="card-v ac">' + fmtC(grandTotal) + '</div></div>';
         h += '<div class="card"><div class="card-l">天数</div><div class="card-v">' + Object.keys(dayTotals).length + '</div></div>';
         h += '<div class="card"><div class="card-l">日均</div><div class="card-v">' + fmtC(grandTotal / daysInMonth) + '</div></div>';
-        h += '</div>';
-        h += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px">';
-        Object.keys(srcTotals).forEach(function(src) { h += '<span class="badge">' + src + ' ' + fmtC(srcTotals[src]) + '</span>'; });
+        h += '<div class="card"><div class="card-l">岸香贸易</div><div class="card-v" style="color:var(--gn)">' + fmtC(ansiang) + '</div></div>';
+        h += '<div class="card"><div class="card-l">外购</div><div class="card-v">' + fmtC(waigou) + '</div></div>';
+        if (tuihuo > 0) {
+            h += '<div class="card"><div class="card-l">退货</div><div class="card-v" style="color:var(--rd)">-' + fmtC(tuihuo) + '</div></div>';
+        }
         h += '</div>';
     }
 
@@ -3382,7 +3459,7 @@ function showPurDayModal(date) {
             allItems.push({
                 name: item.name, section: item.section || '未分区', category: item.category || '未分类',
                 source: item.source || p.source || '外购', qty: item.qty || 0, unit: item.unit || '',
-                unitPrice: item.unitPrice || 0, total: item.total || 0
+                unitPrice: item.unitPrice || 0, total: item.total || 0, note: item.note || ''
             });
         });
     });
@@ -3390,6 +3467,7 @@ function showPurDayModal(date) {
     var total = allItems.reduce(function(s, item) { return s + item.total; }, 0);
     var dateLabel = date.substring(5).replace('-', '/');
 
+    // 顶部标题栏
     var h = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
     h += '<div style="display:flex;align-items:center;gap:6px">';
     h += '<h3 style="margin:0">' + dateLabel + ' 采购明细</h3>';
@@ -3398,70 +3476,120 @@ function showPurDayModal(date) {
     h += '<span style="font-size:.95rem;font-weight:700;color:var(--ac)">¥' + fmtC(total) + '</span>';
     h += '<button class="btn s d" onclick="delPurDay(\'' + date + '\')">删除当日</button></div></div>';
 
-    // 按区域→分类分组
-    var secGroups = {};
+    // 按来源 → 区域 → 分类 三层分组
+    var srcGroups = {};
     allItems.forEach(function(item) {
-        if (!secGroups[item.section]) secGroups[item.section] = {};
-        if (!secGroups[item.section][item.category]) secGroups[item.section][item.category] = { items: [], total: 0 };
-        secGroups[item.section][item.category].items.push(item);
-        secGroups[item.section][item.category].total += item.total;
+        var src = item.source;
+        if (!srcGroups[src]) srcGroups[src] = {};
+        if (!srcGroups[src][item.section]) srcGroups[src][item.section] = {};
+        if (!srcGroups[src][item.section][item.category]) srcGroups[src][item.section][item.category] = { items: [], total: 0 };
+        srcGroups[src][item.section][item.category].items.push(item);
+        srcGroups[src][item.section][item.category].total += item.total;
     });
 
-    var secTotals = {};
-    Object.keys(secGroups).forEach(function(sec) {
-        secTotals[sec] = 0;
-        Object.keys(secGroups[sec]).forEach(function(cat) { secTotals[sec] += secGroups[sec][cat].total; });
+    // 来源小计
+    var srcTotals = {};
+    Object.keys(srcGroups).forEach(function(src) {
+        srcTotals[src] = 0;
+        Object.keys(srcGroups[src]).forEach(function(sec) {
+            Object.keys(srcGroups[src][sec]).forEach(function(cat) {
+                srcTotals[src] += srcGroups[src][sec][cat].total;
+            });
+        });
     });
 
-    var secKeys = Object.keys(secGroups).sort(function(a, b) { return secTotals[b] - secTotals[a]; });
+    var srcKeys = Object.keys(srcGroups).sort(function(a, b) { return srcTotals[b] - srcTotals[a]; });
 
     h += '<div style="max-height:60vh;overflow-y:auto;padding-right:4px">';
 
     var si = 0;
-    secKeys.forEach(function(sec) {
+    srcKeys.forEach(function(src) {
         si++;
-        var secId = 'secBody' + si;
-        h += '<div style="margin-bottom:14px">';
-        h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--card-h);border:1px solid var(--bd);border-radius:8px;margin-bottom:8px;cursor:pointer" onclick="toggleSec(\'' + secId + '\')">';
-        h += '<span style="font-size:.88rem;font-weight:700;color:var(--ac)">▸ ' + sec + '</span>';
+        var srcId = 'srcBody' + si;
+        var isReturn = src === '退货';
+
+        // 来源层
+        h += '<div style="margin-bottom:12px">';
+        h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:' + (isReturn ? 'rgba(199,84,80,0.06)' : 'var(--card-h)') + ';border:1px solid ' + (isReturn ? 'var(--rd)' : 'var(--bd)') + ';border-radius:8px;margin-bottom:6px;cursor:pointer" onclick="toggleSec(\'' + srcId + '\')">';
+        h += '<span style="font-size:.88rem;font-weight:700;color:' + (isReturn ? 'var(--rd)' : 'var(--ac)') + '">▾ ' + src + '</span>';
         h += '<div style="display:flex;align-items:center;gap:6px">';
-        h += '<span style="font-family:var(--fm);font-size:.88rem;font-weight:600">¥' + fmtC(secTotals[sec]) + '</span>';
-        h += '<button class="btn s d" style="font-size:.65rem;padding:2px 6px" onclick="event.stopPropagation();delPurSec(\'' + date + '\',\'' + sec.replace(/'/g, "\\'") + '\')">删除区域</button>';
+        h += '<span style="font-family:var(--fm);font-size:.88rem;font-weight:600;color:' + (isReturn ? 'var(--rd)' : '') + '">' + (isReturn ? '-' : '') + '¥' + fmtC(Math.abs(srcTotals[src])) + '</span>';
         h += '</div></div>';
 
-        h += '<div id="' + secId + '">';
-        var catKeys = Object.keys(secGroups[sec]).sort(function(a, b) { return secGroups[sec][b].total - secGroups[sec][a].total; });
+        h += '<div id="' + srcId + '">';
 
-        var ci = 0;
-        catKeys.forEach(function(cat) {
-            ci++;
-            var group = secGroups[sec][cat];
-            var catId = secId + 'cat' + ci;
+        // 区域列表
+        var secGroups = srcGroups[src];
+        var secTotals = {};
+        Object.keys(secGroups).forEach(function(sec) {
+            secTotals[sec] = 0;
+            Object.keys(secGroups[sec]).forEach(function(cat) { secTotals[sec] += secGroups[sec][cat].total; });
+        });
+        var secOrder = { '厨房': 1, '吧台': 2, '外场': 3, '未分区': 98, '退货': 99 };
+        var secKeys = Object.keys(secGroups).sort(function(a, b) {
+            var oa = secOrder[a] || 50, ob = secOrder[b] || 50;
+            return oa !== ob ? oa - ob : secTotals[b] - secTotals[a];
+        });
 
-            h += '<div style="margin-left:10px;margin-bottom:8px">';
-            h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;margin-bottom:4px;cursor:pointer" onclick="toggleSec(\'' + catId + '\')">';
-            h += '<span style="font-size:.75rem;font-weight:600;color:var(--tx)">▸' + cat + '</span>';
-            h += '<div style="display:flex;align-items:center;gap:4px">';
-            h += '<span style="font-family:var(--fm);font-size:.75rem;color:var(--tx-m)">¥' + fmtC(group.total) + '</span>';
-            h += '<button class="btn s d" style="font-size:.6rem;padding:1px 5px" onclick="event.stopPropagation();delPurCat(\'' + date + '\',\'' + sec.replace(/'/g, "\\'") + '\',\'' + cat.replace(/'/g, "\\'") + '\')">删除分类</button>';
+        var ei = 0;
+        secKeys.forEach(function(sec) {
+            ei++;
+            var secId = srcId + 'sec' + ei;
+
+            // 区域层
+            h += '<div style="margin-left:8px;margin-bottom:6px">';
+            h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;background:var(--card);border:1px solid var(--bd-l);border-radius:6px;margin-bottom:4px;cursor:pointer" onclick="toggleSec(\'' + secId + '\')">';
+            h += '<span style="font-size:.82rem;font-weight:700;color:var(--tx)">▾ ' + sec + '</span>';
+            h += '<div style="display:flex;align-items:center;gap:6px">';
+            h += '<span style="font-family:var(--fm);font-size:.82rem;font-weight:600' + (isReturn ? ';color:var(--rd)' : '') + '">' + (isReturn ? '-' : '') + '¥' + fmtC(Math.abs(secTotals[sec])) + '</span>';
+            if (!isReturn) h += '<button class="btn s d" style="font-size:.6rem;padding:1px 5px" onclick="event.stopPropagation();delPurSec(\'' + date + '\',\'' + sec.replace(/'/g, "\\'") + '\')">删</button>';
             h += '</div></div>';
 
-            h += '<div id="' + catId + '">';
-            group.items.forEach(function(item) {
-                h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;margin-bottom:3px;background:var(--card-h);border:1px solid var(--bd-l);border-radius:6px">';
-                h += '<div style="flex:1;min-width:0">';
-                h += '<div style="font-size:.78rem;font-weight:600">' + item.name + '</div>';
-                h += '<div style="font-size:.65rem;color:var(--tx-s)">' + item.qty + (item.unit || '') + ' × ¥' + fmt(item.unitPrice) + '</div>';
-                h += '</div>';
-                h += '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;margin-left:6px">';
-                h += '<span style="font-size:.82rem;font-weight:700;color:var(--ac)">¥' + fmtC(item.total) + '</span>';
-                h += '<button class="btn s" style="font-size:.65rem;padding:2px 6px" onclick="editPurFromModal(\'' + date + '\',\'' + item.name.replace(/'/g, "\\'") + '\')">编</button>';
-                h += '<button class="btn s d" style="font-size:.65rem;padding:2px 6px" onclick="delPurFromModal(\'' + date + '\',\'' + item.name.replace(/'/g, "\\'") + '\')">删</button>';
-                h += '<button class="btn s og" style="font-size:.65rem;padding:2px 6px" onclick="returnPurItem(\'' + date + '\',' + sq(item.name) + ')">退</button>';
+            h += '<div id="' + secId + '">';
+
+            // 分类列表
+            var catGroups = secGroups[sec];
+            var catKeys = Object.keys(catGroups).sort(function(a, b) { return catGroups[b].total - catGroups[a].total; });
+
+            var ci = 0;
+            catKeys.forEach(function(cat) {
+                ci++;
+                var catId = secId + 'cat' + ci;
+                var group = catGroups[cat];
+
+                h += '<div style="margin-left:8px;margin-bottom:4px">';
+                h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;margin-bottom:3px;cursor:pointer" onclick="toggleSec(\'' + catId + '\')">';
+                h += '<span style="font-size:.75rem;font-weight:600;color:var(--tx-m)">▾ ' + cat + '</span>';
+                h += '<div style="display:flex;align-items:center;gap:4px">';
+                h += '<span style="font-family:var(--fm);font-size:.75rem;color:var(--tx-m)">¥' + fmtC(Math.abs(group.total)) + '</span>';
+                if (!isReturn) h += '<button class="btn s d" style="font-size:.6rem;padding:1px 5px" onclick="event.stopPropagation();delPurCat(\'' + date + '\',\'' + sec.replace(/'/g, "\\'") + '\',\'' + cat.replace(/'/g, "\\'") + '\')">删</button>';
+                h += '</div></div>';
+
+                h += '<div id="' + catId + '">';
+
+                // 物品列表
+                group.items.forEach(function(item) {
+                    h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;margin-bottom:2px;background:var(--card-h);border:1px solid var(--bd-l);border-radius:5px">';
+                    h += '<div style="flex:1;min-width:0">';
+                    h += '<div style="font-size:.78rem;font-weight:600">' + item.name + '</div>';
+                    h += '<div style="font-size:.65rem;color:var(--tx-s)">' + item.qty + (item.unit || '') + ' × ¥' + fmtC(item.unitPrice) + (item.note ? ' · ' + item.note : '') + '</div>';
+                    h += '</div>';
+                    h += '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;margin-left:6px">';
+                    h += '<span style="font-size:.82rem;font-weight:700;color:' + (item.total < 0 ? 'var(--rd)' : 'var(--ac)') + '">' + (item.total < 0 ? '-' : '') + '¥' + fmtC(Math.abs(item.total)) + '</span>';
+                    if (!isReturn) {
+                        h += '<button class="btn s" style="font-size:.65rem;padding:2px 6px" onclick="editPurFromModal(\'' + date + '\',\'' + item.name.replace(/'/g, "\\'") + '\')">编</button>';
+                        h += '<button class="btn s d" style="font-size:.65rem;padding:2px 6px" onclick="delPurFromModal(\'' + date + '\',\'' + item.name.replace(/'/g, "\\'") + '\')">删</button>';
+                        h += '<button class="btn s og" style="font-size:.65rem;padding:2px 6px" onclick="returnPurItem(\'' + date + '\',' + sq(item.name) + ')">退</button>';
+                    }
+                    h += '</div></div>';
+                });
+
                 h += '</div></div>';
             });
+
             h += '</div></div>';
         });
+
         h += '</div></div>';
     });
 
@@ -3539,36 +3667,41 @@ function delPurFromModal(date, name) {
     var remain = DB.purchases.filter(function(p) { return p.date === date; });
     if (remain.length) showPurDayModal(date); else closeModal();
 }
+
 // 采购退货
 function returnPurItem(date, name) {
-    var p = DB.purchases.find(function(pp) { return pp.date === date; });
-    if (!p) return;
+    var purchases = DB.purchases.filter(function(pp) { return pp.date === date; });
+    if (!purchases.length) return;
 
-    // 找到原物品
-    var orig = null;
-    for (var i = 0; i < p.items.length; i++) {
-        if (p.items[i].name === name && p.items[i].source !== '退货') {
-            orig = p.items[i];
-            break;
+    // 在所有采购记录中找原物品
+    var orig = null, foundP = null;
+    for (var i = 0; i < purchases.length; i++) {
+        for (var k = 0; k < purchases[i].items.length; k++) {
+            if (purchases[i].items[k].name === name && purchases[i].items[k].source !== '退货') {
+                orig = purchases[i].items[k];
+                foundP = purchases[i];
+                break;
+            }
         }
+        if (orig) break;
     }
     if (!orig) { toast('未找到原采购记录'); return; }
 
     var h = '<h3>退货 · ' + name + '</h3>';
+    h += '<div class="pv-row"><span class="k">来源</span><span>' + (foundP.source || '外购') + '</span></div>';
     h += '<div class="pv-row"><span class="k">原采购</span><span>' + fmtC(orig.total) + '</span></div>';
     h += '<div class="pv-row"><span class="k">数量</span><span>' + orig.qty + (orig.unit || '') + '</span></div>';
     h += '<div class="pv-row"><span class="k">单价</span><span>' + fmtC(orig.unitPrice || 0) + '</span></div>';
 
     h += '<div class="section-label">退货信息</div>';
     h += '<div class="hrow"><label>退货日期</label><input class="inp" id="retDate" type="text" readonly placeholder="选择日期" value="' + td() + '" onclick="_dpOpen(\'retDate\')" style="max-width:150px;cursor:pointer"></div>';
-    h += '<div class="hrow"><label>退货数量</label><input class="inp" id="retQty" type="number" step="0.01" value="' + orig.qty + '" style="max-width:100px" oninput="calcReturnTotal()"></div>';
+    h += '<div class="hrow"><label>退货数量</label><input class="inp" id="retQty" type="number" step="0.01" value="' + orig.qty + '" style="max-width:100px"></div>';
     h += '<div class="hrow"><label>退货金额</label><input class="inp" id="retTotal" type="number" step="0.01" value="' + orig.total + '" style="max-width:120px"></div>';
     h += '<div class="hrow"><label>退货原因</label><input class="inp" id="retReason" placeholder="可选" style="flex:1"></div>';
 
     h += '<div class="brow" style="margin-top:12px;justify-content:flex-end">';
     h += '<button class="btn p" onclick="doReturnPurItem(\'' + date + '\',' + sq(name) + ')">确认退货</button>';
-    h += '<button class="btn" onclick="closeModal();setTimeout(function(){showPurDayModal(\'' + date + '\')},100)">取消</button>';
-    h += '</div>';
+    h += '<button class="btn" onclick="closeModal();setTimeout(function(){showPurDayModal(\'' + date + '\')},100)">取消</button></div>';
 
     showModal(h, 500);
 }
@@ -3590,44 +3723,36 @@ function doReturnPurItem(date, name) {
 
     if (retQty <= 0 && retTotal <= 0) { toast('请填写退货信息'); return; }
 
-    // 找到原物品信息
-    var p = DB.purchases.find(function(pp) { return pp.date === date; });
-    if (!p) return;
-    var orig = null;
-    for (var i = 0; i < p.items.length; i++) {
-        if (p.items[i].name === name && p.items[i].source !== '退货') {
-            orig = p.items[i];
-            break;
+    var purchases = DB.purchases.filter(function(pp) { return pp.date === date; });
+    var orig = null, foundP = null;
+    for (var i = 0; i < purchases.length; i++) {
+        for (var k = 0; k < purchases[i].items.length; k++) {
+            if (purchases[i].items[k].name === name && purchases[i].items[k].source !== '退货') {
+                orig = purchases[i].items[k];
+                foundP = purchases[i];
+                break;
+            }
         }
+        if (orig) break;
     }
     if (!orig) { toast('未找到原采购'); return; }
 
-    // 查找退货日期对应的采购记录，没有就新建
     upd(function(db) {
-        var target = db.purchases.find(function(pp) { return pp.date === retDate; });
+        var target = db.purchases.find(function(pp) { return pp.date === retDate && pp.source === '退货'; });
         if (!target) {
-            target = { date: retDate, source: p.source, items: [] };
+            target = { date: retDate, source: '退货', items: [] };
             db.purchases.push(target);
         }
-
-        // 添加退货记录（负数金额）
         target.items.push({
-            name: name,
-            section: orig.section,
-            category: orig.category,
-            qty: -retQty,
-            unit: orig.unit || '',
-            unitPrice: orig.unitPrice || 0,
-            total: -retTotal,
-            source: '退货',
-            note: retReason
+            name: name, section: orig.section, category: orig.category,
+            qty: -retQty, unit: orig.unit || '',
+            unitPrice: orig.unitPrice || 0, total: -retTotal,
+            source: '退货', note: retReason
         });
     });
 
     closeModal();
     toast('已退货 ' + name + ' ¥' + fmtC(retTotal));
-
-    // 返回原弹窗
     setTimeout(function() { showPurDayModal(date); }, 100);
 }
 
@@ -3635,13 +3760,30 @@ function doReturnPurItem(date, name) {
 function editPurFromModal(date, name) { closeModal(); editPurByDate(date, name); }
 
 // 修改采购日期
-function editPurDate(date) {
-    var newDate = prompt('输入新日期（YYYY-MM-DD）', date);
-    if (!newDate || newDate === date) return;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) { toast('日期格式错误'); return; }
-    upd(function(db) { db.purchases.forEach(function(p) { if (p.date === date) p.date = newDate; }); });
-    toast('日期已改');
+function editPurDate(oldDate) {
+    var h = '<h3>修改日期</h3>';
+    h += '<div style="padding:10px 0">';
+    h += '<div class="hrow"><label>当前日期</label><span style="font-size:.88rem;font-weight:600;color:var(--ac)">' + oldDate + '</span></div>';
+    h += '<div class="hrow"><label>新日期</label><input class="inp" id="newPurDate" type="text" readonly value="' + oldDate + '" onclick="_dpOpen(\'newPurDate\')" style="max-width:160px;cursor:pointer"></div>';
+    h += '</div>';
+    h += '<div class="brow" style="margin-top:12px;justify-content:flex-end">';
+    h += '<button class="btn p" onclick="doEditPurDate(\'' + oldDate + '\')">确认修改</button>';
+    h += '<button class="btn" onclick="closeModal();setTimeout(function(){showPurDayModal(\'' + oldDate + '\')},100)">取消</button></div>';
+    showModal(h, 400);
+}
+
+function doEditPurDate(oldDate) {
+    var newDate = $id('newPurDate').value;
+    if (!newDate || newDate === oldDate) { toast('日期未变更'); return; }
+    if (!confirm('将 ' + oldDate + ' 的采购记录移到 ' + newDate + '？')) return;
+    upd(function(db) {
+        db.purchases.forEach(function(p) {
+            if (p.date === oldDate) p.date = newDate;
+        });
+    });
     closeModal();
+    toast('已修改为 ' + newDate);
+    setTimeout(function() { showPurDayModal(newDate); }, 100);
     renderPHist();
 }
 
@@ -3812,6 +3954,27 @@ function addExp() {
     rExpense();
 }
 
+// 处理费用凭证照片的输入事件，读取文件并存储Base64数据
+function pickExpPhoto() {
+    var input = document.createElement('input');
+    input.type = 'file'; input.accept = 'image/*'; input.capture = 'environment';
+    input.onchange = function(ev) {
+        var file = ev.target.files[0];
+        if (!file) return;
+        processImage(file, 800, function(base64) {
+            window._eePhoto = base64;
+            var area = $id('eePhotoArea');
+            if (area) {
+                area.innerHTML = '<div style="position:relative;display:inline-block;margin-bottom:8px">' +
+                    '<img src="' + base64 + '" style="max-width:100%;max-height:150px;border-radius:8px;border:1px solid var(--bd)">' +
+                    '<button class="btn s d" style="position:absolute;top:4px;right:4px" onclick="window._eePhoto=null;$id(\'eePhotoArea\').innerHTML=\'\';">×</button></div>';
+            }
+            toast('图片已添加');
+        });
+    };
+    input.click();
+}
+
 // 弹窗编辑费用
 function editExp(id) {
     var e = DB.expenses.find(function(item) { return item.id === id; });
@@ -3820,15 +3983,29 @@ function editExp(id) {
 
     var cats = getExpCats();
     var h = '<h3>编辑费用</h3>';
-    h += '<div class="hrow"><label>日期</label><input class="inp" id="eeDate" type="text" readonly placeholder="选择日期" value="' + e.date + '" onclick="_dpOpen(\'eeDate\')" style="max-width:150px;cursor:pointer">';
+    h += '<div class="hrow"><label>日期</label><input class="inp" id="eeDate" type="text" readonly value="' + e.date + '" onclick="_dpOpen(\'eeDate\')" style="max-width:150px;cursor:pointer">';
     h += '<label>分类</label><select class="inp" id="eeCat" style="max-width:120px">';
     cats.forEach(function(c) { h += '<option' + (e.category === c ? ' selected' : '') + '>' + c + '</option>'; });
     h += '</select></div>';
     h += '<div class="hrow"><label>金额</label><input class="inp" id="eeAmt" type="number" step="0.01" value="' + e.amount + '" style="max-width:100px">';
     h += '<label>备注</label><input class="inp" id="eeNote" value="' + (e.note || '') + '"></div>';
-    h += '<div class="brow" style="margin-top:12px;justify-content:flex-end;gap:10px"><button class="btn p" onclick="doEditExp()">保存</button>';
+
+    // 图片
+    h += '<div class="section-label">附件图片</div>';
+    h += '<div id="eePhotoArea">';
+    if (e.photoFile) {
+        h += '<div style="position:relative;display:inline-block;margin-bottom:8px">';
+        h += '<img src="' + e.photoFile + '" style="max-width:100%;max-height:150px;border-radius:8px;border:1px solid var(--bd)">';
+        h += '<button class="btn s d" style="position:absolute;top:4px;right:4px" onclick="window._eePhoto=null;$id(\'eePhotoArea\').innerHTML=\'\';">×</button>';
+        h += '</div>';
+    }
+    h += '</div>';
+    h += '<div class="brow"><button class="btn" onclick="pickExpPhoto()">📷 拍照/选择图片</button></div>';
+
+    h += '<div class="brow" style="margin-top:12px;justify-content:flex-end"><button class="btn p" onclick="doEditExp()">保存</button>';
     h += '<button class="btn" onclick="closeModal()">取消</button></div>';
     showModal(h);
+    window._eePhoto = e.photoFile || null;
 }
 
 // 保存编辑的费用
@@ -3841,9 +4018,11 @@ function doEditExp() {
         e.category = $id('eeCat').value;
         e.amount = parseFloat($id('eeAmt').value) || 0;
         e.note = $id('eeNote').value.trim();
+        e.photoFile = window._eePhoto || '';
     });
     closeModal();
     _editExpId = null;
+    window._eePhoto = null;
     toast('已更新');
     rExpense();
 }
@@ -3897,19 +4076,30 @@ function renderExpCalendar(){
 
     var todayDay=parseInt(td().split('-')[2]);
     var isThisMonth=td().startsWith(ym);
+    var daysInMonth=new Date(year,month,0).getDate();
 
     var h='';
 
-    // 月份切换
+    // 1. 月份切换
     h+='<div class="hrow" style="margin-bottom:10px">';
-    h+='<button class="btn s" onclick="expCalNav(-1)">◀ 上月</button>';
-    h+='<span style="font-size:.88rem;font-weight:700;flex:1;text-align:center">'+year+'年'+month+'月</span>';
-    h+='<button class="btn s" onclick="expCalNav(1)">下月 ▶</button></div>';
+    h+='<button class="btn s" onclick="expCalNav(-1)">◀</button>';
+    h+='<input class="inp" id="expCalPicker" type="text" readonly value="'+ym+'" onclick="_mpOpen(\'expCalPicker\')" style="max-width:130px;cursor:pointer;text-align:center;font-weight:700" onchange="expCalPickYM(this.value)">';
+    h+='<button class="btn s" onclick="expCalNav(1)">▶</button>';
+    h+='<button class="btn s" onclick="showExpPDFDialog()" style="margin-left:auto">📄 导出PDF</button></div>';
 
-    // 日历网格（和日报一样的样式）
+    // 2. 本月汇总
+    if(monthItems.length){
+        h+='<div class="cards">';
+        h+='<div class="card"><div class="card-l">本月费用</div><div class="card-v ac">'+fmtC(monthTotal)+'</div></div>';
+        h+='<div class="card"><div class="card-l">笔数</div><div class="card-v">'+monthItems.length+'</div></div>';
+        h+='<div class="card"><div class="card-l">日均</div><div class="card-v">'+fmtC(monthTotal/daysInMonth)+'</div></div>';
+        h+='</div>';
+
+    }
+
+    // 3. 日历网格
     var firstDay=new Date(year,month-1,1).getDay();
     firstDay=firstDay===0?6:firstDay-1;
-    var daysInMonth=new Date(year,month,0).getDate();
 
     h+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:14px">';
     ['一','二','三','四','五','六','日'].forEach(function(w){
@@ -3938,21 +4128,8 @@ function renderExpCalendar(){
     }
     h+='</div>';
 
-    // 底部：本月汇总（和日报一样用cards）
-    if(monthItems.length){
-        h+='<div class="cards">';
-        h+='<div class="card"><div class="card-l">本月费用</div><div class="card-v ac">'+fmtC(monthTotal)+'</div></div>';
-        h+='<div class="card"><div class="card-l">笔数</div><div class="card-v">'+monthItems.length+'</div></div>';
-        h+='<div class="card"><div class="card-l">日均</div><div class="card-v">'+fmtC(monthTotal/daysInMonth)+'</div></div>';
-        h+='</div>';
-
-        // 分类标签
-        h+='<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:10px">';
-        Object.keys(catTotals).sort(function(a,b){return catTotals[b]-catTotals[a]}).forEach(function(cat){
-            h+='<span class="badge">'+cat+' '+fmtC(catTotals[cat])+'</span>';
-        });
-        h+='</div>';
-    }else{
+    // 4. 无数据提示
+    if(!monthItems.length){
         h+='<div style="text-align:center;padding:20px;color:var(--tx-m);font-size:.78rem">本月暂无费用记录</div>';
     }
 
@@ -3960,12 +4137,22 @@ function renderExpCalendar(){
 }
 
 // 月份导航
-function expCalNav(dir){
-    var parts=_expCalYM.split('-');
-    var y=parseInt(parts[0]),m=parseInt(parts[1])+dir;
-    if(m<1){m=12;y--}if(m>12){m=1;y++}
-    _expCalYM=y+'-'+(m<10?'0'+m:''+m);
-    document.getElementById('expDetail').innerHTML=renderExpCalendar();
+function expCalNav(dir) {
+    var parts = _expCalYM.split('-').map(Number);
+    parts[1] += dir;
+    if (parts[1] < 1) { parts[0]--; parts[1] = 12; }
+    if (parts[1] > 12) { parts[0]++; parts[1] = 1; }
+    _expCalYM = parts[0] + '-' + String(parts[1]).padStart(2, '0');
+    var picker = $id('expCalPicker');
+    if (picker) picker.value = _expCalYM;
+    renderExp();
+}
+
+// 月份选择
+function expCalPickYM(val) {
+    if (!val) return;
+    _expCalYM = val;
+    renderExp();
 }
 
 // 点击日期格子
@@ -3976,50 +4163,59 @@ function expDayClick(dateStr){
 }
 
 // 某天费用弹窗
-function showExpDayModal(date,items){
-    var total=items.reduce(function(s,e){return s+e.amount},0);
-    var dateLabel=date.substring(5).replace('-','/') || date;
+function showExpDayModal(date, items) {
+    var total = items.reduce(function(s, e) { return s + e.amount; }, 0);
+    var dateLabel = date.substring(5).replace('-', '/') || date;
 
-    var h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
-    h+='<h3 style="margin:0">'+dateLabel+' 费用明细</h3>';
-    h+='<span style="font-size:.95rem;font-weight:700;color:var(--ac)">¥'+fmtC(total)+'</span></div>';
+    var h = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
+    h += '<h3 style="margin:0">' + dateLabel + ' 费用明细</h3>';
+    h += '<div style="display:flex;align-items:center;gap:8px">';
+    h += '<span style="font-size:.95rem;font-weight:700;color:var(--ac)">¥' + fmtC(total) + '</span>';
+    h += '</div></div>';
 
-    // 分类汇总
-    var catTotals={};
-    items.forEach(function(e){
-        if(!catTotals[e.category])catTotals[e.category]=0;
-        catTotals[e.category]+=e.amount;
+    var catTotals = {};
+    items.forEach(function(e) {
+        if (!catTotals[e.category]) catTotals[e.category] = 0;
+        catTotals[e.category] += e.amount;
     });
-    h+='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">';
-    Object.keys(catTotals).forEach(function(cat){
-        h+='<span class="badge">'+cat+' '+fmtC(catTotals[cat])+'</span>';
+    h += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">';
+    Object.keys(catTotals).forEach(function(cat) {
+        h += '<span class="badge">' + cat + ' ' + fmtC(catTotals[cat]) + '</span>';
     });
-    h+='</div>';
+    h += '</div>';
 
-    // 逐笔
-    h+='<div style="max-height:50vh;overflow-y:auto;padding-right:4px">';
-    items.forEach(function(e){
-        h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;margin-bottom:6px;background:var(--card-h);border:1px solid var(--bd);border-radius:8px">';
-
-        h+='<div style="flex:1;min-width:0">';
-        h+='<div style="font-size:.84rem;font-weight:600">'+e.category+'</div>';
-        if(e.note)h+='<div style="font-size:.72rem;color:var(--tx-m);margin-top:2px">'+e.note+'</div>';
-        if(e.photoFile)h+='<span class="badge gn" style="margin-top:4px;display:inline-block">📷</span>';
-        h+='</div>';
-
-        h+='<div style="display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:8px">';
-        h+='<span style="font-size:.88rem;font-weight:700;color:var(--ac)">¥'+fmtC(e.amount)+'</span>';
-        h+=' <button class="btn s" onclick="editExpFromCal(\''+e.id+'\',\''+date+'\')">编</button>';
-        h+=' <button class="btn s d" onclick="delExpFromCal(\''+e.id+'\',\''+date+'\')">删</button>';
-        h+='</div>';
-
-        h+='</div>';
+    h += '<div style="max-height:50vh;overflow-y:auto;padding-right:4px">';
+    items.forEach(function(e) {
+        h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:8px 10px;margin-bottom:6px;background:var(--card-h);border:1px solid var(--bd);border-radius:8px">';
+        h += '<div style="flex:1;min-width:0">';
+        h += '<div style="font-size:.84rem;font-weight:600">' + e.category + '</div>';
+        if (e.note) h += '<div style="font-size:.72rem;color:var(--tx-m);margin-top:2px">' + e.note + '</div>';
+        if (e.photoFile) {
+            h += '<div style="margin-top:4px;cursor:pointer" onclick="toggleExpPhoto(\'' + e.id + '\')">';
+            h += '<img src="' + e.photoFile + '" style="max-width:80px;max-height:50px;border-radius:4px;border:1px solid var(--bd)">';
+            h += '</div>';
+            h += '<div id="expPhoto_' + e.id + '" style="display:none;margin-top:6px">';
+            h += '<img src="' + e.photoFile + '" style="max-width:100%;max-height:300px;border-radius:8px;border:1px solid var(--bd)">';
+            h += '</div>';
+        }
+        h += '</div>';
+        h += '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:8px">';
+        h += '<span style="font-size:.88rem;font-weight:700;color:var(--ac)">¥' + fmtC(e.amount) + '</span>';
+        h += '<button class="btn s" onclick="editExpFromCal(\'' + e.id + '\',\'' + date + '\')">编</button>';
+        h += '<button class="btn s d" onclick="delExpFromCal(\'' + e.id + '\',\'' + date + '\')">删</button>';
+        h += '</div></div>';
     });
-    h+='</div>';
+    h += '</div>';
 
-    h+='<div class="brow" style="margin-top:12px;justify-content:flex-end"><button class="btn" onclick="closeModal()">关闭</button></div>';
+    h += '<div class="brow" style="margin-top:12px;justify-content:flex-end"><button class="btn" onclick="closeModal()">关闭</button></div>';
+    showModal(h, 550);
+}
 
-    showModal(h,550);
+// 查看费用凭证照片
+function toggleExpPhoto(id) {
+    var el = document.getElementById('expPhoto_' + id);
+    if (!el) return;
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
 
 // 从弹窗编辑
@@ -4042,6 +4238,240 @@ function delExpFromCal(id,date){
         // 刷新日历
         document.getElementById('expDetail').innerHTML=renderExpCalendar();
     }
+}
+
+// 导出费用PDF的日期选择弹窗
+function showExpPDFDialog() {
+    var ym = _expCalYM || curYM();
+    var daysInMonth = new Date(parseInt(ym.split('-')[0]), parseInt(ym.split('-')[1]), 0).getDate();
+    var h = '<h3>导出费用PDF</h3>';
+    h += '<div class="hrow"><label>开始</label><input class="inp" id="pdfStart" type="text" readonly value="' + ym + '-01" onclick="_dpOpen(\'pdfStart\')" style="max-width:150px;cursor:pointer">';
+    h += '<label>结束</label><input class="inp" id="pdfEnd" type="text" readonly value="' + ym + '-' + String(daysInMonth).padStart(2,'0') + '" onclick="_dpOpen(\'pdfEnd\')" style="max-width:150px;cursor:pointer"></div>';
+    h += '<div class="brow" style="margin-top:12px;justify-content:flex-end">';
+    h += '<button class="btn p" onclick="previewExpPDF()">预览</button>';
+    h += '<button class="btn" onclick="closeModal()">取消</button></div>';
+    showModal(h, 500);
+}
+
+// 预览费用PDF的内容（在弹窗中展示，提供打印按钮）
+function previewExpPDF() {
+    var startDate = $id('pdfStart').value;
+    var endDate = $id('pdfEnd').value;
+    if (!startDate || !endDate) { toast('请选择起止日期'); return; }
+    if (startDate > endDate) { var t = startDate; startDate = endDate; endDate = t; }
+
+    var items = DB.expenses.filter(function(e) { return e.date >= startDate && e.date <= endDate; });
+    items.sort(function(a, b) { return a.date.localeCompare(b.date); });
+    if (!items.length) { toast('该时间段无费用记录'); return; }
+
+    var total = items.reduce(function(s, e) { return s + e.amount; }, 0);
+    var startLabel = startDate.replace(/-/g, '/');
+    var endLabel = endDate.replace(/-/g, '/');
+    window._expPDFItems = items;
+    window._expPDFTotal = total;
+    window._expPDFStart = startLabel;
+    window._expPDFEnd = endLabel;
+
+    var h = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+    h += '<h3 style="margin:0">费用报告 · ' + startLabel + ' — ' + endLabel + '</h3>';
+    h += '<div style="display:flex;gap:6px">';
+    h += '<button class="btn p" onclick="printExpPDF()">打印 / 导出PDF</button>';
+    h += '<button class="btn" onclick="showExpPDFDialog()">返回</button></div></div>';
+
+    h += '<div style="background:#fff;border:1px solid var(--bd);border-radius:8px;padding:16px;max-height:65vh;overflow-y:auto">';
+    h += '<table style="width:100%;border-collapse:collapse;font-size:.78rem">';
+    h += '<tr><th style="text-align:left;padding:8px;background:var(--card-h);border-bottom:1px solid var(--bd)">日期</th>';
+    h += '<th style="text-align:left;padding:8px;background:var(--card-h);border-bottom:1px solid var(--bd)">分类/备注</th>';
+    h += '<th style="text-align:right;padding:8px;background:var(--card-h);border-bottom:1px solid var(--bd)">金额</th>';
+    h += '<th style="text-align:center;padding:8px;background:var(--card-h);border-bottom:1px solid var(--bd)">图片</th></tr>';
+
+    items.forEach(function(e) {
+        var dateLabel = e.date.substring(5).replace('-', '/');
+        // 主行
+        h += '<tr>';
+        h += '<td style="padding:8px;border-bottom:1px solid var(--bd-l);white-space:nowrap">' + dateLabel + '</td>';
+        h += '<td style="padding:8px;border-bottom:1px solid var(--bd-l)">' + e.category + (e.note ? ' · ' + e.note : '') + '</td>';
+        h += '<td style="padding:8px;border-bottom:1px solid var(--bd-l);text-align:right;font-family:var(--fm);font-weight:600">¥' + fmtC(e.amount) + '</td>';
+        h += '<td style="padding:8px;border-bottom:1px solid var(--bd-l);text-align:center">';
+        if (e.photoFile) {
+            h += '<img src="' + e.photoFile + '" style="max-width:60px;max-height:40px;border-radius:4px;border:1px solid var(--bd);cursor:pointer" onclick="toggleExpPhoto(\'' + e.id + '\')">';
+        } else {
+            h += '<span style="font-size:.65rem;color:var(--tx-s)">-</span>';
+        }
+        h += '</td></tr>';
+        // 大图行（默认隐藏）
+        if (e.photoFile) {
+            h += '<tr id="expPhoto_' + e.id + '" style="display:none"><td colspan="4" style="padding:8px 8px 12px;border-bottom:1px solid var(--bd-l);text-align:center">';
+            h += '<img src="' + e.photoFile + '" style="max-width:100%;max-height:300px;border-radius:8px;border:1px solid var(--bd)" onclick="toggleExpPhoto(\'' + e.id + '\')">';
+            h += '</td></tr>';
+        }
+    });
+
+    h += '<tr style="background:var(--card-h);font-weight:600"><td colspan="2" style="padding:8px">合计</td>';
+    h += '<td style="padding:8px;text-align:right;font-family:var(--fm)">¥' + fmtC(total) + '</td><td></td></tr>';
+    h += '</table></div>';
+
+    showModal(h, 750);
+}
+
+// 打印费用PDF（在新窗口中生成适合打印的HTML）
+function printExpPDF() {
+    var items = window._expPDFItems;
+    var total = window._expPDFTotal;
+    var startLabel = window._expPDFStart;
+    var endLabel = window._expPDFEnd;
+    if (!items) { toast('请先预览'); return; }
+
+    var rows = '';
+    items.forEach(function(e) {
+        var dateLabel = e.date.substring(5).replace('-', '/');
+        rows += '<tr>';
+        rows += '<td>' + dateLabel + '</td>';
+        rows += '<td>' + e.category + (e.note ? ' · ' + e.note : '') + '</td>';
+        rows += '<td class="nr">¥' + fmtC(e.amount) + '</td>';
+        rows += '<td style="text-align:center">';
+        if (e.photoFile) rows += '<img src="' + e.photoFile + '" style="max-width:60px;max-height:40px;border-radius:4px;border:1px solid #ddd">';
+        else rows += '-';
+        rows += '</td></tr>';
+    });
+
+    var html = '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>费用报告</title>';
+    html += '<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;600;700&family=Lexend:wght@300;400;500;600&family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">';
+    html += '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:"Noto Sans SC",sans-serif;padding:40px;max-width:800px;margin:auto;color:#2c2c2c;line-height:1.8;font-size:13px}';
+    html += '@media print{body{padding:20px}tr{page-break-inside:avoid}img{max-width:50px!important}}';
+    html += '.header{text-align:center;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #b08d57}';
+    html += '.header h1{font-family:"Playfair Display",serif;font-size:1.4rem;color:#b08d57}.header .sub{color:#888;font-size:.78rem;letter-spacing:.15em}.header .period{color:#555;font-size:.82rem;margin-top:8px}';
+    html += 'table{width:100%;border-collapse:collapse;font-size:.82rem;margin-bottom:8px}';
+    html += 'th{background:#f0ece4;padding:8px 12px;text-align:left;font-weight:600;color:#666;font-size:.72rem;border-bottom:1px solid #ddd}';
+    html += 'td{padding:8px 12px;border-bottom:1px solid #eee;color:#333}';
+    html += '.nr{text-align:right;font-family:"Lexend",monospace}tr.total{background:#f8f6f0;font-weight:600}tr.total td{border-top:2px solid #b08d57}';
+    html += '.footer{text-align:center;color:#aaa;font-size:.68rem;margin-top:30px;padding-top:12px;border-top:1px solid #eee}';
+    html += '.print-bar{position:fixed;bottom:20px;right:20px;display:flex;gap:8px;z-index:100}';
+    html += '.print-btn{padding:10px 20px;border:none;border-radius:8px;font-size:.82rem;cursor:pointer;transition:all .2s}';
+    html += '.print-btn.primary{background:#b08d57;color:#fff}.print-btn.secondary{background:#f0ece4;color:#333;border:1px solid #ddd}';
+    html += '.print-btn:hover{opacity:.85}@media print{.print-bar{display:none}}</style></head><body>';
+
+    html += '<div class="print-bar no-print"><button class="print-btn secondary" onclick="window.close()">关闭</button>';
+    html += '<button class="print-btn primary" onclick="window.print()">打印 / 导出PDF</button></div>';
+
+    html += '<div class="header"><h1>岸香咖啡 · 费用报告</h1>';
+    html += '<div class="sub">ANSHIANG COFFEE EXPENSE REPORT</div>';
+    html += '<div class="period">' + startLabel + ' — ' + endLabel + '</div></div>';
+
+    html += '<table><tr><th>日期</th><th>分类/备注</th><th class="nr">金额</th><th style="text-align:center">图片</th></tr>';
+    html += rows;
+    html += '<tr class="total"><td colspan="2">合计</td><td class="nr">¥' + fmtC(total) + '</td><td></td></tr></table>';
+
+    html += '<div class="footer">岸香咖啡弘皓大厦店 · ' + td() + ' 生成</div></body></html>';
+
+    var win = window.open('', '_blank');
+    if (win) { win.document.write(html); win.document.close(); setTimeout(function(){win.print();},500); }
+    else toast('弹窗被拦截');
+}
+
+// 执行导出费用PDF的操作
+function doExportExpPDF() {
+    var startDate = $id('pdfStart').value;
+    var endDate = $id('pdfEnd').value;
+    if (!startDate || !endDate) { toast('请选择起止日期'); return; }
+    if (startDate > endDate) { var t = startDate; startDate = endDate; endDate = t; }
+
+    var items = DB.expenses.filter(function(e) { return e.date >= startDate && e.date <= endDate; });
+    items.sort(function(a, b) { return a.date.localeCompare(b.date); });
+    if (!items.length) { toast('该时间段无费用记录'); return; }
+
+    closeModal();
+    var total = items.reduce(function(s, e) { return s + e.amount; }, 0);
+    var days = {};
+    items.forEach(function(e) {
+        if (!days[e.date]) days[e.date] = [];
+        days[e.date].push(e);
+    });
+    var dateCount = Object.keys(days).length;
+
+    // 分类汇总
+    var catTotals = {};
+    items.forEach(function(e) {
+        if (!catTotals[e.category]) catTotals[e.category] = 0;
+        catTotals[e.category] += e.amount;
+    });
+
+    // 每日明细行
+    var dailyRows = '';
+    var dateKeys = Object.keys(days).sort();
+    var idx = 0;
+    dateKeys.forEach(function(date) {
+        var dayItems = days[date];
+        var dayTotal = dayItems.reduce(function(s, e) { return s + e.amount; }, 0);
+        var dateLabel = date.substring(5).replace('-', '/');
+
+        dailyRows += '<tr style="background:#f8f6f0"><td colspan="4" style="font-weight:700;color:#b08d57;padding:8px 10px">' + dateLabel + '  <span style="font-family:Lexend,monospace;color:#555">¥' + fmtC(dayTotal) + '</span></td></tr>';
+
+        dayItems.forEach(function(e) {
+            idx++;
+            dailyRows += '<tr><td style="padding-left:24px">' + idx + '</td>';
+            dailyRows += '<td>' + e.category + '</td>';
+            dailyRows += '<td class="nr">¥' + fmtC(e.amount) + '</td>';
+            dailyRows += '<td>' + (e.note || '-') + '</td></tr>';
+        });
+    });
+
+    // 分类行
+    var catRows = '';
+    Object.keys(catTotals).sort(function(a, b) { return catTotals[b] - catTotals[a]; }).forEach(function(cat) {
+        catRows += '<tr><td>' + cat + '</td><td class="nr">¥' + fmtC(catTotals[cat]) + '</td>';
+        catRows += '<td class="nr">' + (total > 0 ? (catTotals[cat] / total * 100).toFixed(1) : 0) + '%</td></tr>';
+    });
+
+    var startLabel = startDate.replace(/-/g, '/');
+    var endLabel = endDate.replace(/-/g, '/');
+
+    var html = '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>费用报告 - ' + startLabel + ' 至 ' + endLabel + '</title>';
+    html += '<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;600;700&family=Lexend:wght@300;400;500;600&family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">';
+    html += '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:"Noto Sans SC",sans-serif;padding:40px;max-width:800px;margin:auto;color:#2c2c2c;line-height:1.8;font-size:13px}';
+    html += '@media print{body{padding:20px}.no-print{display:none!important}tr{page-break-inside:avoid}}';
+    html += '.header{text-align:center;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #b08d57}';
+    html += '.header h1{font-family:"Playfair Display",serif;font-size:1.4rem;color:#b08d57}.header .sub{color:#888;font-size:.78rem;letter-spacing:.15em}.header .period{color:#555;font-size:.82rem;margin-top:8px}';
+    html += '.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}';
+    html += '.metric{background:#f8f6f0;border:1px solid #e8e2d8;border-radius:8px;padding:12px;text-align:center}.metric .label{font-size:.7rem;color:#888}.metric .value{font-family:"Lexend",monospace;font-size:1.05rem;font-weight:600;margin-top:4px;color:#b08d57}';
+    html += '.section{margin-bottom:20px}.section h2{font-size:.9rem;color:#b08d57;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #e8e2d8}';
+    html += 'table{width:100%;border-collapse:collapse;font-size:.8rem;margin-bottom:8px}th{background:#f0ece4;padding:7px 10px;text-align:left;font-weight:600;color:#666;font-size:.72rem;border-bottom:1px solid #ddd}td{padding:6px 10px;border-bottom:1px solid #eee;color:#333}';
+    html += '.nr{text-align:right;font-family:"Lexend",monospace}tr.total{background:#f8f6f0;font-weight:600}tr.total td{border-top:2px solid #b08d57}';
+    html += '.footer{text-align:center;color:#aaa;font-size:.68rem;margin-top:30px;padding-top:12px;border-top:1px solid #eee}';
+    html += '.print-bar{position:fixed;bottom:20px;right:20px;display:flex;gap:8px;z-index:100}';
+    html += '.print-btn{padding:10px 20px;border:none;border-radius:8px;font-size:.82rem;cursor:pointer;transition:all .2s}.print-btn.primary{background:#b08d57;color:#fff}.print-btn.secondary{background:#f0ece4;color:#333;border:1px solid #ddd}';
+    html += '.print-btn:hover{opacity:.85}@media print{.print-bar{display:none}}</style></head><body>';
+
+    html += '<div class="print-bar no-print"><button class="print-btn secondary" onclick="window.close()">关闭</button><button class="print-btn primary" onclick="window.print()">打印 / 导出PDF</button></div>';
+
+    html += '<div class="header"><h1>岸香咖啡 · 费用报告</h1>';
+    html += '<div class="sub">ANSHIANG COFFEE EXPENSE REPORT</div>';
+    html += '<div class="period">' + startLabel + ' — ' + endLabel + '</div></div>';
+
+    html += '<div class="metrics">';
+    html += '<div class="metric"><div class="label">合计费用</div><div class="value">¥' + fmtC(total) + '</div></div>';
+    html += '<div class="metric"><div class="label">总笔数</div><div class="value">' + items.length + '</div></div>';
+    html += '<div class="metric"><div class="label">天数</div><div class="value">' + dateCount + '</div></div>';
+    html += '<div class="metric"><div class="label">日均</div><div class="value">¥' + fmtC(total / dateCount) + '</div></div>';
+    html += '</div>';
+
+    // 费用分类汇总
+    html += '<div class="section"><h2>费用分类汇总</h2>';
+    html += '<table><tr><th>分类</th><th class="nr">金额</th><th class="nr">占比</th></tr>';
+    html += catRows;
+    html += '<tr class="total"><td>合计</td><td class="nr">¥' + fmtC(total) + '</td><td class="nr">100%</td></tr></table></div>';
+
+    // 每日明细
+    html += '<div class="section"><h2>每日费用明细</h2>';
+    html += '<table><tr><th>序号</th><th>分类</th><th class="nr">金额</th><th>备注</th></tr>';
+    html += dailyRows;
+    html += '<tr class="total"><td colspan="2">合计</td><td class="nr">¥' + fmtC(total) + '</td><td></td></tr></table></div>';
+
+    html += '<div class="footer">岸香咖啡弘皓大厦店 · ' + td() + ' 生成</div></body></html>';
+
+    var win = window.open('', '_blank');
+    if (win) { win.document.write(html); win.document.close(); toast('费用报告已生成，按 Ctrl+P 打印'); }
+    else toast('弹窗被拦截');
 }
 
 
@@ -4120,7 +4550,77 @@ function rInv(type) {
 
         // ---------- 茗茶 ----------
         if (type === 'tea') {
-            h += '<tr><th>品名</th><th>库存</th><th>库存价值</th><th>本月实收</th><th>毛利</th><th>毛利率</th><th>操作</th></tr>';
+            h += '<tr><th>品名</th><th>结存</th><th>本月实收</th><th>销售成本</th><th>毛利</th><th>操作</th></tr>';
+
+            stats.forEach(function(st) {
+                // 主行
+                h += '<tr data-inv="' + type + '_' + st.item.id + '">';
+                h += '<td style="font-weight:600">' + st.item.name + '</td>';
+                h += '<td class="nr">' + st.stock + '克</td>';
+                h += '<td class="nr" style="color:var(--gn);font-weight:600">' + fmtC(st.actual) + '</td>';
+                h += '<td class="nr" style="color:var(--rd);font-weight:600">' + fmtC(st.cost) + '</td>';
+                h += '<td class="nr" style="color:' + (st.profit >= 0 ? 'var(--gn)' : 'var(--rd)') + ';font-weight:600">' + fmtC(st.profit) + '</td>';
+                h += '<td><button class="btn s" data-act="edit">编</button> ';
+                h += '<button class="btn s" onclick="invDetail(\'' + type + '\',\'' + st.item.id + '\')">详</button> ';
+                h += '<button class="btn s d" data-act="del">×</button></td></tr>';
+
+                // 次行
+                h += '<tr>';
+                h += '<td colspan="6" style="padding:4px 10px 8px;border-bottom:1px solid var(--bd-l)">';
+                h += '<span style="font-size:.68rem;color:var(--tx-m)">';
+                h += '单杯 ¥' + fmt(st.item.pricePerCup || 0) + ' · 单壶 ¥' + fmt(st.item.pricePerPot || 0);
+                h += ' · 售 ' + st.cups + '杯+' + st.pots + '壶';
+                h += ' · 库存价值 ¥' + fmtC(st.fifo.remainValue);
+                h += '</span></td></tr>';
+            });
+
+        // 合计
+        h += '<tr style="background:var(--card-h)">';
+        h += '<td style="font-weight:600">合计</td><td></td>';
+        h += '<td class="nr" style="font-weight:600;color:var(--rd)">' + fmtC(tC) + '</td>';
+        h += '<td class="nr" style="font-weight:600;color:var(--gn)">' + fmtC(tA) + '</td>';
+        h += '<td class="nr" style="font-weight:600;color:' + (tP >= 0 ? 'var(--gn)' : 'var(--rd)') + '">' + fmtC(tP) + '</td>';
+        h += '<td></td></tr>';
+
+        // ---------- 香烟 ----------
+        } else if (type === 'cig') {
+            h += '<tr><th>品名</th><th>结存</th><th>销售总额</th><th>销售成本</th><th>毛利</th><th>操作</th></tr>';
+
+            stats.forEach(function(st) {
+                var margin = st.actual > 0 ? fmtP(st.profit / st.actual * 100) : '0%';
+
+                // 主行：结存、销售总额、销售成本、毛利
+                h += '<tr data-inv="' + type + '_' + st.item.id + '">';
+                h += '<td style="font-weight:600">' + st.item.name + '</td>';
+                h += '<td class="nr">' + st.stock + '包</td>';
+                h += '<td class="nr" style="color:var(--gn);font-weight:600">' + fmtC(st.actual) + '</td>';
+                h += '<td class="nr" style="color:var(--rd);font-weight:600">' + fmtC(st.cost) + '</td>';
+                h += '<td class="nr" style="color:' + (st.profit >= 0 ? 'var(--gn)' : 'var(--rd)') + ';font-weight:600">' + fmtC(st.profit) + '</td>';
+                h += '<td><button class="btn s" data-act="edit">编</button> ';
+                h += '<button class="btn s" onclick="invDetail(\'' + type + '\',\'' + st.item.id + '\')">详</button> ';
+                h += '<button class="btn s d" data-act="del">×</button></td></tr>';
+
+                // 次行：单价、销售数量、毛利率
+                h += '<tr>';
+                h += '<td colspan="6" style="padding:4px 10px 8px;border-bottom:1px solid var(--bd-l)">';
+                h += '<span style="font-size:.68rem;color:var(--tx-m)">';
+                h += '单价 ¥' + fmt(st.item.pricePerUnit || 0) + '/包';
+                h += ' · 售 ' + st.qty + '包';
+                h += ' · 毛利率 ' + margin;
+                h += '</span></td></tr>';
+            });
+
+            // 合计
+            h += '<tr style="background:var(--card-h)">';
+            h += '<td style="font-weight:600">合计</td><td></td>';
+            h += '<td class="nr" style="font-weight:600;color:var(--gn)">' + fmtC(tA) + '</td>';
+            h += '<td class="nr" style="font-weight:600;color:var(--rd)">' + fmtC(tC) + '</td>';
+            h += '<td class="nr" style="font-weight:600;color:' + (tP >= 0 ? 'var(--gn)' : 'var(--rd)') + '">' + fmtC(tP) + '</td>';
+            h += '<td></td></tr>';
+
+        // ---------- 酒类 ----------
+        } else {
+            h += '<tr><th>品名</th><th>结存</th><th>销售总额</th><th>销售成本</th><th>毛利</th><th>操作</th></tr>';
 
             stats.forEach(function(st) {
                 var margin = st.actual > 0 ? fmtP(st.profit / st.actual * 100) : '0%';
@@ -4128,105 +4628,30 @@ function rInv(type) {
                 // 主行
                 h += '<tr data-inv="' + type + '_' + st.item.id + '">';
                 h += '<td style="font-weight:600">' + st.item.name + '</td>';
-                h += '<td class="nr">' + st.stock + '克</td>';
-                h += '<td class="nr" style="color:var(--ac);font-weight:600">' + fmtC(st.fifo.remainValue) + '</td>';
+                h += '<td class="nr">' + st.stock + '瓶</td>';
                 h += '<td class="nr" style="color:var(--gn);font-weight:600">' + fmtC(st.actual) + '</td>';
+                h += '<td class="nr" style="color:var(--rd);font-weight:600">' + fmtC(st.cost) + '</td>';
                 h += '<td class="nr" style="color:' + (st.profit >= 0 ? 'var(--gn)' : 'var(--rd)') + ';font-weight:600">' + fmtC(st.profit) + '</td>';
-                h += '<td class="nr">' + margin + '</td>';
                 h += '<td><button class="btn s" data-act="edit">编</button> ';
                 h += '<button class="btn s" onclick="invDetail(\'' + type + '\',\'' + st.item.id + '\')">详</button> ';
                 h += '<button class="btn s d" data-act="del">×</button></td></tr>';
 
                 // 次行
                 h += '<tr>';
-                h += '<td colspan="7" style="padding:4px 10px 8px;border-bottom:1px solid var(--bd-l)">';
-                h += '<span style="font-size:.68rem;color:var(--tx-m)">';
-                h += '单杯 ¥' + fmt(st.item.pricePerCup || 0);
-                h += ' · 单壶 ¥' + fmt(st.item.pricePerPot || 0);
-                h += ' · 售 ' + st.cups + '杯+' + st.pots + '壶';
-                h += ' · 销售成本 ¥' + fmtC(st.cost);
-                h += '</span></td></tr>';
-            });
-
-            // 合计
-            h += '<tr style="background:var(--card-h)">';
-            h += '<td style="font-weight:600">合计</td><td></td>';
-            h += '<td class="nr" style="font-weight:600;color:var(--ac)">' + fmtC(tFifoValue) + '</td>';
-            h += '<td class="nr" style="font-weight:600;color:var(--gn)">' + fmtC(tA) + '</td>';
-            h += '<td class="nr" style="font-weight:600;color:' + (tP >= 0 ? 'var(--gn)' : 'var(--rd)') + '">' + fmtC(tP) + '</td>';
-            h += '<td class="nr" style="font-weight:600">' + (tA > 0 ? fmtP(tP / tA * 100) : '0%') + '</td>';
-            h += '<td></td></tr>';
-
-        // ---------- 香烟 ----------
-        } else if (type === 'cig') {
-            h += '<tr><th>品名</th><th>库存</th><th>库存价值</th><th>本月实收</th><th>毛利</th><th>毛利率</th><th>操作</th></tr>';
-
-            stats.forEach(function(st) {
-                var margin = st.actual > 0 ? fmtP(st.profit / st.actual * 100) : '0%';
-
-                h += '<tr data-inv="' + type + '_' + st.item.id + '">';
-                h += '<td style="font-weight:600">' + st.item.name + '</td>';
-                h += '<td class="nr">' + st.stock + '包</td>';
-                h += '<td class="nr" style="color:var(--ac);font-weight:600">' + fmtC(st.fifo.remainValue) + '</td>';
-                h += '<td class="nr" style="color:var(--gn);font-weight:600">' + fmtC(st.actual) + '</td>';
-                h += '<td class="nr" style="color:' + (st.profit >= 0 ? 'var(--gn)' : 'var(--rd)') + ';font-weight:600">' + fmtC(st.profit) + '</td>';
-                h += '<td class="nr">' + margin + '</td>';
-                h += '<td><button class="btn s" data-act="edit">编</button> ';
-                h += '<button class="btn s" onclick="invDetail(\'' + type + '\',\'' + st.item.id + '\')">详</button> ';
-                h += '<button class="btn s d" data-act="del">×</button></td></tr>';
-
-                h += '<tr>';
-                h += '<td colspan="7" style="padding:4px 10px 8px;border-bottom:1px solid var(--bd-l)">';
-                h += '<span style="font-size:.68rem;color:var(--tx-m)">';
-                h += '单价 ¥' + fmt(st.item.pricePerUnit || 0) + '/包';
-                h += ' · 售 ' + st.qty + '包';
-                h += ' · 销售成本 ¥' + fmtC(st.cost);
-                h += '</span></td></tr>';
-            });
-
-            // 合计
-            h += '<tr style="background:var(--card-h)">';
-            h += '<td style="font-weight:600">合计</td><td></td>';
-            h += '<td class="nr" style="font-weight:600;color:var(--ac)">' + fmtC(tFifoValue) + '</td>';
-            h += '<td class="nr" style="font-weight:600;color:var(--gn)">' + fmtC(tA) + '</td>';
-            h += '<td class="nr" style="font-weight:600;color:' + (tP >= 0 ? 'var(--gn)' : 'var(--rd)') + '">' + fmtC(tP) + '</td>';
-            h += '<td class="nr" style="font-weight:600">' + (tA > 0 ? fmtP(tP / tA * 100) : '0%') + '</td>';
-            h += '<td></td></tr>';
-
-        // ---------- 酒类 ----------
-        } else {
-            h += '<tr><th>品名</th><th>库存</th><th>库存价值</th><th>本月实收</th><th>毛利</th><th>毛利率</th><th>操作</th></tr>';
-
-            stats.forEach(function(st) {
-                var margin = st.actual > 0 ? fmtP(st.profit / st.actual * 100) : '0%';
-
-                h += '<tr data-inv="' + type + '_' + st.item.id + '">';
-                h += '<td style="font-weight:600">' + st.item.name + '</td>';
-                h += '<td class="nr">' + st.stock + '瓶</td>';
-                h += '<td class="nr" style="color:var(--ac);font-weight:600">' + fmtC(st.fifo.remainValue) + '</td>';
-                h += '<td class="nr" style="color:var(--gn);font-weight:600">' + fmtC(st.actual) + '</td>';
-                h += '<td class="nr" style="color:' + (st.profit >= 0 ? 'var(--gn)' : 'var(--rd)') + ';font-weight:600">' + fmtC(st.profit) + '</td>';
-                h += '<td class="nr">' + margin + '</td>';
-                h += '<td><button class="btn s" data-act="edit">编</button> ';
-                h += '<button class="btn s" onclick="invDetail(\'' + type + '\',\'' + st.item.id + '\')">详</button> ';
-                h += '<button class="btn s d" data-act="del">×</button></td></tr>';
-
-                h += '<tr>';
-                h += '<td colspan="7" style="padding:4px 10px 8px;border-bottom:1px solid var(--bd-l)">';
+                h += '<td colspan="6" style="padding:4px 10px 8px;border-bottom:1px solid var(--bd-l)">';
                 h += '<span style="font-size:.68rem;color:var(--tx-m)">';
                 h += '单价 ¥' + fmt(st.item.pricePerUnit || 0) + '/瓶';
                 h += ' · 售 ' + st.qty + '瓶';
-                h += ' · 销售成本 ¥' + fmtC(st.cost);
+                h += ' · 毛利率 ' + margin;
                 h += '</span></td></tr>';
             });
 
             // 合计
             h += '<tr style="background:var(--card-h)">';
             h += '<td style="font-weight:600">合计</td><td></td>';
-            h += '<td class="nr" style="font-weight:600;color:var(--ac)">' + fmtC(tFifoValue) + '</td>';
             h += '<td class="nr" style="font-weight:600;color:var(--gn)">' + fmtC(tA) + '</td>';
+            h += '<td class="nr" style="font-weight:600;color:var(--rd)">' + fmtC(tC) + '</td>';
             h += '<td class="nr" style="font-weight:600;color:' + (tP >= 0 ? 'var(--gn)' : 'var(--rd)') + '">' + fmtC(tP) + '</td>';
-            h += '<td class="nr" style="font-weight:600">' + (tA > 0 ? fmtP(tP / tA * 100) : '0%') + '</td>';
             h += '<td></td></tr>';
         }
 
@@ -5217,7 +5642,7 @@ function showAddInv(type, itemId) {
     var isEdit = !!item;
 
     var h = '<h3>' + (isEdit ? '编辑' : '添加') + ' ' + INV[type].label + '</h3>';
-
+    // 茶叶
     if (type === 'tea') {
         var mode = (isEdit ? item.calcMode : '') || 'gram';
         h += '<div class="section-label">基本信息</div>';
@@ -5259,6 +5684,7 @@ function showAddInv(type, itemId) {
         h += ' <label>补货提醒</label><input class="inp" id="ai_ra_p" type="number" style="max-width:80px" value="' + (isEdit ? item.restockAlert || 0 : 0) + '">包<span style="font-size:.72rem;color:var(--tx-m)">(0=不提醒)</span></div>';
         h += '<div style="font-size:.72rem;color:var(--tx-s);margin-bottom:8px">采购换算: 1斤=500克 ÷ ' + gpk + '克/包 ≈ ' + Math.floor(500 / gpk) + '包</div>';
         h += '</div>';
+    // 香烟
     } else if (type === 'cig') {
         h += '<div class="section-label">基本信息</div>';
         h += '<div class="hrow"><label>品牌</label><input class="inp" id="ai_name" style="flex:2" value="' + (isEdit ? item.name.replace(/"/g, '&quot;') : '') + '">';
@@ -5266,10 +5692,12 @@ function showAddInv(type, itemId) {
         h += ' <label>售价/包</label><input class="inp" id="ai_pricePerUnit" type="number" step="0.01" style="max-width:100px" value="' + (isEdit ? (item.pricePerUnit || 0) : '') + '">元</div>';
         h += '<div class="section-label">库存</div>';
         h += '<div class="hrow"><label>期初库存</label><input class="inp" id="ai_os" type="number" style="max-width:80px" value="' + (isEdit ? item.openingStock || 0 : 0) + '">包';
+        h += ' <label>期初单价</label><input class="inp" id="ai_openCost" type="number" step="0.01" style="max-width:100px" value="' + (isEdit ? (item.openingUnitCost || 0) : '') + '">元/包';
         h += ' <label>补货提醒</label><input class="inp" id="ai_ra" type="number" style="max-width:80px" value="' + (isEdit ? (item.restockAlert || 10) : 10) + '">包<span style="font-size:.72rem;color:var(--tx-m)">(0=不提醒)</span></div>';
         h += '<div class="section-label">采购</div>';
         h += '<div class="hrow"><label>采购单位</label><select class="inp" id="ai_pu" style="max-width:80px"><option' + ((isEdit ? item.purchaseUnit : '条') === '条' ? ' selected' : '') + '>条</option></select>';
         h += '<span style="font-size:.74rem;color:var(--tx-s)">1条 = <input class="inp" id="ai_cr" type="number" style="width:50px;display:inline-block;padding:3px 6px" value="' + (isEdit ? (item.purchaseConvRatio || 10) : 10) + '"> 包</span></div>';
+    // 酒类
     } else {
         h += '<div class="section-label">基本信息</div>';
         h += '<div class="hrow"><label>品名</label><input class="inp" id="ai_name" style="flex:2" value="' + (isEdit ? item.name.replace(/"/g, '&quot;') : '') + '">';
@@ -5277,11 +5705,12 @@ function showAddInv(type, itemId) {
         h += ' <label>售价/瓶</label><input class="inp" id="ai_pricePerUnit" type="number" step="0.01" style="max-width:100px" value="' + (isEdit ? (item.pricePerUnit || 0) : '') + '">元</div>';
         h += '<div class="section-label">库存</div>';
         h += '<div class="hrow"><label>期初库存</label><input class="inp" id="ai_os" type="number" style="max-width:80px" value="' + (isEdit ? item.openingStock || 0 : 0) + '">瓶';
+        h += ' <label>期初单价</label><input class="inp" id="ai_openCost" type="number" step="0.01" style="max-width:100px" value="' + (isEdit ? (item.openingUnitCost || 0) : '') + '">元/瓶';
         h += ' <label>补货提醒</label><input class="inp" id="ai_ra" type="number" style="max-width:80px" value="' + (isEdit ? (item.restockAlert || 10) : 10) + '">瓶<span style="font-size:.72rem;color:var(--tx-m)">(0=不提醒)</span></div>';
         h += '<div class="section-label">采购</div>';
         h += '<div class="hrow"><label>采购单位</label><select class="inp" id="ai_pu" style="max-width:80px"><option' + ((isEdit ? item.purchaseUnit : '箱') === '箱' ? ' selected' : '') + '>箱</option></select>';
         h += '<span style="font-size:.74rem;color:var(--tx-s)">1箱 = <input class="inp" id="ai_cr" type="number" style="width:50px;display:inline-block;padding:3px 6px" value="' + (isEdit ? (item.purchaseConvRatio || 12) : 12) + '"> 瓶</span></div>';
-    }
+    } 
 
     h += '<div class="brow" style="margin-top:16px;justify-content:flex-end"><button class="btn p" onclick="doAddInv(\'' + type + '\'' + (isEdit ? ',\'' + itemId + '\'' : '') + ')">' + (isEdit ? '保存修改' : '添加') + '</button>';
     h += '<button class="btn" onclick="closeModal()">取消</button></div>';
@@ -5796,43 +6225,13 @@ function delWHMove(id, idx) {
 // 报损页面的照片数据（Base64，用于拍照记录报损物品）
 var _dmgPhotoData = null;
 
-// 来源变化时更新物品下拉选项
-function dmgSourceChange() {
-    var src = $id('dmgSource').value;
-    var sel = $id('dmgItem');
-    var items = [];
-
-    if (src === '茗茶') items = DB.teaItems;
-    else if (src === '香烟') items = DB.cigItems;
-    else if (src === '酒类') items = DB.alcItems;
-    else if (src === '仓库') items = DB.whItems;
-
-    var h = '<option value="">选择物品</option>';
-    items.forEach(function(i) { h += '<option value="' + i.id + '">' + i.name + '</option>'; });
-    h += '<option value="_other">其他(手动)</option>';
-    sel.innerHTML = h;
-    $id('dmgManualWrap').style.display = 'none';
-}
-
-// 物品选择变化：选"其他"时显示手动输入框
-function dmgItemChange() {
-    var v = $id('dmgItem').value;
-    $id('dmgManualWrap').style.display = v === '_other' ? '' : 'none';
-}
-
 // 报损主页：录入表单 + 报损记录列表
 function rDamage() {
     var h = '<div class="section-label">录入报损</div>';
 
-    // 日期、来源、物品
+    // 日期、物品名
     h += '<div class="hrow"><label>日期</label><input class="inp" id="dmgDate" type="text" readonly placeholder="选择日期" value="' + td() + '" onclick="_dpOpen(\'dmgDate\')" style="max-width:150px;cursor:pointer">';
-    h += '<label>来源</label><select class="inp" id="dmgSource" style="max-width:100px" onchange="dmgSourceChange()">';
-    h += '<option value="">选择</option><option>茗茶</option><option>香烟</option><option>酒类</option><option>仓库</option></select>';
-    h += '<label>物品</label><select class="inp" id="dmgItem" style="max-width:140px" onchange="dmgItemChange()">';
-    h += '<option value="">选择物品</option><option value="_other">其他(手动)</option></select></div>';
-
-    // 手动物品名（默认隐藏）
-    h += '<div class="hrow" id="dmgManualWrap" style="display:none"><label>物品名</label><input class="inp" id="dmgName" style="flex:2"></div>';
+    h += '<label>物品</label><input class="inp" id="dmgName" placeholder="物品名称" style="flex:2"></div>';
 
     // 数量、单位、原因
     h += '<div class="hrow"><label>数量</label><input class="inp" id="dmgQty" type="number" value="1" style="max-width:60px">';
@@ -5846,7 +6245,7 @@ function rDamage() {
     // 添加按钮
     h += '<div class="brow"><button class="btn p" onclick="doAddDmg()">添加</button></div>';
 
-    // 报损记录列表（按日期倒序）
+    // 报损记录列表
     h += '<div class="sec" style="margin-top:20px">报损记录</div>';
 
     var sorted = DB.damageRecords.slice().sort(function(a, b) { return b.date.localeCompare(a.date); });
@@ -5857,42 +6256,33 @@ function rDamage() {
             h += '<div class="item-card">';
             h += '<span class="name">' + d.date + ' · ' + d.itemName + ' · ' + (d.qty || 0) + (d.unit || '') + (d.reason ? ' · ' + d.reason : '') + '</span>';
             h += '<div class="nums">';
-            if (d.photoFile) h += '<span class="badge gn">📷</span>';
+            if (d.photoFile) {
+                h += '<img src="' + d.photoFile + '" style="max-width:40px;max-height:28px;border-radius:4px;border:1px solid var(--bd);cursor:pointer;vertical-align:middle" onclick="toggleDmgPhoto(\'' + d.id + '\')">';
+            }
             h += '<button class="btn s d" onclick="delDmg(\'' + d.id + '\')">×</button>';
             h += '</div></div>';
+            if (d.photoFile) {
+                h += '<div id="dmgPhoto_' + d.id + '" style="display:none;padding:6px 10px 10px;text-align:center">';
+                h += '<img src="' + d.photoFile + '" style="max-width:100%;max-height:250px;border-radius:8px;border:1px solid var(--bd)" onclick="toggleDmgPhoto(\'' + d.id + '\')">';
+                h += '</div>';
+            }
         });
     }
 
     setMain('报损', h);
 }
 
+// 处理报损照片上传，读取为Base64字符串
+function toggleDmgPhoto(id) {
+    var el = document.getElementById('dmgPhoto_' + id);
+    if (!el) return;
+    el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+
 // 添加报损记录
 function doAddDmg() {
-    var itemSel = $id('dmgItem').value;
-    if (!itemSel) { toast('选物品'); return; }
-
-    // 获取物品名称
-    var itemName = '', itemId = '';
-    if (itemSel === '_other') {
-        // 手动输入的物品名
-        itemName = $id('dmgName').value.trim();
-        if (!itemName) { toast('填物品名'); return; }
-    } else {
-        // 从库存列表中查找
-        itemId = itemSel;
-        var src = $id('dmgSource').value;
-        var list = null;
-        if (src === '茗茶') list = DB.teaItems;
-        else if (src === '香烟') list = DB.cigItems;
-        else if (src === '酒类') list = DB.alcItems;
-        else if (src === '仓库') list = DB.whItems;
-
-        if (list) {
-            var it = list.find(function(i) { return i.id === itemSel; });
-            itemName = it ? it.name : '';
-        }
-    }
-    if (!itemName) { toast('物品无效'); return; }
+    var itemName = $id('dmgName').value.trim();
+    if (!itemName) { toast('填物品名'); return; }
 
     var qty = parseInt($id('dmgQty').value) || 0;
     if (qty <= 0) { toast('填数量'); return; }
@@ -5901,8 +6291,8 @@ function doAddDmg() {
         db.damageRecords.push({
             id: 'dmg_' + Date.now(),
             date: $id('dmgDate').value || td(),
-            category: $id('dmgSource').value || '其他',
-            itemId: itemId,
+            category: '报损',
+            itemId: '',
             itemName: itemName,
             qty: qty,
             unit: $id('dmgUnit').value.trim(),
@@ -7551,15 +7941,6 @@ function ghDisconnect() {
     toast('已断开');
 }
 
-// ---------- 更新顶部同步状态指示灯 ----------
-// 绿色圆点 = 已同步，灰色圆点 = 仅本地
-function updSyncInd() {
-    var el = $id('syncInd');
-    if (!el) return;
-    el.innerHTML = _gh.ready
-        ? '<span class="sync-dot" style="background:var(--gn)"></span>已同步'
-        : '<span class="sync-dot" style="background:var(--tx-m)"></span>本地';
-}
 
 // ---------- 延迟保存（防抖）----------
 // 数据变化后等 1.5 秒再上传，避免频繁请求
@@ -7681,10 +8062,6 @@ function appInit() {
     var savedR = localStorage.getItem('ax_radius');
     if (savedR) document.documentElement.style.setProperty('--r', savedR + 'px');
     if (['ax_font_heading','ax_font_body','ax_font_number'].some(function(k){return localStorage.getItem(k)})) applyFonts();
-
-    document.addEventListener('click', function(e) {
-        if (e.target.id === 'overlay') closeModal();
-    });
 
     renderNav();
     goPage('dash');
