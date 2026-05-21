@@ -1180,6 +1180,7 @@ function rDaily() {
     h += '<div class="section-label">经营数据</div><div id="dmFreeList"></div>';
     h += '<div class="section-label">茗茶销售</div><div id="dmTeaList"></div>';
     h += '<div class="section-label">香烟销售</div><div id="dmCigList"></div>';
+    h += '<div class="section-label">包厢预定</div><div id="dmRoomList"></div>';
     h += '<div class="hrow"><label>汇报人</label><input class="inp" id="dmReporter" style="max-width:160px"></div>';
     h += '<div class="brow"><button class="btn p" onclick="doManualDaily()">保存</button></div>';
     h += '</div>';
@@ -1276,15 +1277,15 @@ function renderDHist() {
 
 // 切换日报标签页（粘贴/手动/明细）
 // 切到手动时初始化填写表单，切到明细时刷新历史列表
-function switchDT(t) {
+function switchDT(tab) {
+    $id('dText').style.display = tab === 'text' ? '' : 'none';
+    $id('dMan').style.display = tab === 'manual' ? '' : 'none';
+    $id('dHist').style.display = tab === 'hist' ? '' : 'none';
     document.querySelectorAll('#dT .tab-btn').forEach(function(b, i) {
-        b.classList.toggle('active', i === (t === 'text' ? 0 : t === 'manual' ? 1 : 2));
+        b.classList.toggle('active', (i === 0 && tab === 'text') || (i === 1 && tab === 'manual') || (i === 2 && tab === 'hist'));
     });
-    $id('dText').style.display = t === 'text' ? '' : 'none';
-    $id('dMan').style.display = t === 'manual' ? '' : 'none';
-    $id('dHist').style.display = t === 'hist' ? '' : 'none';
-    if (t === 'manual') { initFreeRows(); initTeaBlock(); initCigBlock(); }
-    if (t === 'hist') setTimeout(renderDHist, 50);
+    if (tab === 'manual') { initFreeRows(); initTeaBlock(); initCigBlock(); initRoomBlock(); }
+    if (tab === 'hist') renderDHist();
 }
 
 // 日报自定义标签行
@@ -1375,6 +1376,33 @@ function calcCigExpected(el) {
     row.querySelector('.cig-samt').value = (qty * (item.pricePerUnit || 0)).toFixed(2);
 }
 
+// 包厢预定录入
+function initRoomBlock() {
+    var h = '<div id="dmRoomRows">';
+    h += roomRowHTML('李海燕', 0, 0);
+    h += roomRowHTML('文心月', 0, 0);
+    h += roomRowHTML('李海榕', 0, 0);
+    h += roomRowHTML('蒯祯', 0, 0);
+    h += '</div>';
+    h += '<div style="margin-top:6px"><button class="btn s" onclick="addRoomRow()">+添加</button></div>';
+    h += '<div class="hrow" style="margin-top:8px"><label>累计500+包厢</label><input class="inp" id="dmPremCum" type="number" value="0" style="max-width:80px"></div>';
+    $id('dmRoomList').innerHTML = h;
+}
+
+function roomRowHTML(name, today, cum) {
+    return '<div class="hrow free-row room-row">' +
+        '<input class="inp room-name" placeholder="姓名" style="flex:1.5" value="' + (name || '') + '">' +
+        '<input class="inp room-today" type="number" placeholder="今日" style="max-width:60px" value="' + (today || 0) + '">' +
+        '<input class="inp room-cum" type="number" placeholder="累计" style="max-width:60px" value="' + (cum || 0) + '">' +
+        '<button class="btn s d" onclick="this.parentElement.remove()">×</button></div>';
+}
+
+function addRoomRow() {
+    var d = document.createElement('div');
+    d.innerHTML = roomRowHTML('', 0, 0);
+    $id('dmRoomRows').appendChild(d.firstElementChild);
+}
+
 // 手动保存日报
 // 收集表单数据，支持合并保存和覆盖保存两种模式
 // 合并：只更新本次填写的字段，保留已有数据
@@ -1416,12 +1444,21 @@ function doManualDaily() {
         }
     });
 
-    if (!freeData.length && !teaData.length && !cigData.length) {
+    // 收集包厢数据
+    var roomData = [];
+    document.querySelectorAll('.room-row').forEach(function(row) {
+        var name = row.querySelector('.room-name').value.trim();
+        var today = parseInt(row.querySelector('.room-today').value) || 0;
+        var cum = parseInt(row.querySelector('.room-cum').value) || 0;
+        if (name) roomData.push({ name: name, today: today, cum: cum });
+    });
+    var premCum = parseInt($id('dmPremCum') ? $id('dmPremCum').value : 0) || 0;
+
+    if (!freeData.length && !teaData.length && !cigData.length && !roomData.length) {
         toast('请填写数据');
         return;
     }
 
-    // 已有日报时弹窗选择
     if (existing) {
         var h = '<h3>发现 ' + date + ' 已有日报</h3>';
         h += '<p style="font-size:.78rem;color:var(--tx-s);margin-bottom:14px">选择保存方式：</p>';
@@ -1439,8 +1476,9 @@ function doManualDaily() {
         doSaveManual(date, 'overwrite');
     }
 
-    window._manualSaveData = { freeData: freeData, teaData: teaData, cigData: cigData };
+    window._manualSaveData = { freeData: freeData, teaData: teaData, cigData: cigData, roomData: roomData, premCum: premCum };
 }
+
 // 执行保存：收集经营数据、茗茶销售、香烟销售 → 写入DB
 function doSaveManual(date, mode) {
     var data = window._manualSaveData;
@@ -1448,6 +1486,8 @@ function doSaveManual(date, mode) {
     var freeData = data.freeData;
     var teaData = data.teaData;
     var cigData = data.cigData;
+    var roomData = data.roomData || [];
+    var premCum = data.premCum || 0;
     var f = { hasDel: false, hasAR: false };
 
     upd(function(db) {
@@ -1464,7 +1504,7 @@ function doSaveManual(date, mode) {
                 delivery: { total: 0, meituan: 0, taobao: 0, jd: 0 },
                 guest: { count: 0, avgSpend: 0, premiumRoomsToday: 0 },
                 rooms: [],
-                premiumRooms: { today: 0 },
+                premiumRooms: { today: 0, cum: 0 },
                 teaSales: {},
                 cigSales: {},
                 alcSales: {},
@@ -1495,6 +1535,15 @@ function doSaveManual(date, mode) {
             item.sales.push({ date: date, qty: cd.qty, amount: cd.amount });
         });
 
+        // 保存包厢数据
+        r.rooms = roomData;
+        if (roomData.length) {
+            var totalToday = roomData.reduce(function(s, rm) { return s + rm.today; }, 0);
+            r.guest.premiumRoomsToday = totalToday;
+            r.premiumRooms.today = totalToday;
+            r.premiumRooms.cum = premCum;
+        }
+
         if (mode === 'merge' && existing) {
             Object.keys(r).forEach(function(k) { if (k === 'date') return; existing[k] = r[k]; });
         } else {
@@ -1504,7 +1553,6 @@ function doSaveManual(date, mode) {
         }
     });
 
-    // ★ 同步销售即出库
     if (teaData.length) syncInvToDaily('tea', date);
     if (cigData.length) syncInvToDaily('cig', date);
 
@@ -1539,7 +1587,7 @@ function parseDaily(text) {
     }
 
     function splitParts(s) {
-        return s.replace(/\u3001/g, ',').replace(/\uFF0C/g, ',').replace(/\u3001/g, ',').split(',');
+        return s.replace(/\u3001/g, ',').replace(/\uFF0C/g, ',').replace(/\u3001/g, ',').replace(/\+/g, ',').split(',');
     }
 
     text.split('\n').forEach(function(l) {
@@ -1608,11 +1656,31 @@ function parseDaily(text) {
         if (/人数/.test(l)) { r.guest.count = extN(l); return; }
         if (/人均/.test(l)) { r.guest.avgSpend = extN(l); return; }
 
-        if (/500.*包厢.*个数/.test(l)) {
+        // 包厢预定表头
+        if (/包厢预定/.test(l)) return;
+
+        // 包厢预定数据行
+        if (/^[\u4e00-\u9fa5]/.test(l) && !/月累计|合计|人数|人均|汇报|流水|实收|厨房|吧台|香烟|其他|招待|POS|建行|现金|会员|应收|外卖/.test(l)) {
+            var nums = l.match(/(\d+)\s+(\d+)/);
+            var nameMatch = l.match(/^([\u4e00-\u9fa5（）\(\)]+)/);
+            if (nums && nameMatch) {
+                var today = parseInt(nums[1]);
+                var cum = parseInt(nums[2]);
+                r.rooms.push({ name: nameMatch[1].trim(), today: today, cum: cum });
+                // 同一行可能包含500元包厢个数
+                var pm500 = l.match(/个数:?\s*(\d+)/);
+                if (pm500 && /500/.test(l)) {
+                    r.guest.premiumRoomsToday = parseInt(pm500[1]);
+                    r.premiumRooms.today = parseInt(pm500[1]);
+                }
+                return;
+            }
+        }
+
+        // 500元包厢累计（独立行）
+        if (/累计.*500.*包厢.*个数/.test(l)) {
             var pm = l.match(/个数:?\s*(\d+)/);
-            var val = pm ? parseInt(pm[1]) : 0;
-            if (/累计/.test(l)) r.premiumRooms.cum = val;
-            else { r.guest.premiumRoomsToday = val; r.premiumRooms.today = val; }
+            if (pm) r.premiumRooms.cum = parseInt(pm[1]);
             return;
         }
 
@@ -1626,6 +1694,7 @@ function parseDaily(text) {
     if (!r.payment.ar.total) r.payment.ar.total = (r.payment.ar.meituan || 0) + (r.payment.ar.douyin || 0);
     return r;
 }
+
 // 解析日报文本并渲染预览
 function doParseDaily() {
     var text = $id('dtInput').value.trim();
@@ -1634,6 +1703,7 @@ function doParseDaily() {
     fixCigParsed(text, _pd);
     renderDP();
 }
+
 // 解析香烟数据补丁
 function fixCigParsed(text, result) {
     var lines = text.split('\n');
@@ -1760,6 +1830,21 @@ function renderDP() {
     h += inpRow('500+包厢', r.guest.premiumRoomsToday, 'guest.premiumRoomsToday');
     h += '</div>';
 
+    // 包厢预定
+    if (r.rooms && r.rooms.length) {
+        h += '<div class="pv-card"><h4>包厢预定</h4>';
+        h += '<table style="width:100%;border-collapse:collapse;font-size:.78rem">';
+        h += '<tr><th style="text-align:left;padding:6px 8px;background:var(--card-h);border-bottom:1px solid var(--bd)">姓名</th>';
+        h += '<th style="text-align:right;padding:6px 8px;background:var(--card-h);border-bottom:1px solid var(--bd)">今日</th>';
+        h += '<th style="text-align:right;padding:6px 8px;background:var(--card-h);border-bottom:1px solid var(--bd)">累计</th></tr>';
+        r.rooms.forEach(function(room) {
+            h += '<tr><td style="padding:6px 8px;border-bottom:1px solid var(--bd-l)">' + room.name + '</td>';
+            h += '<td style="padding:6px 8px;border-bottom:1px solid var(--bd-l);text-align:right">' + room.today + '</td>';
+            h += '<td style="padding:6px 8px;border-bottom:1px solid var(--bd-l);text-align:right">' + room.cum + '</td></tr>';
+        });
+        h += '</table></div>';
+    }
+
     h += '<div class="brow" style="margin-top:12px;justify-content:flex-end;gap:10px">';
     h += '<button class="btn p" onclick="saveDaily()">保存</button>';
     h += '<button class="btn" onclick="_pd=null;$id(\'dailyPreview\').innerHTML=\'\'">取消</button>';
@@ -1767,6 +1852,7 @@ function renderDP() {
 
     $id('dailyPreview').innerHTML = h;
 }
+
 // 日报预览输入框变化时更新数据
 function setDVal(pa, val) {
     var p = pa.split('.'), o = _pd;
@@ -1912,10 +1998,21 @@ function showDailyModal(date) {
     h += '<div class="pv-row"><span class="k">人均</span><span>' + fmtC(r.guest.avgSpend || 0) + '</span></div>';
     h += '<div class="pv-row"><span class="k">500+包厢</span><span>' + (r.guest.premiumRoomsToday || 0) + '</span></div>';
 
-    // 汇报人
-    if (r.reporter) {
-        h += '<div class="pv-row"><span class="k">汇报人</span><span>' + r.reporter + '</span></div>';
+    // 包厢预定
+    if (r.rooms && r.rooms.length) {
+        h += '<div class="section-label">包厢预定</div>';
+        if (r.premiumRooms && r.premiumRooms.cum) {
+            h += '<div class="pv-row"><span class="k">累计500+包厢</span><span style="color:var(--ac);font-weight:600">' + r.premiumRooms.cum + '</span></div>';
+        }
+        h += '<div class="tw"><table><tr><th>姓名</th><th>今日</th><th>累计</th></tr>';
+        r.rooms.forEach(function(room) {
+            h += '<tr><td>' + room.name + '</td>';
+            h += '<td class="nr">' + (room.today || 0) + '</td>';
+            h += '<td class="nr">' + (room.cum || 0) + '</td></tr>';
+        });
+        h += '</table></div>';
     }
+
 
     // 茗茶销售
     if (r.teaSales && Object.keys(r.teaSales).length) {
@@ -1944,6 +2041,11 @@ function showDailyModal(date) {
             h += '<td class="nr">' + fmtC(s.amount || 0) + '</td></tr>';
         });
         h += '</table></div>';
+    }
+    
+    // 汇报人
+    if (r.reporter) {
+        h += '<div class="pv-row"><span class="k">汇报人</span><span>' + r.reporter + '</span></div>';
     }
 
     h += '</div>';
@@ -2000,6 +2102,24 @@ function editDailyModal(date) {
     h += '<div class="hrow"><label>人数</label><input class="inp" id="dm_count" type="number" value="' + (r.guest.count || 0) + '">';
     h += '<label>人均</label><input class="inp" id="dm_avg" type="number" step="0.01" value="' + (r.guest.avgSpend || 0) + '">';
     h += '<label>500+包厢</label><input class="inp" id="dm_premium" type="number" value="' + (r.guest.premiumRoomsToday || 0) + '"></div>';
+
+    // 包厢预定
+    h += '<div class="section-label">包厢预定</div>';
+    if (r.rooms && r.rooms.length) {
+        h += '<div id="editRoomRows">';
+        r.rooms.forEach(function(room, i) {
+            h += '<div class="hrow room-row">';
+            h += '<input class="inp room-name" value="' + room.name + '" style="flex:1.5">';
+            h += '<input class="inp room-today" type="number" value="' + (room.today || 0) + '" style="max-width:60px">';
+            h += '<input class="inp room-cum" type="number" value="' + (room.cum || 0) + '" style="max-width:60px">';
+            h += '<button class="btn s d" onclick="this.parentElement.remove()">×</button></div>';
+        });
+        h += '</div>';
+    } else {
+        h += '<div id="editRoomRows"></div>';
+    }
+    h += '<div class="hrow"><label>累计500+</label><input class="inp" id="dm_edit_premCum" type="number" value="' + ((r.premiumRooms && r.premiumRooms.cum) || 0) + '" style="max-width:80px">';
+    h += '<button class="btn s" onclick="addEditRoomRow()">+添加</button></div>';
 
     // 汇报人
     h += '<div class="hrow"><label>汇报人</label><input class="inp" id="dm_reporter" value="' + (r.reporter || '') + '"></div>';
@@ -2083,6 +2203,22 @@ function saveDailyModal(date) {
         r.guest.avgSpend = parseFloat($id('dm_avg').value) || 0;
         r.guest.premiumRoomsToday = parseInt($id('dm_premium').value) || 0;
 
+        // 包厢预定
+        var roomData = [];
+        document.querySelectorAll('#editRoomRows .room-row').forEach(function(row) {
+            var name = row.querySelector('.room-name').value.trim();
+            var today = parseInt(row.querySelector('.room-today').value) || 0;
+            var cum = parseInt(row.querySelector('.room-cum').value) || 0;
+            if (name) roomData.push({ name: name, today: today, cum: cum });
+        });
+        r.rooms = roomData;
+        var premCum = $id('dm_edit_premCum') ? (parseInt($id('dm_edit_premCum').value) || 0) : 0;
+        if (!r.premiumRooms) r.premiumRooms = { today: 0, cum: 0 };
+        r.premiumRooms.cum = premCum;
+        var totalToday = roomData.reduce(function(s, rm) { return s + rm.today; }, 0);
+        r.guest.premiumRoomsToday = totalToday;
+        r.premiumRooms.today = totalToday;
+
         // 汇报人
         r.reporter = $id('dm_reporter').value.trim();
     });
@@ -2101,6 +2237,17 @@ function delDailyFromModal(date) {
     toast('已删除');
     closeModal();
     renderDHist();
+}
+
+// 添加编辑包厢行
+function addEditRoomRow() {
+    var d = document.createElement('div');
+    d.innerHTML = '<div class="hrow room-row">' +
+        '<input class="inp room-name" placeholder="姓名" style="flex:1.5">' +
+        '<input class="inp room-today" type="number" placeholder="今日" style="max-width:60px" value="0">' +
+        '<input class="inp room-cum" type="number" placeholder="累计" style="max-width:60px" value="0">' +
+        '<button class="btn s d" onclick="this.parentElement.remove()">×</button></div>';
+    $id('editRoomRows').appendChild(d.firstElementChild);
 }
 
 // 库存销售编辑后，同步日报
@@ -2198,6 +2345,7 @@ function syncInvToDaily(type, date) {
 
     saveDB();
 }
+
 // ==================== 日报数据校验 ====================
 function checkDailyData(r) {
     var issues = [];
