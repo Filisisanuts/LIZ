@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>经营管理</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=Crimson+Pro:wght@400;600&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500&family=DM+Serif+Display&family=Fira+Code:wght@400;500&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif&family=JetBrains+Mono:wght@400;500&family=Lexend:wght@400;500&family=Lora:wght@400;600&family=LXGW+WenKai&family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@400;700&family=Noto+Serif+SC:wght@400;700&family=Playfair+Display:wght@700&family=Source+Serif+4:wght@400;600&family=Syne:wght@600;700&family=Bebas+Neue&display=swap" rel="stylesheet">
+<!-- Supabase SDK（云同步核心） -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="css/style.css?v=2">
+</head>
+<body>
+<!-- 加载遮罩层 -->
+<div id="loadingOverlay" style="position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;transition:opacity 0.3s ease;">
+  <div style="text-align:center">
+    <div style="font-size:2.5rem;margin-bottom:16px">☕</div>
+    <div style="font-size:1.1rem;font-weight:600;color:var(--accent);margin-bottom:8px">加载中...</div>
+    <div style="width:60px;height:3px;background:var(--bd);border-radius:3px;overflow:hidden;margin:0 auto">
+      <div id="loadingBar" style="width:0%;height:100%;background:var(--ac);border-radius:3px;transition:width 0.3s ease"></div>
+    </div>
+  </div>
+</div>
+<script>
+// 未登录跳转登录页（游客模式和已登录不跳转）
+(function(){
+    if (new URLSearchParams(window.location.search).get('guest') === '1') return;
+    // 检查 Supabase auth token 是否存在（已登录）
+    var hasAuth = false;
+    for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf('sb-') === 0 && k.indexOf('auth-token') > 0) { hasAuth = true; break; }
+    }
+    if (!hasAuth) window.location.href = 'login.html';
+})();
+</script>
+<!-- 遮罩层 -->
+<div class="toolbar-mask" id="toolbarMask" onclick="toggleToolbar()"></div>
+<!-- 侧边工具栏 -->
+<div class="toolbar" id="toolbar">
+  <div class="toolbar-logo" title="经营管理" onclick="toggleToolbar()" style="padding:8px 0;margin-bottom:24px;flex-shrink:0;">
+   <div style="font-size:.82rem;font-weight:700;color:var(--accent);letter-spacing:.04em;line-height:1.3;text-align:center">经营管理</div>
+   <div style="font-size:.5rem;font-weight:500;color:var(--text-muted);letter-spacing:.1em;margin-top:2px;text-align:center">COFFEE</div>
+  </div>
+  <div class="toolbar-group" id="toolbarMain"></div>
+  <div class="toolbar-divider"></div>
+  <div class="toolbar-group" id="toolbarInv"></div>
+  <div class="toolbar-divider"></div>
+  <div class="toolbar-group" id="toolbarReport"></div>
+  <div class="toolbar-divider"></div>
+  <div class="toolbar-group" id="toolbarSys"></div>
+  <div class="toolbar-divider"></div>
+    <div class="toolbar-group">
+      <button class="toolbar-btn" data-page="settings" onclick="goPage('settings')" title="设置">
+        <span class="ticon">⚙️</span><span class="tlabel">设置</span>
+      </button>
+    </div>
+  </div>
+</div>
+<!-- 悬浮毛玻璃导航栏 -->
+<div class="floating-nav" id="fnav">
+  <button class="hamburger" id="hamburger" onclick="toggleToolbar()">☰</button>
+  <div class="fnav-title" id="fnavTitle">
+    <span class="page-icon">☕</span>
+    <span id="fnavLabel">经营管理</span>
+  </div>
+  <div class="fnav-tabs" id="fnavTabs"></div>
+  <div class="fnav-right">
+    <div class="search-wrap"><input type="text" class="fnav-search" placeholder="搜索..."></div>
+    <span id="syncInd" onclick="goPage('settings')" style="display:flex;align-items:center;gap:5px;cursor:pointer;padding:4px 10px;border-radius:8px;transition:background .15s" onmouseenter="this.style.background='var(--bg-tertiary)'" onmouseleave="this.style.background='transparent'" title="数据同步">
+      <span class="sync-dot" id="syncDot" style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#9AA0A6;transition:background .3s"></span>
+      <span id="syncLabel" class="sync-label">本地</span>
+    </span>
+    <span id="headerDate" style="font-size:.72rem;color:var(--text-muted);white-space:nowrap"></span>
+    <span id="authBadge"></span>
+  </div>
+</div>
+<!-- 自定义日期选择器 -->
+<div id="datePicker" class="date-picker" style="display:none"><div id="dpBody"></div></div>
+<!-- 主内容区 -->
+<div class="main-content" id="mainContent"></div>
+<div class="search-bar" id="searchBar"><div class="search-inner"></div></div>
+<div class="search-results" id="searchResults"></div>
+<main class="main" id="main"></main>
+<div class="overlay" id="overlay" onclick="closeModal()"></div>
+<div class="modal" id="modal"></div>
+<div class="toast" id="toast"></div>
+
+<!-- ========== JavaScript 模块（按依赖顺序加载） ========== -->
+
+<!-- 基础模块 -->
+<script src="js/config.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/category.js"></script>
+
+<!-- 核心模块 -->
+<script src="js/search.js"></script>
+<script src="js/nav.js"></script>
+<script src="js/auth.js"></script>
+
+<!-- 业务模块 -->
+<script src="js/dashboard.js"></script>
+<script src="js/daily.js"></script>
+<script src="js/purchase.js"></script>
+<script src="js/expense.js"></script>
+<script src="js/inventory.js"></script>
+<script src="js/warehouse.js"></script>
+<script src="js/damage.js"></script>
+<script src="js/report.js"></script>
+<script src="js/brief.js"></script>
+<script src="js/settings.js"></script>
+
+<!-- 同步模块 -->
+<script src="js/sync.js"></script>
+<script src="js/sync-code.js"></script>
+
+<!-- 初始化（必须最后加载） -->
+<script src="js/app.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>经营报表</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&family=Noto+Serif+SC:wght@400;700&family=Lexend:wght@400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#f7f4ee;--card:#fff;--card-h:#faf8f3;--bd:#e5dfd4;--bd-l:#ece8df;--ac:#b08d57;--ac-h:#c9a86c;--tx:#2c2c2c;--tx-s:#666;--tx-m:#aaa;--gn:#3d8b5e;--gn-b:rgba(61,139,94,.06);--rd:#c75450;--rd-b:rgba(199,84,80,.06);--og:#d4a017;--og-b:rgba(212,160,23,.07);--r:8px;--sh:0 1px 4px rgba(0,0,0,.04);--sh2:0 4px 16px rgba(0,0,0,.06)}
+body{background:var(--bg);color:var(--tx);font-family:'Noto Serif SC',Georgia,serif;min-height:100vh}
+.wrap{max-width:900px;margin:0 auto;padding:24px 20px 70px}
+.sec{font-size:.7rem;color:var(--tx-m);letter-spacing:.08em;text-transform:uppercase;margin:22px 0 12px;padding-bottom:7px;border-bottom:1px solid var(--bd-l)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:18px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:15px;box-shadow:var(--sh)}
+.card-l{font-size:.65rem;color:var(--tx-m);margin-bottom:2px;letter-spacing:.05em}
+.card-v{font-family:'DM Mono','Lexend',monospace;font-size:1rem;font-weight:500}
+.card-v.gn{color:var(--gn)}.card-v.rd{color:var(--rd)}.card-v.ac{color:var(--ac)}.card-v.og{color:var(--og)}
+.tw{overflow-x:auto;border:1px solid var(--bd);border-radius:var(--r);background:var(--card);margin-bottom:14px}
+table{width:100%;border-collapse:collapse}
+th{background:var(--card-h);font-size:.66rem;color:var(--tx-s);text-align:left;padding:9px 10px;border-bottom:1px solid var(--bd);font-weight:600;white-space:nowrap}
+td{padding:8px 10px;border-bottom:1px solid var(--bd-l);font-size:.78rem;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--card-h)}
+.nr{text-align:left;font-family:'DM Mono','Lexend',monospace}
+.total-row td{background:var(--card-h);font-weight:600}
+.chart-box{background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:14px;margin-bottom:14px}
+.loading{text-align:center;padding:60px 20px;color:var(--tx-m);font-size:.88rem}
+.loading .spinner{display:inline-block;width:24px;height:24px;border:2.5px solid var(--bd);border-top-color:var(--ac);border-radius:50%;animation:spin .7s linear infinite;margin-bottom:10px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.empty{text-align:center;padding:30px;color:var(--tx-m);font-size:.78rem}
+/* 标签栏 — 与主系统一致 */
+.rep-nav{display:flex;gap:0;overflow-x:auto;margin-bottom:20px;background:var(--card);border:1px solid var(--bd);border-radius:var(--r);scrollbar-width:none}
+.rep-nav::-webkit-scrollbar{display:none}
+.rep-tab{flex-shrink:0;padding:10px 16px;font-size:.76rem;color:var(--tx-m);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;transition:all .2s;white-space:nowrap;font-family:'Noto Serif SC',serif}
+.rep-tab:hover{color:var(--tx)}
+.rep-tab.active{color:var(--ac);border-bottom-color:var(--ac);font-weight:600}
+.refresh-bar{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--bd);padding:8px 20px;text-align:center;font-size:.68rem;color:var(--tx-m);display:flex;align-items:center;justify-content:center;gap:10px}
+.refresh-btn{background:none;border:1px solid var(--bd);border-radius:6px;padding:4px 12px;font-size:.68rem;color:var(--tx-s);cursor:pointer;font-family:inherit}
+.refresh-btn:hover{background:var(--card-h);border-color:var(--ac);color:var(--ac)}
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:500}
+.overlay.show{display:block}
+.modal{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:22px;width:92%;max-width:600px;max-height:80vh;overflow-y:auto;z-index:501;box-shadow:var(--sh2)}
+.modal.show{display:block}
+.rep-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;align-items:start}
+.rep-grid>*{min-width:0}
+.rep-grid .chart-box{margin-bottom:0}
+.rep-grid canvas{max-width:100%!important}
+.rep-grid-wide{grid-template-columns:1fr .7fr}
+@media(max-width:768px){.rep-grid,.rep-grid-wide{display:flex;flex-direction:column;gap:14px}.rep-grid .tw{overflow-x:auto}.rep-grid .tw table{min-width:auto}}
+@media(max-width:600px){.cards{grid-template-columns:repeat(2,1fr)}.wrap{padding:16px 12px 70px}}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+    <div class="loading"><div class="spinner"></div><div>正在加载经营数据...</div></div>
+</div>
+<div class="refresh-bar">
+    <span id="updateTime">--</span>
+    <button class="refresh-btn" onclick="loadData()">刷新数据</button>
+</div>
+<div class="overlay" id="overlay"></div>
+<div class="modal" id="modal"></div>
+
+<script>
+var DB=null,_charts={},_curTab='profit';
+var sb=null;
+(function(){
+    sb=supabase.createClient('https://aahvuwdifuqhwyanrvwj.supabase.co','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhaHZ1d2RpZnVxaHd5YW5ydndqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyMDc5MzMsImV4cCI6MjA5NDc4MzkzM30.6DByxb_Pk_wGVzp189SslD3B8gDoY9H7CpyWEySgFS8');
+    loadData();
+})();
+
+function fmt(n){return n==null?'-':n.toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2})}
+function fmtC(n){return(n<0?'-':'')+fmt(Math.abs(n))}
+function curYM(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')}
+
+// 从URL获取参数
+function getUrlParam(name) {
+    var params = new URLSearchParams(window.location.search);
+    return params.get(name);
+}
+
+// 获取选定的月份（优先使用URL参数）
+function getSelectedYM() {
+    var urlMonth = getUrlParam('month');
+    return urlMonth || curYM();
+}
+
+// 获取选定的数据类型
+function getSelectedType() {
+    return getUrlParam('type') || 'all';
+}
+function td(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function getMR(ym){return(DB.dailyReports||[]).filter(function(r){return r.date.startsWith(ym)})}
+
+async function loadData(){
+    try{
+        var resp=await sb.from('cafe_data').select('data,updated_at').eq('id','shop_data').single();
+        if(resp.error||!resp.data){document.getElementById('app').innerHTML='<div class="empty">暂无经营数据<br><span style="font-size:.7rem;color:var(--tx-m)">请先登录管理系统录入数据</span></div>';return}
+        DB=resp.data.data;
+        document.getElementById('updateTime').textContent='数据更新：'+new Date(resp.data.updated_at).toLocaleString('zh-CN');
+        render();
+    }catch(e){document.getElementById('app').innerHTML='<div class="empty">加载失败：'+e.message+'</div>'}
+}
+
+function render(){
+    if(!DB)return;
+    var ym=getSelectedYM(),type=getSelectedType(),today=new Date(),yy=ym.split('-')[0],mm=parseInt(ym.split('-')[1]);
+    var mr=getMR(ym);
+
+    // 根据数据类型筛选
+    if (type === 'daily') {
+        // 只显示日报数据
+        var mPur = [], mExp = [];
+    } else if (type === 'purchase') {
+        // 只显示采购数据
+        var mExp = [];
+    } else if (type === 'expense') {
+        // 只显示费用数据
+        var mPur = [];
+    } else {
+        // 全部数据
+        var mPur = (DB.purchases || []).filter(function(p) { return p.date.startsWith(ym); });
+        var mExp = (DB.expenses || []).filter(function(e) { return e.date.startsWith(ym); });
+    }
+
+    // 汇总数据
+    var mGross=mr.reduce(function(s,r){return s+(r.revenue.grossSales||0)},0);
+    var mNet=mr.reduce(function(s,r){return s+(r.revenue.netSales||0)},0);
+    var mKit=mr.reduce(function(s,r){return s+(r.revenue.kitchenSales||0)},0);
+    var mBar=mr.reduce(function(s,r){return s+(r.revenue.barSales||0)},0);
+    var mDel=mr.reduce(function(s,r){return s+(r.delivery.total||0)},0);
+    var mCig=mr.reduce(function(s,r){return s+(r.revenue.cigarette?r.revenue.cigarette.total||0:0)},0);
+    var mOther=mr.reduce(function(s,r){return s+(r.revenue.other||0)},0);
+    var mDiscount=mr.reduce(function(s,r){return s+(r.revenue.discount||0)},0);
+    var mGuests=mr.reduce(function(s,r){return s+(r.guest.count||0)},0);
+    var mPr=mr.reduce(function(s,r){return s+(r.guest.premiumRoomsToday||0)},0);
+
+    // 使用已筛选的采购和费用数据
+    if (!mPur) var mPur = (DB.purchases||[]).filter(function(p){return p.date.startsWith(ym)});
+    if (!mExp) var mExp = (DB.expenses||[]).filter(function(e){return e.date.startsWith(ym)});
+    var purTotal=0,retTotal=0,purBySec={};
+    mPur.forEach(function(p){(p.items||[]).forEach(function(item){
+        var src=item.source||p.source||'',sec=item.section||'其他';
+        if(src==='退货')retTotal+=item.total;else{purTotal+=item.total;if(!purBySec[sec])purBySec[sec]=0;purBySec[sec]+=item.total}
+    })});
+    var netPur=purTotal-retTotal;
+
+    var expTotal=mExp.reduce(function(s,e){return s+e.amount},0);
+
+    var kitCost=purBySec['厨房']||0,barCost=purBySec['吧台']||0,outCost=purBySec['外场']||0;
+    var grossProfit=mNet-netPur,grossMargin=mNet>0?grossProfit/mNet*100:0;
+    var operProfit=grossProfit-expTotal,operMargin=mNet>0?operProfit/mNet*100:0;
+    var avgSpend=mGuests>0?mNet/mGuests:0;
+
+    var shopName=(DB.settings&&DB.settings.ax_shop_name)||'';
+    var shopIcon=(DB.settings&&DB.settings.ax_shop_icon)||'☕';
+
+    var h='';
+    // 标题
+    h+='<div style="text-align:center;margin-bottom:20px">';
+    h+='<div style="font-size:2rem;margin-bottom:6px">'+shopIcon+'</div>';
+    h+='<div style="font-size:1.2rem;font-weight:700;color:var(--ac);letter-spacing:.05em">'+(shopName||'经营数据')+'</div>';
+    h+='<div style="font-size:.78rem;color:var(--tx-m);letter-spacing:.1em">FINANCIAL REPORT · '+yy+'.'+String(mm).padStart(2,'0')+'</div>';
+    // 显示筛选条件
+    if (type !== 'all') {
+        var typeNames = {daily: '日报数据', purchase: '采购数据', expense: '费用数据', inventory: '库存数据'};
+        h+='<div style="font-size:.72rem;color:var(--ac);margin-top:6px;background:var(--ac-b);padding:4px 12px;border-radius:20px;display:inline-block">📊 '+typeNames[type]+'</div>';
+    }
+    h+='</div>';
+
+    // 核心卡片
+    h+='<div class="cards" style="margin-bottom:20px">';
+    h+='<div class="card"><div class="card-l">总流水</div><div class="card-v ac">'+fmtC(mGross)+'</div></div>';
+    h+='<div class="card"><div class="card-l">总实收</div><div class="card-v ac">'+fmtC(mNet)+'</div></div>';
+    h+='<div class="card"><div class="card-l">总毛利</div><div class="card-v gn">'+fmtC(grossProfit)+'</div></div>';
+    h+='<div class="card"><div class="card-l">毛利率</div><div class="card-v gn">'+grossMargin.toFixed(1)+'%</div></div>';
+    h+='<div class="card"><div class="card-l">营业利润</div><div class="card-v '+(operProfit>=0?'gn':'rd')+'">'+fmtC(operProfit)+'</div></div>';
+    h+='<div class="card"><div class="card-l">到店人数</div><div class="card-v">'+mGuests+'</div></div>';
+    h+='<div class="card"><div class="card-l">人均消费</div><div class="card-v">'+fmtC(avgSpend)+'</div></div>';
+    h+='<div class="card"><div class="card-l">上报天数</div><div class="card-v">'+mr.length+'</div></div>';
+    h+='</div>';
+
+    // 标签栏
+    h+='<div class="rep-nav" id="repNav"></div>';
+    h+='<div id="repBody"></div>';
+
+    document.getElementById('app').innerHTML=h;
+
+    // 渲染标签
+    var tabs=[{id:'profit',label:'利润表'},{id:'revenue',label:'营收总表'},{id:'daily',label:'每日实收'},{id:'guest',label:'客情包厢'},{id:'cost',label:'成本费用'},{id:'purchase',label:'采购明细'}];
+    var navH='';tabs.forEach(function(t,i){navH+='<button class="rep-tab'+(i===0?' active':'')+'" data-tab="'+t.id+'">'+t.label+'</button>'});
+    document.getElementById('repNav').innerHTML=navH;
+    document.querySelectorAll('.rep-tab').forEach(function(b){
+        b.onclick=function(){
+            document.querySelectorAll('.rep-tab').forEach(function(x){x.classList.toggle('active',x.dataset.tab===b.dataset.tab);x.style.color=x.classList.contains('active')?'var(--ac)':'var(--tx-m)';x.style.borderBottomColor=x.classList.contains('active')?'var(--ac)':'transparent'});
+            _curTab=b.dataset.tab;renderTab();
+        }
+    });
+
+    // 缓存数据
+    window._D={ym:ym,yy:yy,mm:mm,mr:mr,mGross:mGross,mNet:mNet,mKit:mKit,mBar:mBar,mDel:mDel,mCig:mCig,mOther:mOther,mDiscount:mDiscount,mGuests:mGuests,mPr:mPr,mPur:mPur,purTotal:purTotal,retTotal:retTotal,purBySec:purBySec,netPur:netPur,mExp:mExp,expTotal:expTotal,kitCost:kitCost,barCost:barCost,outCost:outCost,grossProfit:grossProfit,grossMargin:grossMargin,operProfit:operProfit,operMargin:operMargin,avgSpend:avgSpend};
+    renderTab();
+}
+
+function renderTab(){
+    var D=window._D;if(!D)return;
+    var s=document.getElementById('repBody');if(!s)return;
+    Object.keys(_charts).forEach(function(k){if(_charts[k])_charts[k].destroy()});_charts={};
+    var h='';
+    if(_curTab==='profit')h=tabProfit(D);
+    else if(_curTab==='revenue')h=tabRevenue(D);
+    else if(_curTab==='daily')h=tabDaily(D);
+    else if(_curTab==='guest')h=tabGuest(D);
+    else if(_curTab==='cost')h=tabCost(D);
+    else if(_curTab==='purchase')h=tabPurchase(D);
+    s.innerHTML=h;
+    setTimeout(function(){initChart(D)},100);
+}
+
+// ===== 利润表 =====
+function tabProfit(D){
+    var h='<div class="sec-head"><h4 style="font-size:.88rem;color:var(--ac);margin-bottom:6px">利润表</h4>';
+    h+='<div style="font-size:.72rem;color:var(--tx-m);margin-bottom:14px">'+D.mm+'月实现营收'+fmtC(D.mNet)+'元，营业成本'+fmtC(D.netPur)+'元，毛利'+fmtC(D.grossProfit)+'元（'+D.grossMargin.toFixed(1)+'%）。扣除费用'+fmtC(D.expTotal)+'元后，营业利润'+fmtC(D.operProfit)+'元，利润率'+D.operMargin.toFixed(1)+'%。</div></div>';
+    h+='<div class="rep-grid">';
+    h+='<div class="tw" style="margin-bottom:0"><table><tr><th>项目</th><th class="nr">金额（元）</th><th>备注</th></tr>';
+    var rows=[
+        {l:'营业收入（实收）',v:D.mNet,n:'流水'+fmtC(D.mGross)+' 减折扣'+fmtC(D.mDiscount)},
+        {l:'减：营业成本',v:D.netPur,n:'净采购'},
+        {l:'  厨房采购',v:D.kitCost},{l:'  吧台采购',v:D.barCost},{l:'  外场采购',v:D.outCost},
+        {l:'毛利',v:D.grossProfit,n:'毛利率 '+D.grossMargin.toFixed(1)+'%',bold:true},
+        {l:'减：营业费用',v:D.expTotal},
+        {l:'营业利润',v:D.operProfit,n:'利润率 '+D.operMargin.toFixed(1)+'%',bold:true}
+    ];
+    rows.forEach(function(r){h+='<tr class="'+(r.bold?'total-row':'')+'"><td'+(r.bold?' style="font-weight:600"':'')+'>'+r.l+'</td><td class="nr" style="'+(r.bold?'font-weight:600;color:'+(r.v>=0?'var(--gn)':'var(--rd)'):'')+'">'+fmtC(r.v)+'</td><td style="font-size:.72rem;color:var(--tx-m)">'+(r.n||'')+'</td></tr>'});
+    h+='</table></div>';
+    h+='<div class="chart-box"><canvas id="repChart" height="220"></canvas></div>';
+    h+='</div>';return h;
+}
+
+// ===== 营收总表 =====
+function tabRevenue(D){
+    var h='<div class="sec-head"><h4 style="font-size:.88rem;color:var(--ac);margin-bottom:6px">营收总表</h4>';
+    h+='<div style="font-size:.72rem;color:var(--tx-m);margin-bottom:14px">总流水'+fmtC(D.mGross)+'元，折扣'+fmtC(D.mDiscount)+'元，实收'+fmtC(D.mNet)+'元。厨房'+(D.mNet>0?(D.mKit/D.mNet*100).toFixed(1):'0')+'%、吧台'+(D.mNet>0?(D.mBar/D.mNet*100).toFixed(1):'0')+'%、外卖'+(D.mNet>0?(D.mDel/D.mNet*100).toFixed(1):'0')+'%。</div></div>';
+    h+='<div class="rep-grid">';
+    h+='<div class="tw" style="margin-bottom:0"><table><tr><th>收入分类</th><th class="nr">金额</th><th class="nr">占比</th></tr>';
+    var items=[['厨房',D.mKit],['吧台',D.mBar],['外卖',D.mDel],['香烟',D.mCig],['其他',D.mOther],['合计',D.mNet]];
+    items.forEach(function(it){var pct=D.mNet>0?(it[1]/D.mNet*100).toFixed(1):'0';var t=it[0]==='合计';h+='<tr class="'+(t?'total-row':'')+'"><td>'+it[0]+'</td><td class="nr"'+(t?' style="font-weight:600"':'')+'>'+fmtC(it[1])+'</td><td class="nr">'+pct+'%</td></tr>'});
+    h+='</table></div>';
+    h+='<div><div class="chart-box" style="margin-bottom:8px;padding:10px"><canvas id="repChart1" height="150"></canvas></div>';
+    h+='<div class="chart-box" style="padding:10px"><canvas id="repChart2" height="150"></canvas></div></div>';
+    h+='</div>';return h;
+}
+
+// ===== 每日实收 =====
+function tabDaily(D){
+    var avgNet=D.mr.length>0?D.mNet/D.mr.length:0;
+    var avgG=D.mr.length>0?D.mGuests/D.mr.length:0;
+    var h='<div class="sec-head"><h4 style="font-size:.88rem;color:var(--ac);margin-bottom:6px">每日营收速览</h4>';
+    h+='<div style="font-size:.72rem;color:var(--tx-m);margin-bottom:14px">日均实收'+fmtC(avgNet)+'元，日均客流'+avgG.toFixed(1)+'人，月均人均'+(D.mGuests>0?(D.mNet/D.mGuests).toFixed(2):'0')+'元。</div></div>';
+    h+='<div class="rep-grid rep-grid-wide">';
+    h+='<div class="tw" style="margin-bottom:0"><table><tr><th>日期</th><th class="nr">流水</th><th class="nr">折扣</th><th class="nr">实收</th><th class="nr">人数</th><th class="nr">人均</th></tr>';
+    var sorted=D.mr.slice().sort(function(a,b){return a.date.localeCompare(b.date)});
+    sorted.forEach(function(r){var d=parseInt(r.date.split('-')[2]);var ppg=r.guest.count>0?(r.revenue.netSales/r.guest.count).toFixed(2):'-';
+        h+='<tr><td>'+d+'日</td><td class="nr">'+fmtC(r.revenue.grossSales||0)+'</td><td class="nr">'+fmtC(r.revenue.discount||0)+'</td><td class="nr">'+fmtC(r.revenue.netSales||0)+'</td><td class="nr">'+(r.guest.count||0)+'</td><td class="nr">'+ppg+'</td></tr>'});
+    h+='<tr class="total-row"><td>合计</td><td class="nr">'+fmtC(D.mr.reduce(function(s,r){return s+(r.revenue.grossSales||0)},0))+'</td><td class="nr">'+fmtC(D.mr.reduce(function(s,r){return s+(r.revenue.discount||0)},0))+'</td><td class="nr">'+fmtC(D.mNet)+'</td><td class="nr">'+D.mGuests+'</td><td class="nr">'+(D.mGuests>0?(D.mNet/D.mGuests).toFixed(2):'-')+'</td></tr>';
+    h+='</table></div>';
+    h+='<div class="chart-box"><canvas id="repChart" height="280"></canvas></div>';
+    h+='</div>';return h;
+}
+
+// ===== 客情包厢 =====
+function tabGuest(D){
+    var h='<div class="sec-head"><h4 style="font-size:.88rem;color:var(--ac);margin-bottom:6px">客情与包厢</h4>';
+    h+='<div style="font-size:.72rem;color:var(--tx-m);margin-bottom:14px">累计到店'+D.mGuests+'人，日均'+(D.mr.length>0?(D.mGuests/D.mr.length).toFixed(1):'0')+'人。500元以上包厢累计'+D.mPr+'个。</div></div>';
+    h+='<div class="rep-grid rep-grid-wide">';
+    h+='<div class="tw" style="margin-bottom:0"><table><tr><th>日期</th><th class="nr">客流</th><th class="nr">人均</th><th class="nr">500+包厢</th></tr>';
+    var sorted=D.mr.slice().sort(function(a,b){return a.date.localeCompare(b.date)});
+    sorted.forEach(function(r){var d=parseInt(r.date.split('-')[2]);var ppg=r.guest.count>0?(r.revenue.netSales/r.guest.count).toFixed(2):'-';
+        h+='<tr><td>'+d+'日</td><td class="nr">'+(r.guest.count||0)+'</td><td class="nr">'+ppg+'</td><td class="nr">'+(r.guest.premiumRoomsToday||0)+'</td></tr>'});
+    h+='<tr class="total-row"><td>合计</td><td class="nr">'+D.mGuests+'</td><td class="nr">'+(D.mGuests>0?(D.mNet/D.mGuests).toFixed(2):'-')+'</td><td class="nr">'+D.mPr+'</td></tr>';
+    h+='</table></div>';
+    h+='<div class="chart-box"><canvas id="repChart" height="280"></canvas></div>';
+    h+='</div>';return h;
+}
+
+// ===== 成本费用 =====
+function tabCost(D){
+    var h='<div class="sec-head"><h4 style="font-size:.88rem;color:var(--ac);margin-bottom:6px">成本费用</h4>';
+    h+='<div style="font-size:.72rem;color:var(--tx-m);margin-bottom:14px">净采购'+fmtC(D.netPur)+'元（采购'+fmtC(D.purTotal)+' - 退货'+fmtC(D.retTotal)+'），营业费用'+fmtC(D.expTotal)+'元。</div></div>';
+
+    // 按来源统计采购成本
+    var purBySrc = {};
+    var purBySrcSec = {};
+    var purBySrcSecCat = {};
+    DB.purchases.filter(function(p) { return p.date.startsWith(D.ym); }).forEach(function(p) {
+        (p.items || []).forEach(function(item) {
+            var src = item.source || p.source || '外购';
+            var sec = item.section || '未分区';
+            var cat = item.category || '未分类';
+            if (!purBySrc[src]) purBySrc[src] = 0;
+            purBySrc[src] += item.total;
+            if (!purBySrcSec[src]) purBySrcSec[src] = {};
+            if (!purBySrcSec[src][sec]) purBySrcSec[src][sec] = 0;
+            purBySrcSec[src][sec] += item.total;
+            if (!purBySrcSecCat[src]) purBySrcSecCat[src] = {};
+            if (!purBySrcSecCat[src][sec]) purBySrcSecCat[src][sec] = {};
+            if (!purBySrcSecCat[src][sec][cat]) purBySrcSecCat[src][sec][cat] = 0;
+            purBySrcSecCat[src][sec][cat] += item.total;
+        });
+    });
+
+    // 按来源显示采购成本
+    h+='<div class="rep-grid">';
+    ['岸香贸易', '外购'].forEach(function(src) {
+        var srcTotal = purBySrc[src] || 0;
+        if (srcTotal <= 0) return;
+        var srcSecs = purBySrcSec[src] || {};
+        var srcSecCats = purBySrcSecCat[src] || {};
+
+        h+='<div class="tw" style="margin-bottom:0">';
+        h+='<table><tr><th colspan="2">' + src + ' <span style="font-weight:normal;color:var(--tx-m)">¥' + fmtC(srcTotal) + '</span></th></tr>';
+        h+='<tr><th>区域</th><th class="nr">金额</th></tr>';
+
+        Object.keys(srcSecs).sort(function(a, b) { return srcSecs[b] - srcSecs[a]; }).forEach(function(sec) {
+            var secTotal = srcSecs[sec];
+            var cats = srcSecCats[sec] || {};
+            h+='<tr><td style="font-weight:600">' + sec + '</td><td class="nr">' + fmtC(secTotal) + '</td></tr>';
+            Object.keys(cats).sort(function(a, b) { return cats[b] - cats[a]; }).forEach(function(cat) {
+                h+='<tr><td style="padding-left:20px;font-size:.72rem;color:var(--tx-m)">' + cat + '</td><td class="nr" style="font-size:.72rem">' + fmtC(cats[cat]) + '</td></tr>';
+            });
+        });
+        h+='<tr class="total-row"><td>小计</td><td class="nr">' + fmtC(srcTotal) + '</td></tr>';
+        h+='</table></div>';
+    });
+
+    // 费用分类
+    h+='<div class="tw" style="margin-bottom:0"><table><tr><th>费用分类</th><th class="nr">金额</th></tr>';
+    var ec={};D.mExp.forEach(function(e){if(!ec[e.category])ec[e.category]=0;ec[e.category]+=e.amount});
+    Object.keys(ec).forEach(function(c){h+='<tr><td>'+c+'</td><td class="nr">'+fmtC(ec[c])+'</td></tr>'});
+    h+='<tr class="total-row"><td>合计</td><td class="nr">'+fmtC(D.expTotal)+'</td></tr></table></div></div>';
+    return h;
+}
+
+// ===== 采购明细 =====
+function tabPurchase(D){
+    var ym=D.ym,year=parseInt(ym.split('-')[0]),month=parseInt(ym.split('-')[1]);
+    var daysInMonth=new Date(year,month,0).getDate();
+    var firstDay=new Date(year,month-1,1).getDay();firstDay=firstDay===0?6:firstDay-1;
+    var todayStr=td(),todayDay=parseInt(todayStr.split('-')[2]),isThisMonth=todayStr.startsWith(ym);
+
+    var dayTotals={},grandTotal=0,srcTotals={},srcSecTotals={};
+    DB.purchases.filter(function(p){return p.date.startsWith(ym)}).forEach(function(p){
+        (p.items||[]).forEach(function(item){
+            var day=parseInt(p.date.substring(8,10));
+            if(!dayTotals[day])dayTotals[day]=0;dayTotals[day]+=item.total;grandTotal+=item.total;
+            var src=item.source||p.source||'外购',sec=item.section||'未分区';
+            if(!srcTotals[src])srcTotals[src]=0;srcTotals[src]+=item.total;
+            if(!srcSecTotals[src])srcSecTotals[src]={};if(!srcSecTotals[src][sec])srcSecTotals[src][sec]=0;srcSecTotals[src][sec]+=item.total;
+        })});
+
+    var h='<div class="sec-head"><h4 style="font-size:.88rem;color:var(--ac);margin-bottom:6px">采购明细</h4>';
+    h+='<div style="font-size:.72rem;color:var(--tx-m);margin-bottom:14px">本月采购'+fmtC(grandTotal)+'元，'+Object.keys(dayTotals).length+'天有采购，日均'+fmtC(grandTotal/daysInMonth)+'元。</div></div>';
+
+    // 汇总卡片
+    if(grandTotal>0){
+        h+='<div class="cards">';
+        h+='<div class="card"><div class="card-l">本月采购</div><div class="card-v ac">'+fmtC(grandTotal)+'</div></div>';
+        h+='<div class="card"><div class="card-l">天数</div><div class="card-v">'+Object.keys(dayTotals).length+'</div></div>';
+        h+='<div class="card"><div class="card-l">日均</div><div class="card-v">'+fmtC(grandTotal/daysInMonth)+'</div></div>';
+        ['岸香贸易','外购'].forEach(function(src){
+            var st=srcTotals[src]||0;
+            var returnTotal = 0;
+            DB.purchases.filter(function(p){return p.date.startsWith(ym)}).forEach(function(p){
+                (p.items||[]).forEach(function(item){
+                    var itemSrc = item.source || p.source || '外购';
+                    if (itemSrc === src && (item.qty < 0 || item.total < 0)) {
+                        returnTotal += Math.abs(item.total);
+                    }
+                });
+            });
+            if(st<=0 && returnTotal<=0) return;
+            var secs=srcSecTotals[src]||{};
+            h+='<div class="card"><div class="card-l">'+src+'</div><div class="card-v" style="color:var(--gn)">'+fmtC(st)+'</div>';
+            if (returnTotal > 0) {
+                h+='<div style="font-size:.65rem;color:var(--rd);margin-top:2px">退 ¥'+fmtC(returnTotal)+'</div>';
+            }
+            h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;margin-top:4px">';
+            Object.keys(secs).sort(function(a,b){return secs[b]-secs[a]}).forEach(function(sec){
+                h+='<div style="font-size:.65rem;color:var(--tx-m)">'+sec+'</div><div style="font-size:.65rem;text-align:right;font-family:var(--fm)">'+fmtC(secs[sec])+'</div>'});
+            h+='</div></div>';
+        });
+        h+='</div>';
+    }
+
+    // 日历网格
+    h+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">';
+    ['一','二','三','四','五','六','日'].forEach(function(w){h+='<div style="text-align:center;font-size:.7rem;color:var(--tx-m);padding:4px 0">'+w+'</div>'});
+    for(var ix=0;ix<firstDay;ix++)h+='<div></div>';
+    for(var d=1;d<=daysInMonth;d++){
+        var dateStr=ym+'-'+(d<10?'0'+d:d);
+        var has=!!dayTotals[d],isToday=isThisMonth&&d===todayDay;
+        var bg=has?'var(--card)':'var(--card-h)';
+        var border=isToday?'2px solid var(--ac)':'1px solid var(--bd)';
+        h+='<div style="background:'+bg+';border:'+border+';border-radius:6px;padding:5px 4px;min-height:52px;cursor:'+(has?'pointer':'default')+'"';
+        if(has)h+=' onclick="showPurDay(\''+dateStr+'\')"';
+        h+='><div style="font-size:.7rem;font-weight:600;color:'+(isToday?'var(--ac)':'var(--tx)')+'">'+d+'</div>';
+        if(has)h+='<div style="font-family:var(--fm);font-size:.65rem;color:var(--ac);margin-top:2px">'+fmtC(dayTotals[d])+'</div>';
+        h+='</div>';
+    }
+    h+='</div>';
+    if(!grandTotal)h+='<div style="text-align:center;padding:20px;color:var(--tx-m);font-size:.78rem">本月暂无采购记录</div>';
+    return h;
+}
+
+// 日详情弹窗
+function showPurDay(date){
+    var dayPurchases=DB.purchases.filter(function(p){return p.date===date});
+    if(!dayPurchases.length)return;
+    var allItems=[];
+    dayPurchases.forEach(function(p){(p.items||[]).forEach(function(item){
+        allItems.push({name:item.name,section:item.section||'未分区',category:item.category||'',source:item.source||p.source||'外购',qty:item.qty||0,unit:item.unit||'',unitPrice:item.unitPrice||0,total:item.total||0})})});
+    var total=allItems.reduce(function(s,i){return s+i.total},0);
+    var dateLabel=date.substring(5).replace('-','/');
+
+    var m=document.getElementById('modal'),o=document.getElementById('overlay');
+    var h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
+    h+='<h3 style="margin:0">'+dateLabel+' 采购明细</h3>';
+    h+='<span style="font-size:.95rem;font-weight:700;color:var(--ac)">¥'+fmtC(total)+'</span></div>';
+
+    // 按来源分组
+    var groups={};allItems.forEach(function(item){
+        if(!groups[item.source])groups[item.source]=[];
+        groups[item.source].push(item)});
+    Object.keys(groups).forEach(function(src){
+        var srcTotal=groups[src].reduce(function(s,i){return s+i.total},0);
+        h+='<div style="font-size:.78rem;font-weight:600;color:var(--ac);margin:12px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--bd-l)">'+src+' · ¥'+fmtC(srcTotal)+'</div>';
+        h+='<div class="tw" style="margin-bottom:8px"><table><tr><th>商品</th><th>区域</th><th class="nr">数量</th><th class="nr">单价</th><th class="nr">金额</th></tr>';
+        groups[src].forEach(function(item){
+            h+='<tr><td>'+item.name+'</td><td>'+item.section+'</td><td class="nr">'+item.qty+' '+(item.unit||'')+'</td><td class="nr">'+fmt(item.unitPrice)+'</td><td class="nr" style="font-weight:600">'+fmtC(item.total)+'</td></tr>'});
+        h+='</table></div>';
+    });
+    h+='<div style="text-align:right;margin-top:8px"><button class="btn" onclick="closeModal()">关闭</button></div>';
+
+    m.innerHTML=h;m.style.maxWidth='600px';m.classList.add('show');o.classList.add('show');
+    o.onclick=function(e){if(e.target===o)closeModal()};
+    m.onclick=function(e){e.stopPropagation()};
+}
+function closeModal(){var m=document.getElementById('modal'),o=document.getElementById('overlay');if(m)m.classList.remove('show');if(o){o.classList.remove('show');o.onclick=null}}
+
+// ===== 图表 =====
+function initChart(D){
+    if(typeof Chart==='undefined')return;
+    Chart.defaults.color='#7a7570';Chart.defaults.font.family="'DM Mono','Lexend',monospace";
+    if(_curTab==='profit'){
+        var ctx=document.getElementById('repChart');if(!ctx)return;
+        _charts.c1=new Chart(ctx,{type:'bar',data:{labels:['营收','成本','毛利','费用','利润'],datasets:[{data:[D.mNet,D.netPur,D.grossProfit,D.expTotal,D.operProfit],backgroundColor:['rgba(201,168,76,.7)','rgba(199,84,80,.5)','rgba(61,139,94,.6)','rgba(212,160,23,.5)','rgba(96,165,250,.6)'],borderRadius:4}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:function(v){return '¥'+v.toLocaleString()}}}}}});
+    }else if(_curTab==='revenue'){
+        var c1=document.getElementById('repChart1');if(c1){
+            _charts.c1=new Chart(c1,{type:'doughnut',data:{labels:['厨房','吧台','外卖','香烟','其他'],datasets:[{data:[D.mKit,D.mBar,D.mDel,D.mCig,D.mOther],backgroundColor:['rgba(201,168,76,.7)','rgba(61,139,94,.6)','rgba(96,165,250,.6)','rgba(167,139,250,.6)','rgba(212,160,23,.5)'],borderWidth:1}]},options:{responsive:true,plugins:{legend:{position:'bottom',labels:{padding:10,font:{size:11}}}}}});
+        }
+        var c2=document.getElementById('repChart2');if(c2){
+            var payItems=[['智能POS',D.mr.reduce(function(s,r){return s+(r.payment?r.payment.pos||0:0)},0)],['建行生活',D.mr.reduce(function(s,r){return s+(r.payment?r.payment.ccbLife||0:0)},0)],['现金',D.mr.reduce(function(s,r){return s+(r.payment?r.payment.cash||0:0)},0)],['会员卡',D.mr.reduce(function(s,r){return s+(r.payment?r.payment.memberCard||0:0)},0)],['外卖',D.mDel]];
+            _charts.c2=new Chart(c2,{type:'doughnut',data:{labels:payItems.map(function(i){return i[0]}),datasets:[{data:payItems.map(function(i){return i[1]}),backgroundColor:['rgba(201,168,76,.7)','rgba(96,165,250,.6)','rgba(61,139,94,.6)','rgba(167,139,250,.6)','rgba(212,160,23,.5)'],borderWidth:1}]},options:{responsive:true,plugins:{legend:{position:'bottom',labels:{padding:10,font:{size:11}}}}}});
+        }
+    }else if(_curTab==='daily'){
+        var ctx=document.getElementById('repChart');if(!ctx)return;
+        var sorted=D.mr.slice().sort(function(a,b){return a.date.localeCompare(b.date)});
+        _charts.c1=new Chart(ctx,{type:'bar',data:{labels:sorted.map(function(r){return parseInt(r.date.split('-')[2])+'日'}),datasets:[
+            {label:'实收',data:sorted.map(function(r){return r.revenue.netSales||0}),backgroundColor:'rgba(201,168,76,.55)',borderColor:'#c9a84c',borderWidth:1,borderRadius:3,yAxisID:'y',order:2},
+            {label:'客流',data:sorted.map(function(r){return r.guest.count||0}),type:'line',borderColor:'#60a5fa',backgroundColor:'rgba(96,165,250,.08)',fill:true,pointRadius:3,yAxisID:'y1',order:1}
+        ]},options:{responsive:true,interaction:{intersect:false,mode:'index'},scales:{y:{position:'left',grid:{color:'rgba(0,0,0,.04)'},ticks:{callback:function(v){return '¥'+v.toLocaleString()}}},y1:{position:'right',grid:{drawOnChartArea:false}}},plugins:{legend:{labels:{usePointStyle:true,pointStyle:'circle',padding:12,font:{size:11}}}}}});
+    }else if(_curTab==='guest'){
+        var ctx=document.getElementById('repChart');if(!ctx)return;
+        var sorted=D.mr.slice().sort(function(a,b){return a.date.localeCompare(b.date)});
+        _charts.c1=new Chart(ctx,{type:'bar',data:{labels:sorted.map(function(r){return parseInt(r.date.split('-')[2])+'日'}),datasets:[
+            {label:'客流',data:sorted.map(function(r){return r.guest.count||0}),backgroundColor:'rgba(96,165,250,.55)',borderColor:'#60a5fa',borderWidth:1,borderRadius:3,yAxisID:'y',order:2},
+            {label:'500+包厢',data:sorted.map(function(r){return r.guest.premiumRoomsToday||0}),type:'line',borderColor:'#c9a84c',backgroundColor:'rgba(201,168,76,.08)',fill:true,pointRadius:3,yAxisID:'y1',order:1}
+        ]},options:{responsive:true,interaction:{intersect:false,mode:'index'},scales:{y:{position:'left',grid:{color:'rgba(0,0,0,.04)'}},y1:{position:'right',grid:{drawOnChartArea:false}}},plugins:{legend:{labels:{usePointStyle:true,pointStyle:'circle',padding:12,font:{size:11}}}}}});
+    }
+}
+
+setInterval(loadData,60000);
+</script>
+</body>
+</html>

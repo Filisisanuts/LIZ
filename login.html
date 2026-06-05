@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>店铺管理 · 登录</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700&family=Lexend:wght@400;500&family=Noto+Sans+SC:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+    font-family: 'Noto Serif SC', Georgia, serif;
+    background: #f7f4ee;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.login-wrap {
+    width: 100%;
+    max-width: 400px;
+    padding: 40px 24px;
+}
+.login-logo {
+    text-align: center;
+    margin-bottom: 36px;
+}
+.login-logo .icon {
+    font-size: 2.8rem;
+    margin-bottom: 10px;
+}
+.login-logo .name {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #2c2c2c;
+    letter-spacing: .04em;
+}
+.login-logo .sub {
+    font-size: .78rem;
+    color: #aaa;
+    margin-top: 4px;
+    letter-spacing: .1em;
+}
+.login-card {
+    background: #fff;
+    border: 1px solid #e5dfd4;
+    border-radius: 12px;
+    padding: 28px 24px;
+    box-shadow: 0 4px 24px rgba(0,0,0,.04);
+}
+.tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 24px;
+    border-bottom: 1px solid #e5dfd4;
+}
+.tab {
+    flex: 1;
+    text-align: center;
+    padding: 10px 0;
+    font-size: .88rem;
+    color: #aaa;
+    cursor: pointer;
+    position: relative;
+    transition: color .2s;
+}
+.tab.active {
+    color: #b08d57;
+    font-weight: 600;
+}
+.tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 20%;
+    right: 20%;
+    height: 2px;
+    background: #b08d57;
+    border-radius: 1px;
+}
+.form-group {
+    margin-bottom: 14px;
+}
+.form-group label {
+    display: block;
+    font-size: .72rem;
+    color: #888;
+    margin-bottom: 5px;
+    letter-spacing: .03em;
+}
+.form-group input {
+    width: 100%;
+    padding: 11px 14px;
+    font-size: .88rem;
+    border: 1px solid #e5dfd4;
+    border-radius: 8px;
+    background: #faf8f3;
+    color: #2c2c2c;
+    outline: none;
+    font-family: 'Noto Sans SC', sans-serif;
+    transition: border-color .2s, box-shadow .2s;
+}
+.form-group input:focus {
+    border-color: #b08d57;
+    box-shadow: 0 0 0 3px rgba(176,141,87,.1);
+}
+.form-group input::placeholder {
+    color: #ccc;
+}
+.btn-primary {
+    width: 100%;
+    padding: 12px 0;
+    background: #b08d57;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: .92rem;
+    font-weight: 600;
+    font-family: 'Noto Serif SC', serif;
+    cursor: pointer;
+    transition: background .2s;
+    margin-top: 6px;
+}
+.btn-primary:hover {
+    background: #c9a86c;
+}
+.btn-primary:active {
+    transform: scale(.98);
+}
+.error-msg {
+    color: #c75450;
+    font-size: .72rem;
+    margin-top: 8px;
+    display: none;
+    text-align: center;
+}
+.error-msg.show {
+    display: block;
+}
+.skip-area {
+    text-align: center;
+    margin-top: 28px;
+}
+.skip-link {
+    font-size: .78rem;
+    color: #aaa;
+    text-decoration: none;
+    cursor: pointer;
+    transition: color .2s;
+}
+.skip-link:hover {
+    color: #b08d57;
+}
+.skip-hint {
+    font-size: .65rem;
+    color: #ccc;
+    margin-top: 6px;
+}
+.spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255,255,255,.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin .6s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media(max-width:480px) {
+    .login-wrap { padding: 60px 20px 40px; }
+    .login-card { padding: 24px 18px; }
+}
+</style>
+</head>
+<body>
+
+<div class="login-wrap">
+    <div class="login-logo">
+        <div class="icon">☕</div>
+        <div class="name">店铺管理</div>
+        <div class="sub">经营管理系统</div>
+    </div>
+
+    <div class="login-card">
+        <div class="tabs">
+            <div class="tab active" id="tabLogin" onclick="switchTab('login')">登录</div>
+            <div class="tab" id="tabReg" onclick="switchTab('reg')">注册</div>
+        </div>
+
+        <!-- 登录表单 -->
+        <div id="formLogin">
+            <div class="form-group">
+                <label>邮箱</label>
+                <input type="email" id="loginEmail" placeholder="请输入邮箱" autocomplete="email">
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="password" id="loginPass" placeholder="请输入密码" autocomplete="current-password">
+            </div>
+            <div style="text-align:right;margin-bottom:12px">
+                <a class="skip-link" style="font-size:.72rem" onclick="switchTab('reset')">忘记密码？</a>
+            </div>
+            <div class="error-msg" id="loginError"></div>
+            <button class="btn-primary" id="loginBtn" onclick="doLogin()">登录</button>
+        </div>
+
+        <!-- 忘记密码 -->
+        <div id="formReset" style="display:none">
+            <div class="form-group">
+                <label>注册邮箱</label>
+                <input type="email" id="resetEmail" placeholder="请输入注册时的邮箱">
+            </div>
+            <div class="error-msg" id="resetError"></div>
+            <button class="btn-primary" id="resetBtn" onclick="doResetPass()">发送重置邮件</button>
+            <div style="text-align:center;margin-top:12px">
+                <a class="skip-link" style="font-size:.72rem" onclick="switchTab('login')">返回登录</a>
+            </div>
+        </div>
+
+        <!-- 注册表单 -->
+        <div id="formReg" style="display:none">
+            <div class="form-group">
+                <label>邮箱</label>
+                <input type="email" id="regEmail" placeholder="请输入邮箱" autocomplete="email">
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="password" id="regPass" placeholder="至少6位" autocomplete="new-password">
+            </div>
+            <div class="form-group">
+                <label>确认密码</label>
+                <input type="password" id="regPass2" placeholder="再次输入密码" autocomplete="new-password">
+            </div>
+            <div class="error-msg" id="regError"></div>
+            <button class="btn-primary" id="regBtn" onclick="doRegister()">注册</button>
+        </div>
+    </div>
+
+    <div class="skip-area">
+        <a class="skip-link" href="index.html?guest=1">跳过，先看看 →</a>
+        <div class="skip-hint">未登录只能查看，不能录入数据</div>
+    </div>
+</div>
+
+<script>
+var _sbClient = null;
+(function() {
+    var url = 'https://aahvuwdifuqhwyanrvwj.supabase.co';
+    var key = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhaHZ1d2RpZnVxaHd5YW5ydndqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyMDc5MzMsImV4cCI6MjA5NDc4MzkzM30.6DByxb_Pk_wGVzp189SslD3B8gDoY9H7CpyWEySgFS8';
+    _sbClient = supabase.createClient(url, key);
+    // 已登录则直接跳转主页
+    _sbClient.auth.getSession().then(function(res) {
+        if (res.data && res.data.session) {
+            window.location.href = 'index.html';
+        }
+    });
+})();
+
+function switchTab(tab) {
+    document.getElementById('tabLogin').className = tab === 'login' ? 'tab active' : 'tab';
+    document.getElementById('tabReg').className = tab === 'reg' ? 'tab active' : 'tab';
+    document.getElementById('formLogin').style.display = tab === 'login' ? '' : 'none';
+    document.getElementById('formReg').style.display = tab === 'reg' ? '' : 'none';
+    document.getElementById('formReset').style.display = tab === 'reset' ? '' : 'none';
+    if (tab === 'reset') {
+        document.getElementById('tabLogin').className = 'tab active';
+    }
+    hideError();
+}
+
+function showError(id, msg) {
+    var el = document.getElementById(id);
+    el.textContent = msg;
+    el.classList.add('show');
+}
+function hideError() {
+    document.getElementById('loginError').classList.remove('show');
+    document.getElementById('regError').classList.remove('show');
+    var re = document.getElementById('resetError');
+    if (re) { re.classList.remove('show'); re.style.color = ''; }
+}
+
+function setLoading(btnId, loading) {
+    var btn = document.getElementById(btnId);
+    if (loading) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>处理中...';
+    } else {
+        btn.disabled = false;
+        btn.textContent = btnId === 'loginBtn' ? '登录' : '注册';
+    }
+}
+
+function doLogin() {
+    hideError();
+    var email = (document.getElementById('loginEmail').value || '').trim();
+    var pass = document.getElementById('loginPass').value || '';
+    if (!email || !pass) { showError('loginError', '请填写邮箱和密码'); return; }
+    setLoading('loginBtn', true);
+    _sbClient.auth.signInWithPassword({ email: email, password: pass }).then(function(res) {
+        setLoading('loginBtn', false);
+        if (res.error) { showError('loginError', '登录失败：' + res.error.message); return; }
+        window.location.href = 'index.html';
+    }).catch(function() {
+        setLoading('loginBtn', false);
+        showError('loginError', '网络错误，请重试');
+    });
+}
+
+function doRegister() {
+    hideError();
+    var email = (document.getElementById('regEmail').value || '').trim();
+    var pass = document.getElementById('regPass').value || '';
+    var pass2 = document.getElementById('regPass2').value || '';
+    if (!email || !pass) { showError('regError', '请填写邮箱和密码'); return; }
+    if (pass.length < 6) { showError('regError', '密码至少6位'); return; }
+    if (pass !== pass2) { showError('regError', '两次密码不一致'); return; }
+    setLoading('regBtn', true);
+    _sbClient.auth.signUp({ email: email, password: pass }).then(function(res) {
+        setLoading('regBtn', false);
+        if (res.error) { showError('regError', '注册失败：' + res.error.message); return; }
+        showError('regError', '注册成功！请查收验证邮件后登录');
+        document.getElementById('regError').style.color = '#3d8b5e';
+        setTimeout(function() { switchTab('login'); }, 2000);
+    }).catch(function() {
+        setLoading('regBtn', false);
+        showError('regError', '网络错误，请重试');
+    });
+}
+
+function doResetPass() {
+    hideError();
+    var email = (document.getElementById('resetEmail').value || '').trim();
+    if (!email) { showError('resetError', '请输入邮箱'); return; }
+    setLoading('resetBtn', true);
+    _sbClient.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + '/login.html' }).then(function(res) {
+        setLoading('resetBtn', false);
+        if (res.error) { showError('resetError', '发送失败：' + res.error.message); return; }
+        showError('resetError', '重置邮件已发送，请查收');
+        document.getElementById('resetError').style.color = '#3d8b5e';
+    }).catch(function() {
+        setLoading('resetBtn', false);
+        showError('resetError', '网络错误，请重试');
+    });
+}
+
+// Enter 键提交
+document.getElementById('loginPass').addEventListener('keydown', function(e) { if (e.key === 'Enter') doLogin(); });
+document.getElementById('regPass2').addEventListener('keydown', function(e) { if (e.key === 'Enter') doRegister(); });
+</script>
+
+</body>
+</html>
