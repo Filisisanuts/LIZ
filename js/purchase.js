@@ -314,7 +314,10 @@ function rPurchase() {
     // 明细页
     h += '<div id="pHist" style="display:none">';
     h += '<div class="hrow"><label>月份</label>';
-    h += '<input class="inp" id="pHistM" type="text" readonly placeholder="选择月份" value="' + curYM() + '" onclick="_mpOpen(\'pHistM\')" onchange="renderPHist()" style="max-width:180px;cursor:pointer"></div>';
+    h += '<button class="btn s" onclick="purchaseCalNav(-1)">◀</button>';
+    h += '<input class="inp" id="pHistM" type="text" readonly placeholder="选择月份" value="' + curYM() + '" onclick="_mpOpen(\'pHistM\')" onchange="purchaseCalPickYM(this.value)" style="max-width:180px;cursor:pointer">';
+    h += '<button class="btn s" onclick="purchaseCalNav(1)">▶</button>';
+    h += '</div>';
     h += '<div id="pHistArea"></div>';
     h += '</div>';
 
@@ -2058,5 +2061,21 @@ function showBadgePriceDetail(itemName, lastPrice, lastDate, backDate) {
 function backToPurDetail(date) {
     backToModal(function() {
         showPurDayModal(date);
+    });
+}
+
+// 采购月份切换
+function purchaseCalNav(dir) {
+    var picker = document.getElementById('pHistM');
+    var currentYM = picker ? picker.value : curYM();
+    calendarNav(dir, currentYM, 'pHistM', function(ym) {
+        renderPHist();
+    });
+}
+
+// 采购月份选择
+function purchaseCalPickYM(val) {
+    calendarPickYM(val, function(ym) {
+        renderPHist();
     });
 }
