@@ -1,5 +1,8 @@
 var $id=function(id){return document.getElementById(id)};
 
+// 括号转换：英文括号转中文括号
+function fixBrackets(s){if(!s)return s;return s.replace(/\(/g,'（').replace(/\)/g,'）')}
+
 // 日期工具
 function td(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function curYM(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')}

@@ -1,13 +1,16 @@
 
 // 月度财务报告主页：核心指标 + 子标签导航 + 多维度报表
 function rReport() {
-    var ym = curYM();
+    // 先检查是否已有月份选择器，如果有就使用它的值
+    var existingPicker = document.getElementById('repM');
+    var ym = existingPicker ? existingPicker.value : curYM();
 
-    // 月份选择器
-    var h = '<div class="hrow"><label>月份</label>';
+    // 月份选择器 + 分享链接
+    var h = '<div class="hrow" style="flex-wrap:wrap;gap:8px;align-items:center"><label>月份</label>';
     h += '<button class="btn s" onclick="reportCalNav(-1)">◀</button>';
     h += '<input class="inp" id="repM" type="text" readonly placeholder="选择月份" value="' + ym + '" onclick="_mpOpen(\'repM\')" onchange="reportCalPickYM(this.value)" style="max-width:180px;cursor:pointer">';
     h += '<button class="btn s" onclick="reportCalNav(1)">▶</button>';
+    h += '<button class="btn s" onclick="copyDashLink()" style="font-size:.7rem">📋 分享</button>';
     h += '</div>';
 
     var m = $id('repM') ? $id('repM').value || ym : ym;
@@ -90,6 +93,20 @@ function rReport() {
         expByCat[e.category] += e.amount;
     });
 
+    // ===== 库存销售成本 =====
+    var saleCostByType = {};
+    ['invTea', 'invCig', 'invAlc', 'invOther'].forEach(function(key) {
+        var typeName = key === 'invTea' ? '茗茶' : key === 'invCig' ? '香烟' : key === 'invAlc' ? '酒类' : '其他';
+        (DB[key] || []).forEach(function(item) {
+            var type = key.replace('inv', '').toLowerCase();
+            var calc = invCalc(item, type, m);
+            if (calc.cost > 0) {
+                if (!saleCostByType[typeName]) saleCostByType[typeName] = 0;
+                saleCostByType[typeName] += calc.cost;
+            }
+        });
+    });
+
     // ===== 分区域成本 =====
     var kitCost = purBySec['厨房'] || 0;
     var barCost = purBySec['吧台'] || 0;
@@ -155,6 +172,7 @@ function rReport() {
     if (alcRev > 0) tabs.push({ id: 'alc', label: '酒类' });
     tabs.push({ id: 'daily', label: '每日营收' });
     tabs.push({ id: 'guest', label: '客情包厢' });
+    tabs.push({ id: 'purchase', label: '采购明细' });
 
     // 渲染子标签按钮
     var navH = '';
@@ -208,7 +226,7 @@ function rReport() {
         } else if (id === 'revenue') {
             sh += renderRevenueSection(mNet, mGross, mDiscount, mKit, mBar, mDel, mCigRev, alcRev, mOther, mPos, mCcb, mCash, mMember, mTreat, mAr, mDelMeituan, mDelTaobao, mDelJd);
         } else if (id === 'cost') {
-            sh += renderCostSection(purBySec, netPur, kitCost, barCost, outCost, teaCost, cigCost, alcCost, expByCat, expTotal);
+            sh += renderCostSection(purBySec, netPur, kitCost, barCost, outCost, teaCost, cigCost, alcCost, expByCat, expTotal, saleCostByType);
         } else if (id === 'catgp') {
             sh += renderCatGPSection(mKit, mBar, barNoTea, teaRev, mDel, mCigRev, alcRev, kitCost, barCost, teaCost, cigCost, alcCost, kitGP, barGP, teaGP, delGP, cigGP, alcGP);
         } else if (id === 'cig') {
@@ -221,6 +239,8 @@ function rReport() {
             sh += renderDailySection(mr, mNet, mGuests, daysReported);
         } else if (id === 'guest') {
             sh += renderGuestSection(mr, mGuests, m);
+        } else if (id === 'purchase') {
+            sh += renderPurchaseSection(m);
         }
 
         s.innerHTML = sh;
@@ -338,32 +358,61 @@ function renderRevenueSection(net, gross, discount, kit, bar, del, cig, alc, oth
 }
 
 // ==================== 成本费用明细 ====================
-function renderCostSection(purBySec, netPur, kitC, barC, outC, teaC, cigC, alcC, expByCat, expTotal) {
+function renderCostSection(purBySec, netPur, kitC, barC, outC, teaC, cigC, alcC, expByCat, expTotal, saleCostByType) {
     var total = netPur + expTotal;
+    var saleCostTotal = saleCostByType ? Object.values(saleCostByType).reduce(function(s, v) { return s + v; }, 0) : 0;
 
     var h = '<div class="sec-head">';
-    h += '<h4 style="font-size:.88rem;color:var(--ac);margin-bottom:6px">三、成本费用明细</h4>';
+    h += '<h4 style="font-size:.88rem;color:var(--ac);margin-bottom:6px">成本费用</h4>';
     h += '<div style="font-size:.72rem;color:var(--tx-m);margin-bottom:14px">';
-    h += '采购总成本' + fmtC(netPur) + '元，费用' + fmtC(expTotal) + '元，合计' + fmtC(total) + '元。';
+    h += '净采购' + fmtC(netPur) + '元，销售成本' + fmtC(saleCostTotal) + '元，营业费用' + fmtC(expTotal) + '元。';
     h += '</div></div>';
 
-    h += '<div class="rep-grid">';
-    h += '<div class="tw" style="margin-bottom:0"><table><tr><th>费用归属</th><th class="nr">金额（元）</th><th class="nr">占比</th></tr>';
-    var items = [['厨房采购', kitC], ['吧台采购', barC], ['外场采购', outC], ['茗茶成本', teaC], ['香烟成本', cigC]];
-    if (alcC > 0) items.push(['酒类成本', alcC]);
-    Object.keys(expByCat).forEach(function(cat) { items.push([cat, expByCat[cat]]); });
-    items.push(['合计', total]);
-    items.forEach(function(it) {
-        var pct = total > 0 ? (it[1] / total * 100).toFixed(1) : '0';
-        var isTotal = it[0] === '合计';
-        h += '<tr' + (isTotal ? ' style="background:var(--card-h)"' : '') + '>';
-        h += '<td' + (isTotal ? ' style="font-weight:600"' : '') + '>' + it[0] + '</td>';
-        h += '<td class="nr"' + (isTotal ? ' style="font-weight:600"' : '') + '>' + fmtC(it[1]) + '</td>';
-        h += '<td class="nr">' + pct + '%</td></tr>';
+    // 三栏布局：采购成本、销售成本、经营费用
+    h += '<div class="rep-grid" style="grid-template-columns:1fr">';
+
+    // 1. 采购成本
+    h += '<div class="tw" style="margin-bottom:0">';
+    h += '<table><tr><th colspan="2">📦 采购成本 <span style="font-weight:normal;color:var(--tx-m)">¥' + fmtC(netPur) + '</span></th></tr>';
+    h += '<tr><th>区域</th><th class="nr">金额</th></tr>';
+    var purItems = [['厨房', kitC], ['吧台', barC], ['外场', outC]];
+    if (teaC > 0) purItems.push(['茗茶', teaC]);
+    if (cigC > 0) purItems.push(['香烟', cigC]);
+    if (alcC > 0) purItems.push(['酒类', alcC]);
+    purItems.forEach(function(it) {
+        if (it[1] > 0) h += '<tr><td style="font-weight:600">' + it[0] + '</td><td class="nr">' + fmtC(it[1]) + '</td></tr>';
     });
+    h += '<tr class="total-row"><td>小计</td><td class="nr">' + fmtC(netPur) + '</td></tr>';
     h += '</table></div>';
-    h += '<div><div style="background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:10px;margin-bottom:8px"><canvas id="repChart" height="150"></canvas></div>';
-    h += '<div style="background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:10px"><canvas id="repChart2" height="150"></canvas></div></div>';
+
+    // 2. 销售成本
+    h += '<div class="tw" style="margin-bottom:0">';
+    h += '<table><tr><th colspan="2">🏷️ 销售成本 <span style="font-weight:normal;color:var(--tx-m)">¥' + fmtC(saleCostTotal) + '</span></th></tr>';
+    h += '<tr><th>类别</th><th class="nr">金额</th></tr>';
+    if (saleCostByType) {
+        Object.keys(saleCostByType).sort(function(a, b) { return saleCostByType[b] - saleCostByType[a]; }).forEach(function(type) {
+            h += '<tr><td>' + type + '</td><td class="nr">' + fmtC(saleCostByType[type]) + '</td></tr>';
+        });
+    }
+    if (saleCostTotal <= 0) {
+        h += '<tr><td colspan="2" style="color:var(--tx-m);text-align:center">暂无销售记录</td></tr>';
+    }
+    h += '<tr class="total-row"><td>小计</td><td class="nr">' + fmtC(saleCostTotal) + '</td></tr>';
+    h += '</table></div>';
+
+    // 3. 经营费用
+    h += '<div class="tw" style="margin-bottom:0">';
+    h += '<table><tr><th colspan="2">📋 经营费用 <span style="font-weight:normal;color:var(--tx-m)">¥' + fmtC(expTotal) + '</span></th></tr>';
+    h += '<tr><th>费用分类</th><th class="nr">金额</th></tr>';
+    Object.keys(expByCat).sort(function(a, b) { return expByCat[b] - expByCat[a]; }).forEach(function(cat) {
+        h += '<tr><td>' + cat + '</td><td class="nr">' + fmtC(expByCat[cat]) + '</td></tr>';
+    });
+    if (expTotal <= 0) {
+        h += '<tr><td colspan="2" style="color:var(--tx-m);text-align:center">暂无费用记录</td></tr>';
+    }
+    h += '<tr class="total-row"><td>小计</td><td class="nr">' + fmtC(expTotal) + '</td></tr>';
+    h += '</table></div>';
+
     h += '</div>';
     return h;
 }
@@ -760,4 +809,320 @@ function reportCalPickYM(val) {
     calendarPickYM(val, function(ym) {
         rReport();
     });
+}
+
+// ==================== 采购明细 ====================
+function renderPurchaseSection(ym) {
+    var year = parseInt(ym.split('-')[0]);
+    var month = parseInt(ym.split('-')[1]);
+    var daysInMonth = new Date(year, month, 0).getDate();
+    var firstDay = new Date(year, month - 1, 1).getDay();
+    firstDay = firstDay === 0 ? 6 : firstDay - 1;
+    var todayStr = td();
+    var todayDay = parseInt(todayStr.split('-')[2]);
+    var isThisMonth = todayStr.startsWith(ym);
+
+    var dayTotals = {}, grandTotal = 0, srcTotals = {}, srcSecTotals = {};
+    DB.purchases.filter(function(p) { return p.date.startsWith(ym); }).forEach(function(p) {
+        (p.items || []).forEach(function(item) {
+            var day = parseInt(p.date.substring(8, 10));
+            if (!dayTotals[day]) dayTotals[day] = 0;
+            dayTotals[day] += item.total;
+            grandTotal += item.total;
+            var src = item.source || p.source || '外购';
+            var sec = item.section || '未分区';
+            if (!srcTotals[src]) srcTotals[src] = 0;
+            srcTotals[src] += item.total;
+            if (!srcSecTotals[src]) srcSecTotals[src] = {};
+            if (!srcSecTotals[src][sec]) srcSecTotals[src][sec] = 0;
+            srcSecTotals[src][sec] += item.total;
+        });
+    });
+
+    var h = '<div class="sec-head"><h4 style="font-size:.88rem;color:var(--ac);margin-bottom:6px">采购明细</h4>';
+    h += '<div style="font-size:.72rem;color:var(--tx-m);margin-bottom:14px">本月采购' + fmtC(grandTotal) + '元，' + Object.keys(dayTotals).length + '天有采购，日均' + fmtC(grandTotal / daysInMonth) + '元。</div></div>';
+
+    // 汇总卡片
+    if (grandTotal > 0) {
+        h += '<div class="cards">';
+        h += '<div class="card"><div class="card-l">本月采购</div><div class="card-v ac">' + fmtC(grandTotal) + '</div></div>';
+        h += '<div class="card"><div class="card-l">天数</div><div class="card-v">' + Object.keys(dayTotals).length + '</div></div>';
+        h += '<div class="card"><div class="card-l">日均</div><div class="card-v">' + fmtC(grandTotal / daysInMonth) + '</div></div>';
+        ['岸香贸易', '外购'].forEach(function(src) {
+            var st = srcTotals[src] || 0;
+            var returnTotal = 0;
+            DB.purchases.filter(function(p) { return p.date.startsWith(ym); }).forEach(function(p) {
+                (p.items || []).forEach(function(item) {
+                    var itemSrc = item.source || p.source || '外购';
+                    if (itemSrc === src && (item.qty < 0 || item.total < 0)) {
+                        returnTotal += Math.abs(item.total);
+                    }
+                });
+            });
+            if (st <= 0 && returnTotal <= 0) return;
+            var secs = srcSecTotals[src] || {};
+            h += '<div class="card" style="cursor:pointer" onclick="showPurSourceDetail(\'' + src + '\',\'' + ym + '\')"><div class="card-l">' + src + '</div><div class="card-v" style="color:var(--gn)">' + fmtC(st) + '</div>';
+            if (returnTotal > 0) {
+                h += '<div style="font-size:.65rem;color:var(--rd);margin-top:2px">退 ¥' + fmtC(returnTotal) + '</div>';
+            }
+            h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;margin-top:4px">';
+            Object.keys(secs).sort(function(a, b) { return secs[b] - secs[a]; }).forEach(function(sec) {
+                h += '<div style="font-size:.65rem;color:var(--tx-m)">' + sec + '</div><div style="font-size:.65rem;text-align:right;font-family:var(--fm)">' + fmtC(secs[sec]) + '</div>';
+            });
+            h += '</div></div>';
+        });
+        h += '</div>';
+    }
+
+    // 日历网格
+    h += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">';
+    ['一', '二', '三', '四', '五', '六', '日'].forEach(function(w) { h += '<div style="text-align:center;font-size:.7rem;color:var(--tx-m);padding:4px 0">' + w + '</div>'; });
+    for (var ix = 0; ix < firstDay; ix++) h += '<div></div>';
+    for (var d = 1; d <= daysInMonth; d++) {
+        var dateStr = ym + '-' + (d < 10 ? '0' + d : d);
+        var has = !!dayTotals[d], isToday = isThisMonth && d === todayDay;
+        var bg = has ? 'var(--card)' : 'var(--card-h)';
+        var border = isToday ? '2px solid var(--ac)' : '1px solid var(--bd)';
+        h += '<div style="background:' + bg + ';border:' + border + ';border-radius:6px;padding:5px 4px;min-height:52px;cursor:' + (has ? 'pointer' : 'default') + '"';
+        if (has) h += ' onclick="showPurDayModalReadOnly(\'' + dateStr + '\')"';
+        h += '><div style="font-size:.7rem;font-weight:600;color:' + (isToday ? 'var(--ac)' : 'var(--tx)') + '">' + d + '</div>';
+        if (has) {
+            h += '<div style="font-family:var(--fm);font-size:.65rem;color:var(--ac);margin-top:2px">' + fmtC(dayTotals[d]) + '</div>';
+        }
+        h += '</div>';
+    }
+    h += '</div>';
+    if (!grandTotal) h += '<div style="text-align:center;padding:20px;color:var(--tx-m);font-size:.78rem">本月暂无采购记录</div>';
+    return h;
+}
+
+// ==================== 采购来源明细弹窗 ====================
+function showPurSourceDetail(source, ym) {
+    var allItems = [];
+    DB.purchases.filter(function(p) { return p.date.startsWith(ym); }).forEach(function(p) {
+        (p.items || []).forEach(function(item) {
+            var itemSrc = item.source || p.source || '外购';
+            if (itemSrc === source) {
+                allItems.push({
+                    name: item.name,
+                    section: item.section || '未分区',
+                    category: item.category || '',
+                    qty: item.qty || 0,
+                    unit: item.unit || '',
+                    unitPrice: item.unitPrice || 0,
+                    total: item.total || 0,
+                    date: p.date
+                });
+            }
+        });
+    });
+
+    if (!allItems.length) return;
+
+    var total = allItems.reduce(function(s, i) { return s + i.total; }, 0);
+    var dateLabel = ym.substring(5).replace('-', '/');
+
+    var h = '<div style="max-width:500px;height:70vh;display:flex;flex-direction:column;font-family:\'Noto Sans SC\',sans-serif">';
+    h += '<div style="flex-shrink:0;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
+    h += '<h3 style="margin:0;font-size:.95rem;font-weight:700;color:var(--ac)">' + dateLabel + ' ' + source + ' 采购明细</h3>';
+    h += '<span style="font-family:var(--fm);font-size:1rem;font-weight:700;color:var(--ac)">¥' + fmtC(total) + '</span>';
+    h += '</div>';
+
+    // 按区域分组
+    var secGroups = {};
+    allItems.forEach(function(item) {
+        var sec = item.section || '未分区';
+        if (!secGroups[sec]) secGroups[sec] = { items: [], total: 0 };
+        secGroups[sec].items.push(item);
+        secGroups[sec].total += item.total;
+    });
+
+    h += '<div style="flex:1;overflow-y:auto">';
+    Object.keys(secGroups).sort(function(a, b) { return secGroups[b].total - secGroups[a].total; }).forEach(function(sec) {
+        var group = secGroups[sec];
+        h += '<div style="margin-bottom:12px">';
+        h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--card-h);border:1px solid var(--bd);border-radius:8px;margin-bottom:8px;cursor:pointer" onclick="toggleSection(\'sec_' + sec + '\')">';
+        h += '<div style="display:flex;align-items:center;gap:6px">';
+        h += '<span style="font-size:.88rem;color:var(--tx-m)">▾</span>';
+        h += '<span style="font-size:.88rem;font-weight:600;color:var(--tx)">' + sec + '</span>';
+        h += '</div>';
+        h += '<span style="font-family:var(--fm);font-size:.88rem;font-weight:700;color:var(--ac)">¥' + fmtC(group.total) + '</span>';
+        h += '</div>';
+        h += '<div id="sec_' + sec + '">';
+
+        // 按分类分组
+        var catGroups = {};
+        group.items.forEach(function(item) {
+            var cat = item.category || '未分类';
+            if (!catGroups[cat]) catGroups[cat] = { items: [], total: 0 };
+            catGroups[cat].items.push(item);
+            catGroups[cat].total += item.total;
+        });
+
+        Object.keys(catGroups).sort(function(a, b) { return catGroups[b].total - catGroups[a].total; }).forEach(function(cat) {
+            var catGroup = catGroups[cat];
+            h += '<div style="margin-left:8px;margin-bottom:8px">';
+            h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:var(--card);border:1px solid var(--bd-l);border-radius:6px;margin-bottom:4px;cursor:pointer" onclick="toggleSection(\'cat_' + sec + '_' + cat + '\')">';
+            h += '<div style="display:flex;align-items:center;gap:4px">';
+            h += '<span style="font-size:.75rem;color:var(--tx-m)">▸</span>';
+            h += '<span style="font-size:.78rem;font-weight:600;color:var(--tx-s)">' + cat + '</span>';
+            h += '</div>';
+            h += '<span style="font-family:var(--fm);font-size:.78rem;font-weight:600;color:var(--ac)">¥' + fmtC(catGroup.total) + '</span>';
+            h += '</div>';
+            h += '<div id="cat_' + sec + '_' + cat + '">';
+
+            // 合并相同物品
+            var mergedItems = {};
+            catGroup.items.forEach(function(item) {
+                var key = item.name;
+                if (!mergedItems[key]) {
+                    mergedItems[key] = { name: item.name, unit: item.unit || '', qty: 0, total: 0, prices: [] };
+                }
+                mergedItems[key].qty = Math.round((mergedItems[key].qty + item.qty) * 100) / 100;
+                mergedItems[key].total = Math.round((mergedItems[key].total + item.total) * 100) / 100;
+                if (item.unitPrice > 0) mergedItems[key].prices.push(item.unitPrice);
+            });
+
+            // 按金额从大到小排序并显示
+            Object.keys(mergedItems).sort(function(a, b) { return mergedItems[b].total - mergedItems[a].total; }).forEach(function(name) {
+                var item = mergedItems[name];
+                var priceText = '';
+                if (item.prices.length > 0) {
+                    var minPrice = Math.min.apply(null, item.prices);
+                    var maxPrice = Math.max.apply(null, item.prices);
+                    if (minPrice === maxPrice) {
+                        priceText = item.qty + (item.unit || '') + ' × ¥' + fmtC(minPrice);
+                    } else {
+                        priceText = item.qty + (item.unit || '') + ' × ¥' + fmtC(minPrice) + '~' + fmtC(maxPrice);
+                    }
+                } else {
+                    priceText = item.qty + (item.unit || '');
+                }
+                h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;margin-bottom:2px;background:var(--card-h);border:1px solid var(--bd-l);border-radius:4px;font-size:.75rem">';
+                h += '<span style="flex:1;color:var(--tx)">' + item.name + '</span>';
+                h += '<span style="color:var(--tx-m);margin:0 8px">' + priceText + '</span>';
+                h += '<span style="font-family:var(--fm);font-weight:600;color:var(--ac)">¥' + fmtC(item.total) + '</span>';
+                h += '</div>';
+            });
+
+            h += '</div></div>';  // 关闭分类内容容器和分类外层容器
+        });
+
+        h += '</div></div>';  // 关闭区域内容容器和区域外层容器
+    });
+    h += '</div>';
+
+    h += '<div class="brow" style="justify-content:flex-end"><button class="btn" onclick="closeModal()">关闭</button></div>';
+    h += '</div>';
+
+    showModal(h, 550);
+}
+
+// 切换区域/分类展开收起
+function toggleSection(id) {
+    var el = document.getElementById(id);
+    if (el) {
+        var isOpen = el.style.display !== 'none';
+        el.style.display = isOpen ? 'none' : 'block';
+        // 更新箭头
+        var prev = el.previousElementSibling;
+        if (prev) {
+            var arrow = prev.querySelector('span:first-child');
+            if (arrow && (arrow.textContent === '▾' || arrow.textContent === '▸')) {
+                arrow.textContent = isOpen ? '▸' : '▾';
+            }
+        }
+    }
+}
+
+// ==================== 只读版采购日详情弹窗（dashboard用） ====================
+// 只在dashboard页面定义，不影响index.html
+if (document.getElementById('mainContent')) {
+    window.showPurDayModalReadOnly = function(date) {
+        var dayPurchases = DB.purchases.filter(function(p) { return p.date === date; });
+        if (!dayPurchases.length) return;
+
+        var allItems = [];
+        dayPurchases.forEach(function(p) {
+            p.items.forEach(function(item) {
+                allItems.push({
+                    name: item.name, section: item.section || '未分区', category: item.category || '未分类',
+                    source: item.source || p.source || '外购', qty: item.qty || 0, unit: item.unit || '',
+                    unitPrice: item.unitPrice || 0, total: item.total || 0
+                });
+            });
+        });
+
+    var total = allItems.reduce(function(s, item) { return s + item.total; }, 0);
+    var dateLabel = date.substring(5).replace('-', '/');
+
+    var h = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
+    h += '<h3 style="margin:0">' + dateLabel + ' 采购明细</h3>';
+    h += '<span style="font-size:.95rem;font-weight:700;color:var(--ac)">¥' + fmtC(total) + '</span>';
+    h += '</div>';
+
+    // 按来源分组
+    var srcGroups = {};
+    allItems.forEach(function(item) {
+        var src = item.source;
+        if (!srcGroups[src]) srcGroups[src] = [];
+        srcGroups[src].push(item);
+    });
+
+    h += '<div style="max-height:60vh;overflow-y:auto;padding-right:4px">';
+    var si = 0;
+    Object.keys(srcGroups).sort(function(a, b) {
+        var totalA = srcGroups[a].reduce(function(s, i) { return s + i.total; }, 0);
+        var totalB = srcGroups[b].reduce(function(s, i) { return s + i.total; }, 0);
+        return totalB - totalA;
+    }).forEach(function(src) {
+        si++;
+        var srcId = 'srcDay' + si;
+        var srcTotal = srcGroups[src].reduce(function(s, i) { return s + i.total; }, 0);
+        h += '<div style="margin-bottom:12px">';
+        h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--card-h);border:1px solid var(--bd);border-radius:8px;margin-bottom:6px;cursor:pointer" onclick="toggleSection(\'' + srcId + '\')">';
+        h += '<span style="font-size:.88rem;font-weight:700;color:var(--ac)">▾ ' + src + '</span>';
+        h += '<span style="font-family:var(--fm);font-size:.88rem;font-weight:600">¥' + fmtC(srcTotal) + '</span>';
+        h += '</div>';
+        h += '<div id="' + srcId + '">';
+
+        // 按区域分组
+        var secGroups = {};
+        srcGroups[src].forEach(function(item) {
+            var sec = item.section;
+            if (!secGroups[sec]) secGroups[sec] = { items: [], total: 0 };
+            secGroups[sec].items.push(item);
+            secGroups[sec].total += item.total;
+        });
+
+        var ei = 0;
+        Object.keys(secGroups).sort(function(a, b) { return secGroups[b].total - secGroups[a].total; }).forEach(function(sec) {
+            ei++;
+            var secId = srcId + 'sec' + ei;
+            var secData = secGroups[sec];
+            h += '<div style="margin-left:8px;margin-bottom:6px">';
+            h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;background:var(--card);border:1px solid var(--bd-l);border-radius:6px;margin-bottom:4px;cursor:pointer" onclick="toggleSection(\'' + secId + '\')">';
+            h += '<span style="font-size:.82rem;font-weight:700;color:var(--tx)">▾ ' + sec + '</span>';
+            h += '<span style="font-family:var(--fm);font-size:.82rem;font-weight:600">¥' + fmtC(secData.total) + '</span>';
+            h += '</div>';
+            h += '<div id="' + secId + '">';
+
+            secData.items.forEach(function(item) {
+                h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;margin-bottom:2px;background:var(--card-h);border:1px solid var(--bd-l);border-radius:5px;font-size:.78rem">';
+                h += '<span style="flex:1;font-weight:600;color:var(--tx)">' + item.name + '</span>';
+                h += '<span style="color:var(--tx-m);margin:0 8px">' + item.qty + (item.unit || '') + ' × ¥' + fmtC(item.unitPrice) + '</span>';
+                h += '<span style="font-family:var(--fm);font-weight:600;color:var(--ac)">¥' + fmtC(item.total) + '</span>';
+                h += '</div>';
+            });
+
+            h += '</div></div>';
+        });
+
+        h += '</div></div>';
+    });
+    h += '</div>';
+
+    h += '<div class="brow" style="justify-content:flex-end"><button class="btn" onclick="closeModal()">关闭</button></div>';
+    showModal(h, 600);
+}
 }

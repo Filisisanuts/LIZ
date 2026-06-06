@@ -435,7 +435,7 @@ function addPurItem() {
     var cat = getSelVal('pmCat', 'pmCatC');
 
     _pmItems.push({
-        name: n, section: sec, category: cat,
+        name: fixBrackets(n), section: sec, category: cat,
         qty: q, unit: $id('pmUnit').value.trim(),
         unitPrice: up, total: t, source: $id('pmSrc').value
     });
@@ -1191,17 +1191,24 @@ function renderPHist() {
     if (alertItems.length > 0) {
         h += '<div style="margin-bottom:14px">';
         h += '<div style="font-size:.78rem;font-weight:600;color:var(--tx-s);margin-bottom:8px">⚠️ 价格涨幅预警</div>';
-        h += '<div style="display:flex;flex-wrap:wrap;gap:8px">';
-        alertItems.forEach(function(item) {
+        h += '<div style="display:flex;flex-wrap:wrap;gap:8px" id="alertList">';
+        var showCount = Math.min(3, alertItems.length);
+        for (var ai = 0; ai < alertItems.length; ai++) {
+            var item = alertItems[ai];
             var bgColor = item.level === 'danger' ? 'rgba(199,84,80,0.08)' : 'rgba(212,160,23,0.08)';
             var borderColor = item.level === 'danger' ? 'var(--rd)' : 'var(--og)';
             var textColor = item.level === 'danger' ? 'var(--rd)' : 'var(--og)';
-            h += '<div style="background:' + bgColor + ';border:1px solid ' + borderColor + ';border-radius:6px;padding:6px 10px;font-size:.72rem;cursor:pointer" onclick="showPriceDetail(\'' + item.name.replace(/'/g, "\\'") + '\',' + item.lastPrice + ',\'' + item.date.substring(0, 7) + '\')">';
+            var hideStyle = ai >= showCount ? 'display:none' : '';
+            h += '<div style="background:' + bgColor + ';border:1px solid ' + borderColor + ';border-radius:6px;padding:6px 10px;font-size:.72rem;cursor:pointer' + (hideStyle ? ';'+hideStyle : '') + '" class="alert-item" onclick="showPriceDetail(\'' + item.name.replace(/'/g, "\\'") + '\',' + item.lastPrice + ',\'' + item.date.substring(0, 7) + '\')">';
             h += '<div style="font-weight:600;color:' + textColor + '">' + item.name + '</div>';
             h += '<div style="font-size:.65rem;color:var(--tx-m);margin-top:2px">¥' + fmtC(item.lastPrice) + ' → ¥' + fmtC(item.unitPrice) + ' <span style="color:' + textColor + ';font-weight:600">' + (item.priceChange > 0 ? '+' : '') + item.priceChange.toFixed(1) + '%</span></div>';
             h += '</div>';
-        });
-        h += '</div></div>';
+        }
+        h += '</div>';
+        if (alertItems.length > showCount) {
+            h += '<div style="text-align:center;margin-top:8px"><button class="btn s" id="alertToggle" onclick="toggleAlertList()">展开全部 ' + alertItems.length + '项 ▾</button></div>';
+        }
+        h += '</div>';
     }
 
     h += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">';
@@ -1225,6 +1232,22 @@ function renderPHist() {
     h += '</div>';
     if (!grandTotal) h += '<div style="text-align:center;padding:20px;color:var(--tx-m);font-size:.78rem">本月暂无采购记录</div>';
     el.innerHTML = h;
+}
+
+// 涨幅预警展开/收起
+var _alertExpanded = false;
+function toggleAlertList() {
+    _alertExpanded = !_alertExpanded;
+    var items = document.querySelectorAll('.alert-item');
+    var btn = document.getElementById('alertToggle');
+    items.forEach(function(item, i) {
+        if (i >= 3) {
+            item.style.display = _alertExpanded ? '' : 'none';
+        }
+    });
+    if (btn) {
+        btn.textContent = _alertExpanded ? '收起 ▴' : '展开全部 ' + items.length + '项 ▾';
+    }
 }
 
 // ------ 日详情弹窗 ------

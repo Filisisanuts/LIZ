@@ -198,7 +198,9 @@ select.inp option{background:var(--card);color:var(--tx)}
 .rep-grid .chart-box,.rep-grid [style*="background:var(--card)"]{margin-bottom:0}
 .rep-grid canvas{max-width:100%!important}
 .rep-grid-wide{grid-template-columns:1fr .7fr}
-@media(max-width:768px){.rep-grid,.rep-grid-wide{display:flex;flex-direction:column;gap:14px}.rep-grid .tw{overflow-x:auto}.rep-grid .tw table{min-width:auto}}
+@media(max-width:768px){.rep-grid,.rep-grid-wide{display:flex;flex-direction:column;gap:14px}.rep-grid .tw{width:100%;overflow-x:auto}.rep-grid .tw table{min-width:100%}}
+.tw{overflow-x:auto;border:1px solid var(--bd);border-radius:var(--r);background:var(--card);margin-bottom:14px;width:100%}
+@media(max-width:768px){.tw{width:100%!important}}
 
 /* 日历响应式优化 */
 @media(max-width:768px){

@@ -135,40 +135,10 @@ function rData() {
     h += '<div class="card"><div class="card-l">费用</div><div class="card-v">' + DB.expenses.length + '</div></div>';
     h += '<div class="card"><div class="card-l">仓库</div><div class="card-v">' + (DB.whItems || []).length + '</div></div></div>';
 
-    // 分享报表链接
-    h += '<div class="sec">分享报表</div>';
-    h += '<div style="background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:14px;margin-bottom:12px">';
-    h += '<p style="font-size:.74rem;color:var(--tx-s);margin-bottom:12px">自定义分享内容：选择月份和数据类型</p>';
-
-    // 月份选择
-    h += '<div class="hrow" style="margin-bottom:10px">';
-    h += '<label>月份</label>';
-    h += '<select class="inp" id="shareMonth" style="max-width:150px" onchange="updateShareLink()">';
-    h += '<option value="">全部月份</option>';
-    // 生成最近12个月的选项
-    var now = new Date();
-    for (var i = 0; i < 12; i++) {
-        var d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        var ym = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-        h += '<option value="' + ym + '">' + ym + '</option>';
-    }
-    h += '</select></div>';
-
-    // 数据类型选择
-    h += '<div class="hrow" style="margin-bottom:12px">';
-    h += '<label>内容</label>';
-    h += '<select class="inp" id="shareType" style="max-width:150px" onchange="updateShareLink()">';
-    h += '<option value="all">全部数据</option>';
-    h += '<option value="daily">日报数据</option>';
-    h += '<option value="purchase">采购数据</option>';
-    h += '<option value="expense">费用数据</option>';
-    h += '<option value="inventory">库存数据</option>';
-    h += '</select></div>';
-
-    var dashUrl = window.location.origin + window.location.pathname.replace(/index\.html$/, '').replace(/\/$/, '/') + 'dashboard.html';
-    h += '<div style="display:flex;gap:6px"><input class="inp" id="dashLinkInput" style="flex:1;font-size:.72rem;background:var(--card-h)" value="' + dashUrl + '" readonly>';
-    h += '<button class="btn p" onclick="copyDashLink()">复制链接</button></div>';
-    h += '</div>';
+    // 数据修复
+    h += '<div class="sec">数据修复</div>';
+    h += '<div class="brow"><button class="btn" onclick="fixAllBrackets()">修复英文括号 → 中文括号</button></div>';
+    h += '<div style="font-size:.68rem;color:var(--tx-m);margin-top:4px">将所有物品名称中的英文括号()替换为中文括号（）</div>';
 
     // 导入导出（游客不可用）
     if (!_guest || _auth.loggedIn) {
@@ -306,32 +276,28 @@ function updateShopDisplay() {
 
 // ---- 复制报表链接 ----
 // 更新分享链接
-function updateShareLink() {
-    var month = document.getElementById('shareMonth').value;
-    var type = document.getElementById('shareType').value;
-    var baseUrl = window.location.origin + window.location.pathname.replace(/index\.html$/, '').replace(/\/$/, '/') + 'dashboard.html';
-    var params = [];
-    if (month) params.push('month=' + month);
-    if (type && type !== 'all') params.push('type=' + type);
-    var url = baseUrl + (params.length ? '?' + params.join('&') : '');
-    var input = document.getElementById('dashLinkInput');
-    if (input) input.value = url;
-}
-
 function copyDashLink() {
     var input = document.getElementById('dashLinkInput');
-    if (!input) return;
-    input.select();
-    input.setSelectionRange(0, 99999);
+    var link = '';
+    if (input) {
+        link = input.value;
+    } else {
+        // 如果没有input元素，直接生成链接
+        link = window.location.origin + window.location.pathname.replace(/index\.html$/, '').replace(/\/$/, '/') + 'dashboard.html';
+    }
+    if (!link) return;
+
     try {
-        document.execCommand('copy');
-        toast('链接已复制');
+        navigator.clipboard.writeText(link).then(function(){ toast('链接已复制'); });
     } catch(e) {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(input.value).then(function(){ toast('链接已复制'); });
-        } else {
-            toast('请手动复制');
-        }
+        // fallback
+        var temp = document.createElement('textarea');
+        temp.value = link;
+        document.body.appendChild(temp);
+        temp.select();
+        document.execCommand('copy');
+        document.body.removeChild(temp);
+        toast('链接已复制');
     }
 }
 
@@ -458,6 +424,46 @@ function applySpacing() {
     if (v === 'compact') { root.style.setProperty('--sp', '8px'); root.style.setProperty('--sp-l', '10px'); }
     else if (v === 'loose') { root.style.setProperty('--sp', '18px'); root.style.setProperty('--sp-l', '24px'); }
     else { root.style.setProperty('--sp', '12px'); root.style.setProperty('--sp-l', '16px'); }
+}
+
+// ---------- 修复英文括号 ----------
+function fixAllBrackets() {
+    if (!confirm('将把所有物品名称中的英文括号()替换为中文括号（），确定？')) return;
+    var count = 0;
+    // 修复采购物品
+    DB.purchases.forEach(function(p) {
+        (p.items || []).forEach(function(item) {
+            if (item.name && (item.name.indexOf('(') >= 0 || item.name.indexOf(')') >= 0)) {
+                item.name = fixBrackets(item.name);
+                count++;
+            }
+        });
+    });
+    // 修复库存物品
+    ['invTea', 'invCig', 'invAlc', 'invOther'].forEach(function(key) {
+        (DB[key] || []).forEach(function(item) {
+            if (item.name && (item.name.indexOf('(') >= 0 || item.name.indexOf(')') >= 0)) {
+                item.name = fixBrackets(item.name);
+                count++;
+            }
+        });
+    });
+    // 修复仓库物品
+    (DB.whItems || []).forEach(function(item) {
+        if (item.name && (item.name.indexOf('(') >= 0 || item.name.indexOf(')') >= 0)) {
+            item.name = fixBrackets(item.name);
+            count++;
+        }
+    });
+    if (count > 0) {
+        DB._ts = Date.now();
+        saveDB(DB);
+        sbScheduleSave();
+        toast('已修复 ' + count + ' 个物品的括号');
+        rData();
+    } else {
+        toast('没有需要修复的物品');
+    }
 }
 
 // ---------- 导出JSON ----------
