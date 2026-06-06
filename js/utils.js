@@ -27,7 +27,7 @@ function showModal(content, width) {
     m.classList.add('show', 'modal-enter');
     o.classList.add('show');
     m.style.position = 'fixed';
-    m.style.overflowY = 'auto';
+    // 不自动设置overflowY，由调用方控制
     o.onclick = function(e) {
         if (e.target !== o) return;
         var dp = document.getElementById('datePicker');
@@ -52,10 +52,10 @@ function showModal(content, width) {
 function closeModal() {
     var m = $id('modal'), o = $id('overlay');
     if (m) {
-        m.classList.add('modal-exit');
-        setTimeout(function() {
-            m.classList.remove('show', 'modal-exit');
-        }, 200);
+        m.classList.remove('show', 'modal-enter', 'modal-exit');
+        m.innerHTML = '';
+        // 清除所有内联样式，让CSS类的display:none生效
+        m.removeAttribute('style');
     }
     if (o) {
         o.classList.remove('show');
@@ -190,7 +190,8 @@ function _mpClear(){if(_mpTarget){_mpTarget.value='';_mpTarget.dispatchEvent(new
 
 // 初始化日期选择器DOM
 function initDatePicker(){if(document.getElementById('datePicker'))return;var div=document.createElement('div');div.id='datePicker';div.className='date-picker';div.style.display='none';div.innerHTML='<div id="dpBody"></div>';document.body.appendChild(div)}
-initDatePicker();
+// 确保DOM加载完成后再初始化
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',initDatePicker)}else{initDatePicker()}
 
 
 

@@ -9,6 +9,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&family=Noto+Serif+SC:wght@400;700&family=Lexend:wght@400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="js/utils.js"></script>
+<link rel="stylesheet" href="css/style.css?v=3">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#f7f4ee;--card:#fff;--card-h:#faf8f3;--bd:#e5dfd4;--bd-l:#ece8df;--ac:#b08d57;--ac-h:#c9a86c;--tx:#2c2c2c;--tx-s:#666;--tx-m:#aaa;--gn:#3d8b5e;--gn-b:rgba(61,139,94,.06);--rd:#c75450;--rd-b:rgba(199,84,80,.06);--og:#d4a017;--og-b:rgba(212,160,23,.07);--r:8px;--sh:0 1px 4px rgba(0,0,0,.04);--sh2:0 4px 16px rgba(0,0,0,.06)}
@@ -44,7 +46,7 @@ tr:hover td{background:var(--card-h)}
 .refresh-btn:hover{background:var(--card-h);border-color:var(--ac);color:var(--ac)}
 .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:500}
 .overlay.show{display:block}
-.modal{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:22px;width:92%;max-width:600px;max-height:80vh;overflow-y:auto;z-index:501;box-shadow:var(--sh2)}
+.modal{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:22px;width:92%;max-width:600px;z-index:501;box-shadow:var(--sh2);cursor:default}
 .modal.show{display:block}
 .rep-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;align-items:start}
 .rep-grid>*{min-width:0}
@@ -99,12 +101,22 @@ function getMR(ym){return(DB.dailyReports||[]).filter(function(r){return r.date.
 
 async function loadData(){
     try{
+        console.log('开始加载数据...');
         var resp=await sb.from('cafe_data').select('data,updated_at').eq('id','shop_data').single();
-        if(resp.error||!resp.data){document.getElementById('app').innerHTML='<div class="empty">暂无经营数据<br><span style="font-size:.7rem;color:var(--tx-m)">请先登录管理系统录入数据</span></div>';return}
+        console.log('Supabase响应:', resp);
+        if(resp.error||!resp.data){
+            console.error('加载失败:', resp.error);
+            document.getElementById('app').innerHTML='<div class="empty">暂无经营数据<br><span style="font-size:.7rem;color:var(--tx-m)">请先登录管理系统录入数据</span></div>';
+            return;
+        }
         DB=resp.data.data;
         document.getElementById('updateTime').textContent='数据更新：'+new Date(resp.data.updated_at).toLocaleString('zh-CN');
+        console.log('数据加载成功，开始渲染');
         render();
-    }catch(e){document.getElementById('app').innerHTML='<div class="empty">加载失败：'+e.message+'</div>'}
+    }catch(e){
+        console.error('加载异常:', e);
+        document.getElementById('app').innerHTML='<div class="empty">加载失败：'+e.message+'</div>';
+    }
 }
 
 function render(){
@@ -113,19 +125,22 @@ function render(){
     var mr=getMR(ym);
 
     // 根据数据类型筛选
+    var mPur = [], mExp = [];
     if (type === 'daily') {
         // 只显示日报数据
-        var mPur = [], mExp = [];
+        mPur = []; mExp = [];
     } else if (type === 'purchase') {
         // 只显示采购数据
-        var mExp = [];
+        mExp = [];
+        mPur = (DB.purchases || []).filter(function(p) { return p.date.startsWith(ym); });
     } else if (type === 'expense') {
         // 只显示费用数据
-        var mPur = [];
+        mPur = [];
+        mExp = (DB.expenses || []).filter(function(e) { return e.date.startsWith(ym); });
     } else {
         // 全部数据
-        var mPur = (DB.purchases || []).filter(function(p) { return p.date.startsWith(ym); });
-        var mExp = (DB.expenses || []).filter(function(e) { return e.date.startsWith(ym); });
+        mPur = (DB.purchases || []).filter(function(p) { return p.date.startsWith(ym); });
+        mExp = (DB.expenses || []).filter(function(e) { return e.date.startsWith(ym); });
     }
 
     // 汇总数据
@@ -385,7 +400,7 @@ function tabPurchase(D){
             });
             if(st<=0 && returnTotal<=0) return;
             var secs=srcSecTotals[src]||{};
-            h+='<div class="card"><div class="card-l">'+src+'</div><div class="card-v" style="color:var(--gn)">'+fmtC(st)+'</div>';
+            h+='<div class="card" style="cursor:pointer" onclick="showPurSourceDetail(\'' + src + '\',\'' + ym + '\')"><div class="card-l">'+src+'</div><div class="card-v" style="color:var(--gn)">'+fmtC(st)+'</div>';
             if (returnTotal > 0) {
                 h+='<div style="font-size:.65rem;color:var(--rd);margin-top:2px">退 ¥'+fmtC(returnTotal)+'</div>';
             }
@@ -427,7 +442,6 @@ function showPurDay(date){
     var total=allItems.reduce(function(s,i){return s+i.total},0);
     var dateLabel=date.substring(5).replace('-','/');
 
-    var m=document.getElementById('modal'),o=document.getElementById('overlay');
     var h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
     h+='<h3 style="margin:0">'+dateLabel+' 采购明细</h3>';
     h+='<span style="font-size:.95rem;font-weight:700;color:var(--ac)">¥'+fmtC(total)+'</span></div>';
@@ -446,11 +460,8 @@ function showPurDay(date){
     });
     h+='<div style="text-align:right;margin-top:8px"><button class="btn" onclick="closeModal()">关闭</button></div>';
 
-    m.innerHTML=h;m.style.maxWidth='600px';m.classList.add('show');o.classList.add('show');
-    o.onclick=function(e){if(e.target===o)closeModal()};
-    m.onclick=function(e){e.stopPropagation()};
+    showModal(h, 600);
 }
-function closeModal(){var m=document.getElementById('modal'),o=document.getElementById('overlay');if(m)m.classList.remove('show');if(o){o.classList.remove('show');o.onclick=null}}
 
 // ===== 图表 =====
 function initChart(D){
@@ -485,6 +496,194 @@ function initChart(D){
 }
 
 setInterval(loadData,60000);
+
+// 采购来源明细弹窗
+function showPurSourceDetail(source, ym) {
+    var allItems = [];
+    DB.purchases.filter(function(p) { return p.date.startsWith(ym); }).forEach(function(p) {
+        (p.items || []).forEach(function(item) {
+            var itemSrc = item.source || p.source || '外购';
+            if (itemSrc === source) {
+                allItems.push({
+                    name: item.name,
+                    section: item.section || '未分区',
+                    category: item.category || '',
+                    qty: item.qty || 0,
+                    unit: item.unit || '',
+                    unitPrice: item.unitPrice || 0,
+                    total: item.total || 0,
+                    date: p.date
+                });
+            }
+        });
+    });
+
+    if (!allItems.length) return;
+
+    var total = allItems.reduce(function(s, i) { return s + i.total; }, 0);
+    var dateLabel = ym.substring(5).replace('-', '/');
+
+    var h = '<div style="max-width:500px;height:70vh;display:flex;flex-direction:column;font-family:\'Noto Sans SC\',sans-serif">';
+    // 标题栏
+    h += '<div style="flex-shrink:0;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
+    h += '<div style="display:flex;align-items:center;gap:8px">';
+    h += '<h3 style="margin:0;font-size:.95rem;font-weight:700;color:var(--ac)">' + dateLabel + ' 采购明细</h3>';
+    h += '</div>';
+    h += '<div style="display:flex;align-items:center;gap:8px">';
+    h += '<span style="font-family:var(--fm);font-size:1rem;font-weight:700;color:var(--ac)">¥' + fmtC(total) + '</span>';
+    h += '</div>';
+    h += '</div>';
+
+    // 来源分组卡片
+    h += '<div style="flex-shrink:0;display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--card-h);border-radius:8px;margin-bottom:12px">';
+    h += '<span style="font-size:.88rem;font-weight:600;color:var(--tx)">' + source + '</span>';
+    h += '<span style="font-family:var(--fm);font-size:.92rem;font-weight:700;color:var(--ac)">¥' + fmtC(total) + '</span>';
+    h += '</div>';
+
+    // 内容区域（可滚动）
+    h += '<div style="flex:1;overflow-y:auto;padding-right:4px">';
+
+    // 按区域分组
+    var secGroups = {};
+    allItems.forEach(function(item) {
+        var sec = item.section || '未分区';
+        if (!secGroups[sec]) secGroups[sec] = { items: [], total: 0 };
+        secGroups[sec].items.push(item);
+        secGroups[sec].total += item.total;
+    });
+
+    // 按区域显示
+    Object.keys(secGroups).sort(function(a, b) { return secGroups[b].total - secGroups[a].total; }).forEach(function(sec) {
+        var group = secGroups[sec];
+        // 区域header
+        h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--card-h);border-radius:8px;margin-bottom:8px;cursor:pointer" onclick="toggleSection(\'sec_' + sec + '\')">';
+        h += '<div style="display:flex;align-items:center;gap:6px">';
+        h += '<span class="toggle-icon" style="font-size:.88rem;color:var(--tx-m);transition:transform .2s ease">▾</span>';
+        h += '<span style="font-size:.88rem;font-weight:600;color:var(--tx)">' + sec + '</span>';
+        h += '</div>';
+        h += '<div style="display:flex;align-items:center;gap:8px">';
+        h += '<span style="font-family:var(--fm);font-size:.88rem;font-weight:700;color:var(--ac)">¥' + fmtC(group.total) + '</span>';
+        h += '</div>';
+        h += '</div>';
+        h += '<div id="sec_' + sec + '" style="display:block;padding-left:8px;margin-bottom:12px">';
+
+        // 按分类分组
+        var catGroups = {};
+        group.items.forEach(function(item) {
+            var cat = item.category || '未分类';
+            if (!catGroups[cat]) catGroups[cat] = { items: [], total: 0 };
+            catGroups[cat].items.push(item);
+            catGroups[cat].total += item.total;
+        });
+
+        Object.keys(catGroups).sort(function(a, b) { return catGroups[b].total - catGroups[a].total; }).forEach(function(cat) {
+            var catGroup = catGroups[cat];
+            // 分类header
+            h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--card);border-radius:6px;margin-bottom:6px;cursor:pointer" onclick="toggleSection(\'cat_' + sec + '_' + cat + '\')">';
+            h += '<div style="display:flex;align-items:center;gap:6px">';
+            h += '<span style="font-size:.82rem;color:var(--tx-m);transition:transform .2s ease">▸</span>';
+            h += '<span style="font-size:.82rem;font-weight:600;color:var(--tx-s)">' + cat + '</span>';
+            h += '</div>';
+            h += '<div style="display:flex;align-items:center;gap:8px">';
+            h += '<span style="font-family:var(--fm);font-size:.82rem;font-weight:600;color:var(--ac)">¥' + fmtC(catGroup.total) + '</span>';
+            h += '</div>';
+            h += '</div>';
+            h += '<div id="cat_' + sec + '_' + cat + '" style="display:block;padding:0 4px 8px 8px">';
+
+            // 按物品名称合并
+            var mergedItems = {};
+            catGroup.items.forEach(function(item) {
+                var key = item.name;
+                if (!mergedItems[key]) {
+                    mergedItems[key] = { name: item.name, unit: item.unit || '', qty: 0, total: 0, prices: [] };
+                }
+                mergedItems[key].qty = Math.round((mergedItems[key].qty + item.qty) * 100) / 100;
+                mergedItems[key].total = Math.round((mergedItems[key].total + item.total) * 100) / 100;
+                if (item.unitPrice > 0) mergedItems[key].prices.push(item.unitPrice);
+            });
+
+            // 排序并显示合并后的物品
+            Object.keys(mergedItems).sort(function(a, b) { return mergedItems[b].total - mergedItems[a].total; }).forEach(function(name) {
+                var item = mergedItems[name];
+                var priceText = '';
+                if (item.prices.length > 0) {
+                    var minPrice = Math.min.apply(null, item.prices);
+                    var maxPrice = Math.max.apply(null, item.prices);
+                    if (minPrice === maxPrice) {
+                        priceText = item.qty + (item.unit || '') + ' × ¥' + fmtC(minPrice);
+                    } else {
+                        priceText = item.qty + (item.unit || '') + ' × ¥' + fmtC(minPrice) + '~' + fmtC(maxPrice);
+                    }
+                } else {
+                    priceText = item.qty + (item.unit || '');
+                }
+                // 物品行
+                h += '<div style="display:flex;align-items:center;padding:8px 10px;background:var(--card);border-radius:6px;margin-bottom:4px">';
+                h += '<div style="flex:1">';
+                h += '<div style="font-size:.82rem;font-weight:600;color:var(--tx)">' + item.name + '</div>';
+                h += '<div style="font-size:.72rem;color:var(--tx-m);margin-top:2px">' + priceText + '</div>';
+                h += '</div>';
+                h += '<span style="font-family:var(--fm);font-size:.88rem;font-weight:700;color:var(--ac)">' + fmtC(item.total) + '</span>';
+                h += '</div>';
+            });
+
+            h += '</div>';
+        });
+
+        h += '</div>';
+    });
+
+    h += '</div>';  // 关闭滚动容器
+
+    // 固定底部按钮
+    h += '<div style="flex-shrink:0;padding-top:12px;border-top:1px solid var(--bd-l)">';
+    h += '<div class="brow" style="justify-content:flex-end"><button class="btn" onclick="closeModal()">关闭</button></div>';
+    h += '</div>';
+    h += '</div>';
+
+    showModal(h, 550);
+
+    // 设置弹窗布局（与purchase.js一致）
+    var mc = document.getElementById('modal');
+    if (mc) {
+        mc.style.height = '75vh';
+        mc.style.display = 'flex';
+        mc.style.flexDirection = 'column';
+        mc.style.overflow = 'hidden';
+    }
+    // 找到内容区域（flex:1的div）
+    var contentDiv = mc ? mc.querySelector('div[style*="flex:1"]') : null;
+    if (contentDiv) {
+        contentDiv.style.flex = '1';
+        contentDiv.style.overflowY = 'auto';
+        contentDiv.style.minHeight = '0';
+    }
+}
+
+// 切换区域/分类的展开/收起
+function toggleSection(id) {
+    var el = document.getElementById(id);
+    if (el) {
+        var isOpen = el.style.display !== 'none';
+        el.style.display = isOpen ? 'none' : 'block';
+
+        // 更新箭头图标
+        var prev = el.previousElementSibling;
+        if (prev) {
+            // 区域箭头（toggle-icon类）
+            var toggleIcon = prev.querySelector('.toggle-icon');
+            if (toggleIcon) {
+                toggleIcon.style.transform = isOpen ? 'rotate(-90deg)' : 'rotate(0deg)';
+            }
+            // 分类箭头（第一个span）
+            var firstSpan = prev.querySelector('span:first-child');
+            if (firstSpan && (firstSpan.textContent === '▾' || firstSpan.textContent === '▸')) {
+                firstSpan.textContent = isOpen ? '▸' : '▾';
+                firstSpan.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(90deg)';
+            }
+        }
+    }
+}
 </script>
 </body>
 </html>

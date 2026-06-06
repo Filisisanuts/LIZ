@@ -1058,7 +1058,7 @@ function doEditPurItem(date, origName) {
 
     closeModal();
     toast('已更新');
-    setTimeout(function() { showPurDayModal(newDate); }, 100);
+    setTimeout(function() { showPurDayModal(newDate); }, 250);
     renderPHist();
 }
 
@@ -1734,7 +1734,7 @@ function _doReturnExec(date, name, retDate, retQty, retTotal, retReason) {
 
     closeModal();
     toast('已退货 ' + name + ' ¥' + fmtC(retTotal));
-    setTimeout(function() { showPurDayModal(date); }, 100);
+    setTimeout(function() { showPurDayModal(date); }, 250);
 }
 
 // 从弹窗跳转到编辑
@@ -1769,7 +1769,7 @@ function doEditPurDate(oldDate) {
     });
     closeModal();
     toast('已修改为 ' + newDate);
-    setTimeout(function() { showPurDayModal(newDate); }, 100);
+    setTimeout(function() { showPurDayModal(newDate); }, 250);
     renderPHist();
 }
 

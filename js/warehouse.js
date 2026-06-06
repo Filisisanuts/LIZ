@@ -425,7 +425,7 @@ function editWHMove(id, idx) {
 
     h += '<div class="brow" style="margin-top:12px;justify-content:flex-end">';
     h += '<button class="btn p" onclick="saveWHMove(\'' + id + '\',' + idx + ')">保存</button>';
-    h += '<button class="btn" onclick="closeModal();setTimeout(function(){whDetail(\'' + id + '\')},100)">取消</button>';
+    h += '<button class="btn" onclick="closeModal();setTimeout(function(){whDetail(\'' + id + '\')},250)">取消</button>';
     h += '</div>';
 
     showModal(h, 450);
