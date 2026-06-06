@@ -189,9 +189,9 @@ function _mpThisMonth(){var now=new Date();var ym=now.getFullYear()+'-'+String(n
 function _mpClear(){if(_mpTarget){_mpTarget.value='';_mpTarget.dispatchEvent(new Event('change',{bubbles:true}));_mpTarget.dispatchEvent(new Event('input',{bubbles:true}))}_mpClose()}
 
 // 初始化日期选择器DOM
-function initDatePicker(){if(document.getElementById('datePicker'))return;var div=document.createElement('div');div.id='datePicker';div.className='date-picker';div.style.display='none';div.innerHTML='<div id="dpBody"></div>';document.body.appendChild(div)}
+function initDatePicker(){if(document.getElementById('datePicker'))return;if(!document.body)return;var div=document.createElement('div');div.id='datePicker';div.className='date-picker';div.style.display='none';div.innerHTML='<div id="dpBody"></div>';document.body.appendChild(div)}
 // 确保DOM加载完成后再初始化
-if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',initDatePicker)}else{initDatePicker()}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',initDatePicker)}else if(document.body){initDatePicker()}else{document.addEventListener('DOMContentLoaded',initDatePicker)}
 
 
 
