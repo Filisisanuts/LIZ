@@ -95,10 +95,10 @@ function rReport() {
 
     // ===== 库存销售成本 =====
     var saleCostByType = {};
-    ['invTea', 'invCig', 'invAlc', 'invOther'].forEach(function(key) {
-        var typeName = key === 'invTea' ? '茗茶' : key === 'invCig' ? '香烟' : key === 'invAlc' ? '酒类' : '其他';
+    ['teaItems', 'cigItems', 'alcItems', 'otherItems'].forEach(function(key) {
+        var typeName = key === 'teaItems' ? '茗茶' : key === 'cigItems' ? '香烟' : key === 'alcItems' ? '酒类' : '其他';
         (DB[key] || []).forEach(function(item) {
-            var type = key.replace('inv', '').toLowerCase();
+            var type = key.replace('Items', '');
             var calc = invCalc(item, type, m);
             if (calc.cost > 0) {
                 if (!saleCostByType[typeName]) saleCostByType[typeName] = 0;
@@ -226,7 +226,7 @@ function rReport() {
         } else if (id === 'revenue') {
             sh += renderRevenueSection(mNet, mGross, mDiscount, mKit, mBar, mDel, mCigRev, alcRev, mOther, mPos, mCcb, mCash, mMember, mTreat, mAr, mDelMeituan, mDelTaobao, mDelJd);
         } else if (id === 'cost') {
-            sh += renderCostSection(purBySec, netPur, kitCost, barCost, outCost, teaCost, cigCost, alcCost, expByCat, expTotal, saleCostByType);
+            sh += renderCostSection(purBySec, netPur, kitCost, barCost, outCost, teaCost, cigCost, alcCost, expByCat, expTotal, saleCostByType, m);
         } else if (id === 'catgp') {
             sh += renderCatGPSection(mKit, mBar, barNoTea, teaRev, mDel, mCigRev, alcRev, kitCost, barCost, teaCost, cigCost, alcCost, kitGP, barGP, teaGP, delGP, cigGP, alcGP);
         } else if (id === 'cig') {
@@ -358,7 +358,7 @@ function renderRevenueSection(net, gross, discount, kit, bar, del, cig, alc, oth
 }
 
 // ==================== 成本费用明细 ====================
-function renderCostSection(purBySec, netPur, kitC, barC, outC, teaC, cigC, alcC, expByCat, expTotal, saleCostByType) {
+function renderCostSection(purBySec, netPur, kitC, barC, outC, teaC, cigC, alcC, expByCat, expTotal, saleCostByType, m) {
     var total = netPur + expTotal;
     var saleCostTotal = saleCostByType ? Object.values(saleCostByType).reduce(function(s, v) { return s + v; }, 0) : 0;
 
@@ -371,18 +371,48 @@ function renderCostSection(purBySec, netPur, kitC, barC, outC, teaC, cigC, alcC,
     // 三栏布局：采购成本、销售成本、经营费用
     h += '<div class="rep-grid" style="grid-template-columns:1fr">';
 
-    // 1. 采购成本
+    // 1. 采购成本（按来源-区域-分类）
     h += '<div class="tw" style="margin-bottom:0">';
-    h += '<table><tr><th colspan="2">📦 采购成本 <span style="font-weight:normal;color:var(--tx-m)">¥' + fmtC(netPur) + '</span></th></tr>';
-    h += '<tr><th>区域</th><th class="nr">金额</th></tr>';
-    var purItems = [['厨房', kitC], ['吧台', barC], ['外场', outC]];
-    if (teaC > 0) purItems.push(['茗茶', teaC]);
-    if (cigC > 0) purItems.push(['香烟', cigC]);
-    if (alcC > 0) purItems.push(['酒类', alcC]);
-    purItems.forEach(function(it) {
-        if (it[1] > 0) h += '<tr><td style="font-weight:600">' + it[0] + '</td><td class="nr">' + fmtC(it[1]) + '</td></tr>';
+    h += '<table><tr><th colspan="3">📦 采购成本 <span style="font-weight:normal;color:var(--tx-m)">¥' + fmtC(netPur) + '</span></th></tr>';
+    h += '<tr><th>来源/区域</th><th>分类</th><th class="nr">金额</th></tr>';
+
+    // 按来源分组
+    var purBySrc = {};
+    DB.purchases.filter(function(p) { return p.date.startsWith(m); }).forEach(function(p) {
+        (p.items || []).forEach(function(item) {
+            var src = item.source || p.source || '外购';
+            var sec = item.section || '未分区';
+            var cat = item.category || '未分类';
+            if (!purBySrc[src]) purBySrc[src] = {};
+            if (!purBySrc[src][sec]) purBySrc[src][sec] = {};
+            if (!purBySrc[src][sec][cat]) purBySrc[src][sec][cat] = 0;
+            purBySrc[src][sec][cat] += item.total;
+        });
     });
-    h += '<tr class="total-row"><td>小计</td><td class="nr">' + fmtC(netPur) + '</td></tr>';
+
+    Object.keys(purBySrc).sort(function(a, b) {
+        var totalA = Object.values(purBySrc[a]).reduce(function(s, sec) { return Object.values(sec).reduce(function(s2, v) { return s2 + v; }, 0) + s; }, 0);
+        var totalB = Object.values(purBySrc[b]).reduce(function(s, sec) { return Object.values(sec).reduce(function(s2, v) { return s2 + v; }, 0) + s; }, 0);
+        return totalB - totalA;
+    }).forEach(function(src) {
+        var srcTotal = Object.values(purBySrc[src]).reduce(function(s, sec) { return Object.values(sec).reduce(function(s2, v) { return s2 + v; }, 0) + s; }, 0);
+        h += '<tr style="background:var(--card-h)"><td style="font-weight:700" colspan="2">' + src + '</td><td class="nr" style="font-weight:700">' + fmtC(srcTotal) + '</td></tr>';
+
+        Object.keys(purBySrc[src]).sort(function(a, b) {
+            var totalA = Object.values(purBySrc[src][a]).reduce(function(s, v) { return s + v; }, 0);
+            var totalB = Object.values(purBySrc[src][b]).reduce(function(s, v) { return s + v; }, 0);
+            return totalB - totalA;
+        }).forEach(function(sec) {
+            var secTotal = Object.values(purBySrc[src][sec]).reduce(function(s, v) { return s + v; }, 0);
+            h += '<tr style="background:var(--card)"><td style="font-weight:600;padding-left:12px">' + sec + '</td><td></td><td class="nr">' + fmtC(secTotal) + '</td></tr>';
+
+            Object.keys(purBySrc[src][sec]).sort(function(a, b) { return purBySrc[src][sec][b] - purBySrc[src][sec][a]; }).forEach(function(cat) {
+                h += '<tr><td style="padding-left:24px;color:var(--tx-s)">' + cat + '</td><td></td><td class="nr" style="color:var(--tx-m)">' + fmtC(purBySrc[src][sec][cat]) + '</td></tr>';
+            });
+        });
+    });
+
+    h += '<tr class="total-row"><td colspan="2">小计</td><td class="nr">' + fmtC(netPur) + '</td></tr>';
     h += '</table></div>';
 
     // 2. 销售成本
