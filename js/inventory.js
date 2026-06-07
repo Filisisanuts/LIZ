@@ -845,7 +845,7 @@ function doEditInvSale(type, itemId, idx) {
     }
     closeModal();
     toast('已更新');
-    refreshDetBuy(type, itemId);
+    detRefresh(type, itemId);
 }
 
 // 删除出入库或销售记录
@@ -997,6 +997,17 @@ function updateMvF(type, dir) {
             h += '金额:<input class="inp" id="mvAmount" type="number" step="0.01" value="0" style="max-width:100px;background:var(--card-h)" readonly></div>';
             h += '<div class="hrow"><label>原因</label><input class="inp" id="mvReason" style="max-width:150px" value="销售"></div>';
         }
+    } else if (type === 'other') {
+        if (dir > 0) {
+            h += '<div class="hrow"><label>数量</label><input class="inp" id="mvQty" type="number" step="any" style="max-width:120px">';
+            h += '<select class="inp" id="mvUnit" style="max-width:80px"><option value="个">个</option><option value="瓶">瓶</option><option value="箱">箱</option></select>';
+            h += '<label>来源</label><input class="inp" id="mvReason" style="max-width:150px"></div>';
+            h += '<div class="hrow"><label>进货价</label><input class="inp" id="mvCost" type="number" step="0.01" style="max-width:100px">元</div>';
+        } else {
+            h += '<div class="hrow"><label>数量</label><input class="inp" id="mvQty" type="number" value="0" style="max-width:60px" oninput="calcMvOtherAmt()"> 个 ';
+            h += '金额:<input class="inp" id="mvAmount" type="number" step="0.01" value="0" style="max-width:100px;background:var(--card-h)" readonly></div>';
+            h += '<div class="hrow"><label>原因</label><input class="inp" id="mvReason" style="max-width:150px" value="销售"></div>';
+        }
     } else {
         if (dir > 0) {
             h += '<div class="hrow"><label>数量</label><input class="inp" id="mvQty" type="number" step="any" style="max-width:120px">';
@@ -1036,6 +1047,15 @@ function calcMvCigAmt() {
 function calcMvAlcAmt() {
     var itemId = $id('mvItem').value;
     var item = DB.alcItems.find(function(i) { return i.id === itemId; });
+    if (!item) return;
+    var qty = parseInt($id('mvQty').value) || 0;
+    $id('mvAmount').value = (qty * (item.pricePerUnit || 0)).toFixed(2);
+}
+
+// 销售时自动计算其他贵重物品金额
+function calcMvOtherAmt() {
+    var itemId = $id('mvItem').value;
+    var item = DB.otherItems.find(function(i) { return i.id === itemId; });
     if (!item) return;
     var qty = parseInt($id('mvQty').value) || 0;
     $id('mvAmount').value = (qty * (item.pricePerUnit || 0)).toFixed(2);
@@ -1244,7 +1264,8 @@ function showAddInv(type, itemId) {
         var allCats = getPurCats();
         allCats.forEach(function(c) { h += '<option value="' + c + '">'; });
         h += '</datalist></div>';
-        h += '<div class="hrow"><label>计算方式</label><select class="inp" id="ai_otherMode" style="max-width:100px" onchange="toggleOtherMode()">';
+        h += '<div class="hrow"><label>单位</label><input class="inp" id="ai_unit" style="max-width:80px" value="' + (isEdit ? (item.unit || '个') : '个') + '">';
+        h += '<label>计算方式</label><select class="inp" id="ai_otherMode" style="max-width:100px" onchange="toggleOtherMode()">';
         h += '<option value="simple"' + (oMode === 'simple' ? ' selected' : '') + '>简单模式</option>';
         h += '<option value="gram"' + (oMode === 'gram' ? ' selected' : '') + '>按克消耗</option>';
         h += '<option value="pack"' + (oMode === 'pack' ? ' selected' : '') + '>按包消耗</option></select></div>';
@@ -1411,7 +1432,7 @@ function doAddInv(type, itemId) {
             });
             toast('已更新');
         } else {
-            var item = { id: type + '_' + Date.now(), name: name, calcMode: oMode === 'simple' ? '' : oMode, category: $id('ai_category').value || '', sales: [], purchases: [] };
+            var item = { id: type + '_' + Date.now(), name: name, calcMode: oMode === 'simple' ? '' : oMode, category: $id('ai_category').value || '', unit: $id('ai_unit').value || '个', sales: [], purchases: [] };
             if (oMode === 'simple') {
                 item.costPerUnit = parseFloat($id('ai_costPerUnit').value) || 0;
                 item.pricePerUnit = parseFloat($id('ai_pricePerUnit').value) || 0;
@@ -1480,11 +1501,15 @@ function doAddInv(type, itemId) {
 
 // 通过事件委托处理库存表格中的编辑/删除按钮（避免内联 onclick）
 document.addEventListener('click', function(e) {
+    console.log('点击事件触发:', e.target);
     var card = e.target.closest('[data-inv]');
+    console.log('找到的data-inv元素:', card);
     if (!card) return;
     var parts = card.dataset.inv.split('_');
+    console.log('解析parts:', parts);
     var type = parts[0];
     var id = parts.slice(1).join('_');
+    console.log('type:', type, 'id:', id);
 
     if (e.target.closest('[data-act="del"]')) {
         if (!confirm('确认删除？')) return;
@@ -1495,6 +1520,7 @@ document.addEventListener('click', function(e) {
         toast('已删除');
         rInv(type);
     } else if (e.target.closest('[data-act="edit"]')) {
+        console.log('点击编辑按钮');
         showAddInv(type, id);
     }
 });
