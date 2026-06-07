@@ -5,7 +5,9 @@
 function rInv(type) {
     var items = DB[INV[type].key] || [];
     var ym = $id('invMonth') ? $id('invMonth').value || curYM() : curYM();
-    var unit = type === 'cig' ? '包' : type === 'alc' ? '瓶' : '';
+    var unit = type === 'tea' ? (items[0] && items[0].calcMode === 'pack' ? '包' : '克') :
+               type === 'other' ? (items[0] && items[0].unit || '个') :
+               type === 'cig' ? '包' : type === 'alc' ? '瓶' : '';
 
     // 统计每个商品的指定月份数据
     var stats = [];
@@ -166,7 +168,7 @@ function rInv(type) {
                 // 该分类下的商品
                 categories[cat].forEach(function(st) {
                     var margin = st.actual > 0 ? fmtP(st.profit / st.actual * 100) : '0%';
-                    var unit = st.item.calcMode === 'pack' ? '包' : st.item.calcMode === 'gram' ? '克' : '个';
+                    var unit = st.item.unit || (st.item.calcMode === 'pack' ? '包' : st.item.calcMode === 'gram' ? '克' : '个');
 
                     // 主行
                     h += '<tr data-inv="' + type + '_' + st.item.id + '">';
@@ -184,8 +186,8 @@ function rInv(type) {
                     h += '<tr>';
                     h += '<td colspan="6" style="padding:4px 10px 8px;border-bottom:1px solid var(--bd-l)">';
                     h += '<span style="font-size:.68rem;color:var(--tx-m)">';
-                    h += '单价 ¥' + fmt(st.item.pricePerUnit || 0) + '/个';
-                    h += ' · 售 ' + st.qty + '个';
+                    h += '单价 ¥' + fmt(st.item.pricePerUnit || 0) + '/' + unit;
+                    h += ' · 售 ' + st.qty + unit;
                     h += ' · 毛利率 ' + margin;
                     h += '</span></td></tr>';
                 });
@@ -276,7 +278,9 @@ function renderInvHist(type) {
     // 读取共享月份选择器
     var ym = $id('invMonth') ? $id('invMonth').value || curYM() : curYM();
     var items = DB[INV[type].key] || [];
-    var unit = type === 'cig' ? '包' : type === 'alc' ? '瓶' : '';
+    var unit = type === 'tea' ? (items[0] && items[0].calcMode === 'pack' ? '包' : '克') :
+               type === 'other' ? (items[0] && items[0].unit || '个') :
+               type === 'cig' ? '包' : type === 'alc' ? '瓶' : '';
 
     var year = parseInt(ym.split('-')[0]);
     var month = parseInt(ym.split('-')[1]);
@@ -338,7 +342,9 @@ function renderInvHist(type) {
 // 日销售详情弹窗
 function showInvDayModal(type, date) {
     var items = DB[INV[type].key] || [];
-    var unit = type === 'cig' ? '包' : type === 'alc' ? '瓶' : '克';
+    var unit = type === 'tea' ? (items[0] && items[0].calcMode === 'pack' ? '包' : '克') :
+               type === 'other' ? (items[0] && items[0].unit || '个') :
+               type === 'cig' ? '包' : type === 'alc' ? '瓶' : '克';
     var records = [];
     items.forEach(function(item) {
         item.sales.forEach(function(s, si) {
@@ -471,6 +477,7 @@ function editOpeningStock(type, itemId, ym) {
     if (!item) return;
     var currentOS = getOpeningStock(item, ym);
     var unit = type === 'tea' ? (item.calcMode === 'pack' ? '包' : '克') :
+               type === 'other' ? (item.unit || '个') :
                type === 'cig' ? '包' : type === 'alc' ? '瓶' : '个';
     var isCurMonth = ym === curYM();
 
@@ -512,7 +519,9 @@ function saveOpeningStock(type, itemId, ym) {
 function invDetail(type, itemId) {
     var item = DB[INV[type].key].find(function(i) { return i.id === itemId; });
     if (!item) return;
-    var unit = type === 'cig' ? '包' : type === 'alc' ? '瓶' : '';
+    var unit = type === 'tea' ? (item.calcMode === 'pack' ? '包' : '克') :
+               type === 'other' ? (item.unit || '个') :
+               type === 'cig' ? '包' : type === 'alc' ? '瓶' : '';
     var ym = document.getElementById('invMonth') ? document.getElementById('invMonth').value : curYM();
     if (!ym) ym = curYM();
 
@@ -681,6 +690,7 @@ function renderBuyDetail(item, type, ym, unit) {
     var u = unit;
     if (type === 'tea' && item.calcMode === 'pack') u = '包';
     else if (type === 'tea') u = '克';
+    else if (type === 'other') u = item.unit || '个';
 
     // 合并出入库+销售记录
     var allRows = [];
@@ -921,7 +931,9 @@ function refreshDetBuy(type, itemId) {
 function detRefresh(type, itemId) {
     var item = DB[INV[type].key].find(function(i) { return i.id === itemId; });
     if (!item) return;
-    var unit = type === 'cig' ? '包' : type === 'alc' ? '瓶' : '';
+    var unit = type === 'tea' ? (item.calcMode === 'pack' ? '包' : '克') :
+               type === 'other' ? (item.unit || '个') :
+               type === 'cig' ? '包' : type === 'alc' ? '瓶' : '';
     var ym = $id('detM').value || curYM();
     $id('detSaleArea').innerHTML = renderSaleDetail(item, type, ym, unit);
 }
@@ -930,7 +942,9 @@ function detRefresh(type, itemId) {
 function detBuyRefresh(type, itemId) {
     var item = DB[INV[type].key].find(function(i) { return i.id === itemId; });
     if (!item) return;
-    var unit = type === 'cig' ? '包' : type === 'alc' ? '瓶' : '';
+    var unit = type === 'tea' ? (item.calcMode === 'pack' ? '包' : '克') :
+               type === 'other' ? (item.unit || '个') :
+               type === 'cig' ? '包' : type === 'alc' ? '瓶' : '';
     var ym = $id('detBuyM').value || curYM();
     $id('detBuyArea').innerHTML = renderBuyDetail(item, type, ym, unit);
 }
@@ -1409,6 +1423,7 @@ function doAddInv(type, itemId) {
                 if (!it) return;
                 it.name = name; it.calcMode = oMode === 'simple' ? '' : oMode;
                 it.category = $id('ai_category').value || '';
+                it.unit = $id('ai_unit').value || '个';
                 if (oMode === 'simple') {
                     it.costPerUnit = parseFloat($id('ai_costPerUnit').value) || 0;
                     it.pricePerUnit = parseFloat($id('ai_pricePerUnit').value) || 0;
@@ -1643,7 +1658,7 @@ function rolloverInventory() {
             var totalPurchases = (item.purchases || []).filter(function(p) { return p.date && p.date.startsWith(lastYM); }).reduce(function(s, p) { return s + (p.qty || 0); }, 0);
             var totalSalesQty = 0;
             var unit = type === 'tea' ? (item.calcMode === 'pack' ? '包' : '克') :
-                       type === 'other' ? (item.calcMode === 'pack' ? '包' : item.calcMode === 'gram' ? '克' : '个') :
+                       type === 'other' ? (item.unit || (item.calcMode === 'pack' ? '包' : item.calcMode === 'gram' ? '克' : '个')) :
                        (type === 'cig' ? '包' : '瓶');
             (item.sales || []).forEach(function(s) {
                 if (s.date && s.date.startsWith(lastYM)) {
