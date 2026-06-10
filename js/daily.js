@@ -199,7 +199,8 @@ function initCigBlock() {
         h += '<div class="tea-sale-row" data-cid="' + item.id + '">';
         h += '<label>' + item.name + '</label>';
         h += '数量:<input class="inp cig-sqty" type="number" value="0" style="max-width:60px" oninput="calcCigExpected(this)"> ';
-        h += '金额:<input class="inp cig-samt" type="number" step="0.01" value="0" style="max-width:100px;background:var(--card-h)" readonly>';
+        h += '应收:<input class="inp cig-expected" type="number" step="0.01" value="0" style="max-width:80px;background:var(--card-h)" readonly>';
+        h += '实收:<input class="inp cig-samt" type="number" step="0.01" value="0" style="max-width:80px">';
         h += '</div>';
     });
     $id('dmCigList').innerHTML = h;
@@ -222,7 +223,7 @@ function calcCigExpected(el) {
     var item = DB.cigItems.find(function(c) { return c.id === row.dataset.cid; });
     if (!item) return;
     var qty = parseInt(row.querySelector('.cig-sqty').value) || 0;
-    row.querySelector('.cig-samt').value = (qty * (item.pricePerUnit || 0)).toFixed(2);
+    row.querySelector('.cig-expected').value = (qty * (item.pricePerUnit || 0)).toFixed(2);
 }
 
 // 包厢预定录入
@@ -277,6 +278,8 @@ function doManualDaily() {
         var pots = parseInt(row.querySelector('.tea-pots').value) || 0;
         var expected = parseFloat(row.querySelector('.tea-expected').value) || 0;
         var amt = parseFloat(row.querySelector('.tea-amt').value) || 0;
+        // 不填实收默认按应收入账
+        if (amt === 0 && expected > 0) amt = expected;
         if (cups > 0 || pots > 0 || amt > 0) {
             teaData.push({ id: id, cups: cups, pots: pots, expectedAmount: expected, amount: amt });
         }
@@ -287,9 +290,12 @@ function doManualDaily() {
     document.querySelectorAll('.tea-sale-row[data-cid]').forEach(function(row) {
         var id = row.dataset.cid;
         var qty = parseInt(row.querySelector('.cig-sqty').value) || 0;
+        var expected = parseFloat(row.querySelector('.cig-expected').value) || 0;
         var amt = parseFloat(row.querySelector('.cig-samt').value) || 0;
+        // 不填实收默认按应收入账
+        if (amt === 0 && expected > 0) amt = expected;
         if (qty > 0 || amt > 0) {
-            cigData.push({ id: id, qty: qty, amount: amt });
+            cigData.push({ id: id, qty: qty, expectedAmount: expected, amount: amt });
         }
     });
 
@@ -378,10 +384,10 @@ function doSaveManual(date, mode) {
         cigData.forEach(function(cd) {
             var item = db.cigItems.find(function(c) { return c.id === cd.id; });
             if (!item) return;
-            r.cigSales[cd.id] = { qty: cd.qty, amount: cd.amount };
+            r.cigSales[cd.id] = { qty: cd.qty, expectedAmount: cd.expectedAmount, amount: cd.amount };
             r.revenue.cigarette.total += cd.amount;
             if (mode === 'merge') item.sales = item.sales.filter(function(s) { return s.date !== date; });
-            item.sales.push({ date: date, qty: cd.qty, amount: cd.amount });
+            item.sales.push({ date: date, qty: cd.qty, expectedAmount: cd.expectedAmount, amount: cd.amount });
         });
 
         // 保存包厢数据
