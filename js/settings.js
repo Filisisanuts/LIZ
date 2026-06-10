@@ -102,7 +102,7 @@ function rData() {
     h += '<div style="background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:14px;margin-bottom:12px">';
     h += '<p style="font-size:.74rem;color:var(--tx-s);margin-bottom:10px">用于采购单拍照识别，接入小米MiMo视觉API</p>';
     h += '<div class="hrow"><label>API地址</label><input class="inp" id="mimoEndpoint" style="flex:2" placeholder="https://token-plan-cn.xiaomimimo.com/v1/chat/completions" value="' + (localStorage.getItem('ax_mimo_ep') || '') + '"></div>';
-    h += '<div class="hrow"><label>API Key</label><input class="inp" id="mimoKey" style="flex:2" placeholder="sk-xxxx" value="' + (localStorage.getItem('ax_mimo_key') || '') + '"></div>';
+    h += '<div class="hrow"><label>API Key</label><div style="flex:2;position:relative;display:flex;align-items:center"><input class="inp" id="mimoKey" type="password" style="width:100%;padding-right:30px" placeholder="sk-xxxx" value="' + (localStorage.getItem('ax_mimo_key') || '') + '"><span onclick="toggleKeyVisibility()" style="position:absolute;right:8px;cursor:pointer;opacity:0.5" id="keyEye"><i data-feather="eye"></i></span></div></div>';
     h += '<div class="hrow"><label>模型</label>';
     h += '<select class="inp" id="mimoModel" style="max-width:200px">';
     ['mimo-v2.5', 'mimo-v2.5-pro', 'mimo-v2.5-tts-voiceclone', 'mimo-v2.5-tts-voicedesign', 'mimo-v2.5-tts', 'mimo-v2-pro', 'mimo-v2-omni', 'mimo-v2-tts'].forEach(function(m) {
@@ -154,6 +154,7 @@ function rData() {
     }
 
     setMain('设置', h);
+    if (typeof feather !== 'undefined') feather.replace();
 }
 
 // ---- 编辑资料弹窗 ----
@@ -299,6 +300,20 @@ function copyDashLink() {
         document.body.removeChild(temp);
         toast('链接已复制');
     }
+}
+
+// API Key显示/隐藏切换
+function toggleKeyVisibility() {
+    var input = document.getElementById('mimoKey');
+    var eye = document.getElementById('keyEye');
+    if (input.type === 'password') {
+        input.type = 'text';
+        eye.innerHTML = '<i data-feather="eye-off"></i>';
+    } else {
+        input.type = 'password';
+        eye.innerHTML = '<i data-feather="eye"></i>';
+    }
+    feather.replace();
 }
 
 function saveMimoCfg() {
