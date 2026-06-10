@@ -1012,13 +1012,14 @@ function updateMvF(type, dir) {
             h += '<div class="hrow"><label>原因</label><input class="inp" id="mvReason" style="max-width:150px" value="销售"></div>';
         }
     } else if (type === 'other') {
+        var itemUnit = item.unit || '个';
         if (dir > 0) {
             h += '<div class="hrow"><label>数量</label><input class="inp" id="mvQty" type="number" step="any" style="max-width:120px">';
-            h += '<select class="inp" id="mvUnit" style="max-width:80px"><option value="个">个</option><option value="瓶">瓶</option><option value="箱">箱</option></select>';
+            h += '<input class="inp" id="mvUnit" type="text" value="' + itemUnit + '" style="max-width:80px" readonly>';
             h += '<label>来源</label><input class="inp" id="mvReason" style="max-width:150px"></div>';
             h += '<div class="hrow"><label>进货价</label><input class="inp" id="mvCost" type="number" step="0.01" style="max-width:100px">元</div>';
         } else {
-            h += '<div class="hrow"><label>数量</label><input class="inp" id="mvQty" type="number" value="0" style="max-width:60px" oninput="calcMvOtherAmt()"> 个 ';
+            h += '<div class="hrow"><label>数量</label><input class="inp" id="mvQty" type="number" value="0" style="max-width:60px" oninput="calcMvOtherAmt()"> ' + itemUnit + ' ';
             h += '金额:<input class="inp" id="mvAmount" type="number" step="0.01" value="0" style="max-width:100px;background:var(--card-h)" readonly></div>';
             h += '<div class="hrow"><label>原因</label><input class="inp" id="mvReason" style="max-width:150px" value="销售"></div>';
         }
@@ -1160,7 +1161,7 @@ function doInvMove(type, id, dir) {
             syncInvToDaily(type, date);
 
             closeModal();
-            toast('销售 ' + qty + '包 ' + amount.toFixed(2) + '元');
+            toast('销售 ' + qty + (item.unit || '包') + ' ' + amount.toFixed(2) + '元');
         } else {
             var qty = parseInt($id('mvQty').value) || 0;
             var amount = parseFloat($id('mvAmount').value) || 0;
@@ -1175,7 +1176,8 @@ function doInvMove(type, id, dir) {
             syncInvToDaily(type, date);
 
             closeModal();
-            toast('销售 ' + qty + '瓶 ' + amount.toFixed(2) + '元');
+            var itemUnit = DB[cfg.key].find(function(i) { return i.id === id; });
+            toast('销售 ' + qty + (itemUnit ? (itemUnit.unit || '个') : '个') + ' ' + amount.toFixed(2) + '元');
         }
     }
     rInv(type);
