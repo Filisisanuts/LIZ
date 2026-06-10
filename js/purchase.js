@@ -221,7 +221,7 @@ function doParsePur() {
         var unitPrice = parseFloat(item.unitPrice) || 0;
         if (!unitPrice && total > 0 && qty > 0) unitPrice = Math.round(total / qty * 100) / 100;
         return {
-            name: item.name || '',
+            name: fixBrackets(item.name || ''),
             section: item.section || '',
             category: '',
             qty: qty,
