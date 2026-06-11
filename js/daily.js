@@ -660,7 +660,8 @@ function renderDP() {
         h += '<div class="tea-sale-row" data-cid="' + item.id + '">';
         h += '<label>' + item.name + '</label>';
         h += '数量:<input class="ed-input cig-sqty" type="number" value="' + dq + '" style="width:60px" oninput="calcCigExpected(this)"> ';
-        h += '金额:<input class="ed-input cig-samt" type="number" step="0.01" value="' + (Math.round(da * 100) / 100) + '" style="width:100px;background:var(--card-h)" readonly>';
+        h += '应收:<input class="ed-input cig-expected" type="number" step="0.01" value="' + (Math.round(da * 100) / 100) + '" style="width:80px;background:var(--card-h)" readonly>';
+        h += '实收:<input class="ed-input cig-samt" type="number" step="0.01" value="' + (Math.round(da * 100) / 100) + '" style="width:80px">';
         h += '</div>';
     });
     if (!DB.cigItems.length && Object.keys(parsedCig).length) {
@@ -805,10 +806,13 @@ function saveDaily() {
             var item = db.cigItems.find(function(c) { return c.id === id; });
             if (!item) return;
             var qty = parseInt(row.querySelector('.cig-sqty').value) || 0;
+            var expected = parseFloat(row.querySelector('.cig-expected').value) || 0;
             var amt = parseFloat(row.querySelector('.cig-samt').value) || 0;
+            // 不填实收默认按应收入账
+            if (amt === 0 && expected > 0) amt = expected;
             if (qty > 0 || amt > 0) {
-                _pd.cigSales[id] = { qty: qty, amount: amt };
-                item.sales.push({ date: _pd.date, qty: qty, amount: amt });
+                _pd.cigSales[id] = { qty: qty, expectedAmount: expected, amount: amt };
+                item.sales.push({ date: _pd.date, qty: qty, expectedAmount: expected, amount: amt });
                 cigTotal += amt;
             }
         });
