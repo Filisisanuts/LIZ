@@ -152,6 +152,8 @@ function doAIParseGo(){
                 if(qty>0&&total>0)items.push({name:item.name||'',section:item.section||'',category:'',qty:qty,unit:item.unit||'',unitPrice:unitPrice,total:total,source:src});
             });
             if(!items.length){toast('解析结果为空');return}
+            // 英文括号转中文括号
+            items.forEach(function(item){item.name=fixBrackets(item.name)});
             // 添加历史匹配
             items = addHistoryMatches(items);
             _pmItems=items.slice();goPage('purchase');
