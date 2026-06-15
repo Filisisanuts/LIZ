@@ -465,7 +465,7 @@ function parseDaily(text) {
                 splitParts(inner).forEach(function(part) {
                     part = part.trim();
                     if (!part) return;
-                    var im = part.match(/(.+?)[:\uFF1A](\d+)/);
+                    var im = part.match(/(.+?)[:：](\d+)/); if (!im) im = part.match(/(.+?)(\d+)/);
                     if (im) {
                         var nm = im[1].trim(), qt = parseInt(im[2]);
                         if (nm && qt > 0) r.revenue.cigarette.items[nm] = qt;
