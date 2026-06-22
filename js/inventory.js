@@ -374,8 +374,11 @@ function showInvDayModal(type, date) {
         }
         h += '</div>';
 
-        // 右侧：金额 + 编辑/删除按钮
+        // 右侧：应收 + 实收 + 编辑/删除按钮
         h += '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0">';
+        var expected = r.sale.expectedAmount || ((r.sale.qty || 0) * (r.item.pricePerUnit || 0));
+        if (type === 'tea') expected = r.sale.expectedAmount || ((r.sale.cups || 0) * (r.item.pricePerCup || 0) + (r.sale.pots || 0) * (r.item.pricePerPot || 0));
+        h += '<span style="font-size:.76rem;color:var(--tx-m)">应收 ¥' + fmtC(expected) + '</span>';
         h += '<span style="font-size:.88rem;font-weight:700;color:var(--ac)">¥' + fmtC(r.sale.amount || 0) + '</span>';
         h += '<button class="btn s" onclick="closeModal();editInvSale(\'' + type + '\',\'' + r.item.id + '\',' + r.si + ')">编</button>';
         h += '<button class="btn s d" onclick="delInvSaleConfirm(\'' + type + '\',\'' + r.item.id + '\',' + r.si + ',\'' + date + '\')">删</button>';
