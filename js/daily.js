@@ -780,6 +780,14 @@ function matchLabel(lb, v, r, f) {
 function saveDaily() {
     if (!_pd) return;
 
+    // 检查是否已有该日期的数据
+    var existingReport = DB.dailyReports.find(function(d) { return d.date === _pd.date; });
+    if (existingReport) {
+        if (!confirm('⚠️ ' + _pd.date + ' 已有日报数据，确定要覆盖吗？\n\n覆盖后原数据将被删除。')) {
+            return;
+        }
+    }
+
     upd(function(db) {
         var oldReport = db.dailyReports.find(function(d) { return d.date === _pd.date; });
 
