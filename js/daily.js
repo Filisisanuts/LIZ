@@ -214,7 +214,13 @@ function calcTeaExpected(el) {
     if (!item) return;
     var cups = parseInt(row.querySelector('.tea-cups').value) || 0;
     var pots = parseInt(row.querySelector('.tea-pots').value) || 0;
-    row.querySelector('.tea-expected').value = (cups * (item.pricePerCup || 0) + pots * (item.pricePerPot || 0)).toFixed(2);
+    var expected = (cups * (item.pricePerCup || 0) + pots * (item.pricePerPot || 0)).toFixed(2);
+    row.querySelector('.tea-expected').value = expected;
+    // 实收默认填入应收价格
+    var amtInput = row.querySelector('.tea-amt');
+    if (amtInput && (!amtInput.value || parseFloat(amtInput.value) === 0)) {
+        amtInput.value = expected;
+    }
 }
 // 香烟自动计算应收 = 数量×单价
 function calcCigExpected(el) {
