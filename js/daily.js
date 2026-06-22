@@ -603,7 +603,7 @@ function renderDP() {
     // 日期选择
     var h = '<div class="pv-card"><h4>日期</h4>';
     h += '<div class="pv-row"><span class="k">日报日期</span>';
-    h += '<input class="ed-input" id="dpDate" type="text" readonly value="' + r.date + '" onclick="_dpOpen(\'dpDate\')" onchange="setDVal(\'date\',this.value)" style="cursor:pointer"></div>';
+    h += '<input class="ed-input" id="dpDate" type="text" readonly value="' + r.date + '" onclick="_dpOpen(\'dpDate\')" onchange="setDVal(\'date\',this.value)" style="cursor:pointer;width:140px"></div>';
     h += '</div>';
 
     h += '<div class="pv-card"><h4>营收</h4>';
