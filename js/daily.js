@@ -218,11 +218,13 @@ function calcTeaExpected(el) {
     var pots = parseInt(row.querySelector('.tea-pots').value) || 0;
     var expected = (cups * (item.pricePerCup || 0) + pots * (item.pricePerPot || 0)).toFixed(2);
     row.querySelector('.tea-expected').value = expected;
-    // 实收默认填入应收价格
+    // 实收跟随应收更新（只有实收等于之前的应收时才更新）
     var amtInput = row.querySelector('.tea-amt');
-    if (amtInput && (!amtInput.value || parseFloat(amtInput.value) === 0)) {
+    var prevExpected = row.querySelector('.tea-expected').dataset.prevExpected || '0';
+    if (amtInput && parseFloat(amtInput.value) === parseFloat(prevExpected)) {
         amtInput.value = expected;
     }
+    row.querySelector('.tea-expected').dataset.prevExpected = expected;
 }
 // 香烟自动计算应收 = 数量×单价
 function calcCigExpected(el) {
@@ -231,7 +233,15 @@ function calcCigExpected(el) {
     var item = DB.cigItems.find(function(c) { return c.id === row.dataset.cid; });
     if (!item) return;
     var qty = parseInt(row.querySelector('.cig-sqty').value) || 0;
-    row.querySelector('.cig-expected').value = (qty * (item.pricePerUnit || 0)).toFixed(2);
+    var expected = (qty * (item.pricePerUnit || 0)).toFixed(2);
+    row.querySelector('.cig-expected').value = expected;
+    // 实收跟随应收更新（只有实收等于之前的应收时才更新）
+    var amtInput = row.querySelector('.cig-samt');
+    var prevExpected = row.querySelector('.cig-expected').dataset.prevExpected || '0';
+    if (amtInput && parseFloat(amtInput.value) === parseFloat(prevExpected)) {
+        amtInput.value = expected;
+    }
+    row.querySelector('.cig-expected').dataset.prevExpected = expected;
 }
 // 酒类录入：为每个酒类生成数量输入行，自动计算应收金额
 function initAlcBlock() {
@@ -257,11 +267,13 @@ function calcAlcExpected(el) {
     var qty = parseInt(row.querySelector('.alc-sqty').value) || 0;
     var expected = (qty * (item.pricePerUnit || 0)).toFixed(2);
     row.querySelector('.alc-expected').value = expected;
-    // 实收默认填入应收价格
+    // 实收跟随应收更新（只有实收等于之前的应收时才更新）
     var amtInput = row.querySelector('.alc-samt');
-    if (amtInput && (!amtInput.value || parseFloat(amtInput.value) === 0)) {
+    var prevExpected = row.querySelector('.alc-expected').dataset.prevExpected || '0';
+    if (amtInput && parseFloat(amtInput.value) === parseFloat(prevExpected)) {
         amtInput.value = expected;
     }
+    row.querySelector('.alc-expected').dataset.prevExpected = expected;
 }
 // 其他贵重物品录入：为每个物品生成数量输入行，自动计算应收金额
 function initOtherBlock() {
@@ -287,11 +299,13 @@ function calcOtherExpected(el) {
     var qty = parseFloat(row.querySelector('.other-sqty').value) || 0;
     var expected = (qty * (item.pricePerUnit || 0)).toFixed(2);
     row.querySelector('.other-expected').value = expected;
-    // 实收默认填入应收价格
+    // 实收跟随应收更新（只有实收等于之前的应收时才更新）
     var amtInput = row.querySelector('.other-samt');
-    if (amtInput && (!amtInput.value || parseFloat(amtInput.value) === 0)) {
+    var prevExpected = row.querySelector('.other-expected').dataset.prevExpected || '0';
+    if (amtInput && parseFloat(amtInput.value) === parseFloat(prevExpected)) {
         amtInput.value = expected;
     }
+    row.querySelector('.other-expected').dataset.prevExpected = expected;
 }
 
 // 包厢预定录入
@@ -697,7 +711,7 @@ function renderDP() {
         h += '<label>' + item.name + '</label>';
         h += '杯:<input class="ed-input tea-cups" type="number" value="' + cups + '" style="width:50px" oninput="calcTeaExpected(this)"> ';
         h += '壶:<input class="ed-input tea-pots" type="number" value="' + pots + '" style="width:50px" oninput="calcTeaExpected(this)"> ';
-        h += '应收:<input class="ed-input tea-expected" type="number" step="0.01" value="' + expected + '" style="width:80px;background:var(--card-h)" readonly> ';
+        h += '应收:<input class="ed-input tea-expected" type="number" step="0.01" value="' + expected + '" data-prev-expected="' + expected + '" style="width:80px;background:var(--card-h)" readonly> ';
         h += '实收:<input class="ed-input tea-amt" type="number" step="0.01" value="' + amt + '" style="width:80px">';
         h += '</div>';
     });
@@ -735,7 +749,7 @@ function renderDP() {
         h += '<div class="tea-sale-row" data-cid="' + item.id + '">';
         h += '<label>' + item.name + '</label>';
         h += '数量:<input class="ed-input cig-sqty" type="number" value="' + dq + '" style="width:60px" oninput="calcCigExpected(this)"> ';
-        h += '应收:<input class="ed-input cig-expected" type="number" step="0.01" value="' + (Math.round(da * 100) / 100) + '" style="width:80px;background:var(--card-h)" readonly>';
+        h += '应收:<input class="ed-input cig-expected" type="number" step="0.01" value="' + (Math.round(da * 100) / 100) + '" data-prev-expected="' + (Math.round(da * 100) / 100) + '" style="width:80px;background:var(--card-h)" readonly>';
         h += '实收:<input class="ed-input cig-samt" type="number" step="0.01" value="' + (Math.round(da * 100) / 100) + '" style="width:80px">';
         h += '</div>';
     });
@@ -757,7 +771,7 @@ function renderDP() {
         h += '<div class="tea-sale-row" data-aid="' + item.id + '">';
         h += '<label>' + item.name + '</label>';
         h += '数量:<input class="ed-input alc-sqty" type="number" value="' + dq + '" style="width:60px" oninput="calcAlcExpected(this)"> ';
-        h += '应收:<input class="ed-input alc-expected" type="number" step="0.01" value="' + (Math.round(da * 100) / 100) + '" style="width:80px;background:var(--card-h)" readonly>';
+        h += '应收:<input class="ed-input alc-expected" type="number" step="0.01" value="' + (Math.round(da * 100) / 100) + '" data-prev-expected="' + (Math.round(da * 100) / 100) + '" style="width:80px;background:var(--card-h)" readonly>';
         h += '实收:<input class="ed-input alc-samt" type="number" step="0.01" value="' + (Math.round(da * 100) / 100) + '" style="width:80px">';
         h += '</div>';
     });
@@ -772,7 +786,7 @@ function renderDP() {
         h += '<div class="tea-sale-row" data-oid="' + item.id + '">';
         h += '<label>' + item.name + '</label>';
         h += '数量:<input class="ed-input other-sqty" type="number" step="0.01" value="' + dq + '" style="width:60px" oninput="calcOtherExpected(this)"> ';
-        h += '应收:<input class="ed-input other-expected" type="number" step="0.01" value="' + (Math.round(da * 100) / 100) + '" style="width:80px;background:var(--card-h)" readonly>';
+        h += '应收:<input class="ed-input other-expected" type="number" step="0.01" value="' + (Math.round(da * 100) / 100) + '" data-prev-expected="' + (Math.round(da * 100) / 100) + '" style="width:80px;background:var(--card-h)" readonly>';
         h += '实收:<input class="ed-input other-samt" type="number" step="0.01" value="' + (Math.round(da * 100) / 100) + '" style="width:80px">';
         h += '</div>';
     });
