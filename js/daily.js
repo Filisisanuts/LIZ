@@ -25,6 +25,8 @@ function rDaily() {
     h += '<div class="section-label">经营数据</div><div id="dmFreeList"></div>';
     h += '<div class="section-label">茗茶销售</div><div id="dmTeaList"></div>';
     h += '<div class="section-label">香烟销售</div><div id="dmCigList"></div>';
+    h += '<div class="section-label">酒类销售</div><div id="dmAlcList"></div>';
+    h += '<div class="section-label">其他贵重物品</div><div id="dmOtherList"></div>';
     h += '<div class="section-label">包厢预定</div><div id="dmRoomList"></div>';
     h += '<div class="hrow"><label>汇报人</label><input class="inp" id="dmReporter" style="max-width:160px"></div>';
     h += '<div class="brow"><button class="btn p" onclick="doManualDaily()">保存</button></div>';
@@ -133,7 +135,7 @@ function switchDT(tab) {
     document.querySelectorAll('#dT .tab-btn').forEach(function(b, i) {
         b.classList.toggle('active', (i === 0 && tab === 'text') || (i === 1 && tab === 'manual') || (i === 2 && tab === 'hist'));
     });
-    if (tab === 'manual') { initFreeRows(); initTeaBlock(); initCigBlock(); initRoomBlock(); }
+    if (tab === 'manual') { initFreeRows(); initTeaBlock(); initCigBlock(); initAlcBlock(); initOtherBlock(); initRoomBlock(); }
     if (tab === 'hist') renderDHist();
 }
 
@@ -230,6 +232,66 @@ function calcCigExpected(el) {
     if (!item) return;
     var qty = parseInt(row.querySelector('.cig-sqty').value) || 0;
     row.querySelector('.cig-expected').value = (qty * (item.pricePerUnit || 0)).toFixed(2);
+}
+// 酒类录入：为每个酒类生成数量输入行，自动计算应收金额
+function initAlcBlock() {
+    var items = DB.alcItems;
+    if (!items.length) { $id('dmAlcList').innerHTML = '<div style="font-size:.74rem;color:var(--tx-m)">先在酒类管理中添加</div>'; return; }
+    var h = '';
+    items.forEach(function(item) {
+        h += '<div class="tea-sale-row" data-aid="' + item.id + '">';
+        h += '<label>' + item.name + '</label>';
+        h += '数量:<input class="inp alc-sqty" type="number" value="0" style="max-width:60px" oninput="calcAlcExpected(this)"> ';
+        h += '应收:<input class="inp alc-expected" type="number" step="0.01" value="0" style="max-width:80px;background:var(--card-h)" readonly>';
+        h += '实收:<input class="inp alc-samt" type="number" step="0.01" value="0" style="max-width:80px">';
+        h += '</div>';
+    });
+    $id('dmAlcList').innerHTML = h;
+}
+// 酒类自动计算应收 = 数量×单价
+function calcAlcExpected(el) {
+    var row = el.closest('.tea-sale-row');
+    if (!row) return;
+    var item = DB.alcItems.find(function(a) { return a.id === row.dataset.aid; });
+    if (!item) return;
+    var qty = parseInt(row.querySelector('.alc-sqty').value) || 0;
+    var expected = (qty * (item.pricePerUnit || 0)).toFixed(2);
+    row.querySelector('.alc-expected').value = expected;
+    // 实收默认填入应收价格
+    var amtInput = row.querySelector('.alc-samt');
+    if (amtInput && (!amtInput.value || parseFloat(amtInput.value) === 0)) {
+        amtInput.value = expected;
+    }
+}
+// 其他贵重物品录入：为每个物品生成数量输入行，自动计算应收金额
+function initOtherBlock() {
+    var items = DB.otherItems;
+    if (!items.length) { $id('dmOtherList').innerHTML = '<div style="font-size:.74rem;color:var(--tx-m)">先在其他贵重物品管理中添加</div>'; return; }
+    var h = '';
+    items.forEach(function(item) {
+        h += '<div class="tea-sale-row" data-oid="' + item.id + '">';
+        h += '<label>' + item.name + '</label>';
+        h += '数量:<input class="inp other-sqty" type="number" step="0.01" value="0" style="max-width:60px" oninput="calcOtherExpected(this)"> ';
+        h += '应收:<input class="inp other-expected" type="number" step="0.01" value="0" style="max-width:80px;background:var(--card-h)" readonly>';
+        h += '实收:<input class="inp other-samt" type="number" step="0.01" value="0" style="max-width:80px">';
+        h += '</div>';
+    });
+    $id('dmOtherList').innerHTML = h;
+}
+// 其他贵重物品自动计算应收 = 数量×单价
+function calcOtherExpected(el) {
+    var row = el.closest('.tea-sale-row');
+    if (!row) return;
+    var item = DB.otherItems.find(function(o) { return o.id === row.dataset.oid; });
+    if (!item) return;
+    var qty = parseFloat(row.querySelector('.other-sqty').value) || 0;
+    var expected = (qty * (item.pricePerUnit || 0)).toFixed(2);
+    row.querySelector('.other-expected').value = expected;
+    // 实收默认填入应收价格
+    var amtInput = row.querySelector('.other-samt');
+    if (amtInput && (!amtInput.value || parseFloat(amtInput.value) === 0)) {
+        amtInput.value = expected;
+    }
 }
 
 // 包厢预定录入
@@ -436,6 +498,7 @@ function parseDaily(text) {
         teaSales: {},
         cigSales: {},
         alcSales: {},
+        otherSales: {},
         reporter: ''
     };
 
@@ -685,6 +748,36 @@ function renderDP() {
     }
     h += '</div>';
 
+    // 酒类销售
+    h += '<div class="pv-card"><h4>酒类销售</h4>';
+    DB.alcItems.forEach(function(item) {
+        var sv = r.alcSales && r.alcSales[item.id];
+        var dq = sv ? sv.qty || 0 : 0;
+        var da = sv ? sv.amount || 0 : 0;
+        h += '<div class="tea-sale-row" data-aid="' + item.id + '">';
+        h += '<label>' + item.name + '</label>';
+        h += '数量:<input class="ed-input alc-sqty" type="number" value="' + dq + '" style="width:60px" oninput="calcAlcExpected(this)"> ';
+        h += '应收:<input class="ed-input alc-expected" type="number" step="0.01" value="' + (Math.round(da * 100) / 100) + '" style="width:80px;background:var(--card-h)" readonly>';
+        h += '实收:<input class="ed-input alc-samt" type="number" step="0.01" value="' + (Math.round(da * 100) / 100) + '" style="width:80px">';
+        h += '</div>';
+    });
+    h += '</div>';
+
+    // 其他贵重物品销售
+    h += '<div class="pv-card"><h4>其他贵重物品</h4>';
+    DB.otherItems.forEach(function(item) {
+        var sv = r.otherSales && r.otherSales[item.id];
+        var dq = sv ? sv.qty || 0 : 0;
+        var da = sv ? sv.amount || 0 : 0;
+        h += '<div class="tea-sale-row" data-oid="' + item.id + '">';
+        h += '<label>' + item.name + '</label>';
+        h += '数量:<input class="ed-input other-sqty" type="number" step="0.01" value="' + dq + '" style="width:60px" oninput="calcOtherExpected(this)"> ';
+        h += '应收:<input class="ed-input other-expected" type="number" step="0.01" value="' + (Math.round(da * 100) / 100) + '" style="width:80px;background:var(--card-h)" readonly>';
+        h += '实收:<input class="ed-input other-samt" type="number" step="0.01" value="' + (Math.round(da * 100) / 100) + '" style="width:80px">';
+        h += '</div>';
+    });
+    h += '</div>';
+
     // 支付
     h += '<div class="pv-card"><h4>支付</h4>';
     h += inpRow('POS', r.payment.pos, 'payment.pos');
@@ -797,7 +890,7 @@ function saveDaily() {
     upd(function(db) {
         var oldReport = db.dailyReports.find(function(d) { return d.date === _pd.date; });
 
-        // 清除旧的茗茶/香烟销售记录
+        // 清除旧的茗茶/香烟/酒类/其他销售记录
         if (oldReport) {
             Object.keys(oldReport.teaSales || {}).forEach(function(tid) {
                 var item = db.teaItems.find(function(t) { return t.id === tid; });
@@ -805,6 +898,14 @@ function saveDaily() {
             });
             Object.keys(oldReport.cigSales || {}).forEach(function(cid) {
                 var item = db.cigItems.find(function(c) { return c.id === cid; });
+                if (item) item.sales = item.sales.filter(function(s) { return s.date !== _pd.date; });
+            });
+            Object.keys(oldReport.alcSales || {}).forEach(function(aid) {
+                var item = db.alcItems.find(function(a) { return a.id === aid; });
+                if (item) item.sales = item.sales.filter(function(s) { return s.date !== _pd.date; });
+            });
+            Object.keys(oldReport.otherSales || {}).forEach(function(oid) {
+                var item = db.otherItems.find(function(o) { return o.id === oid; });
                 if (item) item.sales = item.sales.filter(function(s) { return s.date !== _pd.date; });
             });
         }
@@ -842,6 +943,40 @@ function saveDaily() {
             }
         });
         if (cigTotal > 0) _pd.revenue.cigarette.total = cigTotal;
+
+        // 酒类销售
+        var alcTotal = 0;
+        document.querySelectorAll('.tea-sale-row[data-aid]').forEach(function(row) {
+            var id = row.dataset.aid;
+            var item = db.alcItems.find(function(a) { return a.id === id; });
+            if (!item) return;
+            var qty = parseInt(row.querySelector('.alc-sqty').value) || 0;
+            var expected = parseFloat(row.querySelector('.alc-expected').value) || 0;
+            var amt = parseFloat(row.querySelector('.alc-samt').value) || 0;
+            if (amt === 0 && expected > 0) amt = expected;
+            if (qty > 0 || amt > 0) {
+                _pd.alcSales[id] = { qty: qty, expectedAmount: expected, amount: amt };
+                item.sales.push({ date: _pd.date, qty: qty, expectedAmount: expected, amount: amt });
+                alcTotal += amt;
+            }
+        });
+
+        // 其他贵重物品销售
+        var otherTotal = 0;
+        document.querySelectorAll('.tea-sale-row[data-oid]').forEach(function(row) {
+            var id = row.dataset.oid;
+            var item = db.otherItems.find(function(o) { return o.id === id; });
+            if (!item) return;
+            var qty = parseFloat(row.querySelector('.other-sqty').value) || 0;
+            var expected = parseFloat(row.querySelector('.other-expected').value) || 0;
+            var amt = parseFloat(row.querySelector('.other-samt').value) || 0;
+            if (amt === 0 && expected > 0) amt = expected;
+            if (qty > 0 || amt > 0) {
+                _pd.otherSales[id] = { qty: qty, expectedAmount: expected, amount: amt };
+                item.sales.push({ date: _pd.date, qty: qty, expectedAmount: expected, amount: amt });
+                otherTotal += amt;
+            }
+        });
 
         // 保存日报
         var idx = db.dailyReports.findIndex(function(d) { return d.date === _pd.date; });
@@ -944,7 +1079,35 @@ function showDailyModal(date) {
         });
         h += '</table></div>';
     }
-    
+
+    // 酒类销售
+    if (r.alcSales && Object.keys(r.alcSales).length) {
+        h += '<div class="section-label">酒类销售</div>';
+        h += '<div class="tw"><table><tr><th>酒品</th><th>数量</th><th>金额</th></tr>';
+        Object.keys(r.alcSales).forEach(function(id) {
+            var s = r.alcSales[id];
+            var item = DB.alcItems.find(function(a) { return a.id === id; });
+            h += '<tr><td>' + (item ? item.name : id) + '</td>';
+            h += '<td class="nr">' + (s.qty || 0) + '</td>';
+            h += '<td class="nr">' + fmtC(s.amount || 0) + '</td></tr>';
+        });
+        h += '</table></div>';
+    }
+
+    // 其他贵重物品销售
+    if (r.otherSales && Object.keys(r.otherSales).length) {
+        h += '<div class="section-label">其他贵重物品销售</div>';
+        h += '<div class="tw"><table><tr><th>物品</th><th>数量</th><th>金额</th></tr>';
+        Object.keys(r.otherSales).forEach(function(id) {
+            var s = r.otherSales[id];
+            var item = DB.otherItems.find(function(o) { return o.id === id; });
+            h += '<tr><td>' + (item ? item.name : id) + '</td>';
+            h += '<td class="nr">' + (s.qty || 0) + '</td>';
+            h += '<td class="nr">' + fmtC(s.amount || 0) + '</td></tr>';
+        });
+        h += '</table></div>';
+    }
+
     // 汇报人
     if (r.reporter) {
         h += '<div class="pv-row"><span class="k">汇报人</span><span>' + r.reporter + '</span></div>';
@@ -1048,6 +1211,34 @@ function editDailyModal(date) {
         Object.keys(r.cigSales).forEach(function(id) {
             var s = r.cigSales[id];
             var item = DB.cigItems.find(function(c) { return c.id === id; });
+            h += '<tr><td>' + (item ? item.name : id) + '</td>';
+            h += '<td class="nr">' + (s.qty || 0) + '</td>';
+            h += '<td class="nr">' + fmtC(s.amount || 0) + '</td></tr>';
+        });
+        h += '</table></div>';
+    }
+
+    // 酒类销售（只读）
+    if (r.alcSales && Object.keys(r.alcSales).length) {
+        h += '<div class="section-label">酒类销售（只读）</div>';
+        h += '<div class="tw"><table><tr><th>酒品</th><th>数量</th><th>金额</th></tr>';
+        Object.keys(r.alcSales).forEach(function(id) {
+            var s = r.alcSales[id];
+            var item = DB.alcItems.find(function(a) { return a.id === id; });
+            h += '<tr><td>' + (item ? item.name : id) + '</td>';
+            h += '<td class="nr">' + (s.qty || 0) + '</td>';
+            h += '<td class="nr">' + fmtC(s.amount || 0) + '</td></tr>';
+        });
+        h += '</table></div>';
+    }
+
+    // 其他贵重物品销售（只读）
+    if (r.otherSales && Object.keys(r.otherSales).length) {
+        h += '<div class="section-label">其他贵重物品销售（只读）</div>';
+        h += '<div class="tw"><table><tr><th>物品</th><th>数量</th><th>金额</th></tr>';
+        Object.keys(r.otherSales).forEach(function(id) {
+            var s = r.otherSales[id];
+            var item = DB.otherItems.find(function(o) { return o.id === id; });
             h += '<tr><td>' + (item ? item.name : id) + '</td>';
             h += '<td class="nr">' + (s.qty || 0) + '</td>';
             h += '<td class="nr">' + fmtC(s.amount || 0) + '</td></tr>';
