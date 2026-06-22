@@ -283,7 +283,7 @@ function initOtherBlock() {
     items.forEach(function(item) {
         h += '<div class="tea-sale-row" data-oid="' + item.id + '">';
         h += '<label>' + item.name + '</label>';
-        h += '数量:<input class="inp other-sqty" type="number" step="0.01" value="0" style="max-width:60px" oninput="calcOtherExpected(this)"> ';
+        h += '数量:<input class="inp other-sqty" type="number" value="0" style="max-width:60px" oninput="calcOtherExpected(this)"> ';
         h += '应收:<input class="inp other-expected" type="number" step="0.01" value="0" style="max-width:80px;background:var(--card-h)" readonly>';
         h += '实收:<input class="inp other-samt" type="number" step="0.01" value="0" style="max-width:80px">';
         h += '</div>';
@@ -785,7 +785,7 @@ function renderDP() {
         var da = sv ? sv.amount || 0 : 0;
         h += '<div class="tea-sale-row" data-oid="' + item.id + '">';
         h += '<label>' + item.name + '</label>';
-        h += '数量:<input class="ed-input other-sqty" type="number" step="0.01" value="' + dq + '" style="width:60px" oninput="calcOtherExpected(this)"> ';
+        h += '数量:<input class="ed-input other-sqty" type="number" value="' + dq + '" style="width:60px" oninput="calcOtherExpected(this)"> ';
         h += '应收:<input class="ed-input other-expected" type="number" step="0.01" value="' + (Math.round(da * 100) / 100) + '" data-prev-expected="' + (Math.round(da * 100) / 100) + '" style="width:80px;background:var(--card-h)" readonly>';
         h += '实收:<input class="ed-input other-samt" type="number" step="0.01" value="' + (Math.round(da * 100) / 100) + '" style="width:80px">';
         h += '</div>';
