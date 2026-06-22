@@ -112,6 +112,30 @@ function rData() {
     h += '<div class="brow" style="margin-top:8px"><button class="btn p" onclick="saveMimoCfg()">保存配置</button></div>';
     h += '</div>';
 
+    // 采购匹配映射
+    h += '<div class="sec">采购匹配映射</div>';
+    h += '<div style="background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:14px;margin-bottom:12px">';
+    h += '<p style="font-size:.74rem;color:var(--tx-s);margin-bottom:10px">配置采购名称到库存物品的映射，优先级高于匹配关键词</p>';
+    var mapping = DB.settings.purchaseMapping || {};
+    var mappingKeys = Object.keys(mapping);
+    h += '<div id="mappingList">';
+    if (mappingKeys.length) {
+        mappingKeys.forEach(function(k, i) {
+            h += '<div class="hrow" style="margin-bottom:6px">';
+            h += '<input class="inp mapping-key" style="flex:1" value="' + k.replace(/"/g, '&quot;') + '" placeholder="采购名称">';
+            h += '<span style="margin:0 6px">→</span>';
+            h += '<input class="inp mapping-val" style="flex:1" value="' + (mapping[k] || '').replace(/"/g, '&quot;') + '" placeholder="库存物品名称">';
+            h += '<button class="btn s d" onclick="this.parentElement.remove()">×</button>';
+            h += '</div>';
+        });
+    }
+    h += '</div>';
+    h += '<div class="brow" style="margin-top:10px">';
+    h += '<button class="btn s" onclick="addMappingRow()">+添加映射</button>';
+    h += '<button class="btn p" onclick="saveMapping()">保存映射</button>';
+    h += '</div>';
+    h += '</div>';
+
     // Supabase 云同步
     h += '<div class="sec">Supabase 云同步</div>';
     h += '<div style="background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:14px;margin-bottom:12px">';
@@ -506,5 +530,35 @@ function impJSON(event) {
     };
     reader.readAsText(f);
     event.target.value = '';
+}
+
+// ---------- 采购匹配映射 ----------
+function addMappingRow() {
+    var list = $id('mappingList');
+    if (!list) return;
+    var div = document.createElement('div');
+    div.className = 'hrow';
+    div.style.marginBottom = '6px';
+    div.innerHTML = '<input class="inp mapping-key" style="flex:1" placeholder="采购名称">' +
+        '<span style="margin:0 6px">→</span>' +
+        '<input class="inp mapping-val" style="flex:1" placeholder="库存物品名称">' +
+        '<button class="btn s d" onclick="this.parentElement.remove()">×</button>';
+    list.appendChild(div);
+}
+
+function saveMapping() {
+    var keys = document.querySelectorAll('.mapping-key');
+    var vals = document.querySelectorAll('.mapping-val');
+    var mapping = {};
+    keys.forEach(function(k, i) {
+        var key = k.value.trim();
+        var val = vals[i] ? vals[i].value.trim() : '';
+        if (key && val) mapping[key] = val;
+    });
+    upd(function(db) {
+        if (!db.settings) db.settings = {};
+        db.settings.purchaseMapping = mapping;
+    });
+    toast('映射已保存');
 }
 

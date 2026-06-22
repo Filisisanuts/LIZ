@@ -809,12 +809,26 @@ function saveMPur() {
 // 保存后检查采购物品是否匹配库存，弹窗让用户确认入库
 function checkPurInvLink(purItems, date) {
     var matches = [];
+    var mapping = DB.settings.purchaseMapping || {};
 
     purItems.forEach(function(pi) {
         var name = pi.name.trim();
         function matchList(list, type) {
             list.forEach(function(item) {
-                if (item.name === name || name.indexOf(item.name) >= 0 || item.name.indexOf(name) >= 0) {
+                var matched = false;
+                // 优先检查映射表
+                if (mapping[name]) {
+                    matched = item.name === mapping[name];
+                }
+                // 如果映射表未匹配，检查匹配关键词
+                if (!matched && item.matchKeyword && item.matchKeyword.trim()) {
+                    matched = name.indexOf(item.matchKeyword.trim()) >= 0;
+                }
+                // 如果都没有匹配，使用默认匹配逻辑
+                if (!matched) {
+                    matched = item.name === name || name.indexOf(item.name) >= 0 || item.name.indexOf(name) >= 0;
+                }
+                if (matched) {
                     matches.push({ type: type, inv: item, pur: pi });
                 }
             });

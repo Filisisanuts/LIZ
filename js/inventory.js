@@ -1336,6 +1336,8 @@ function showAddInv(type, itemId) {
         h += '<option value="simple"' + (oMode === 'simple' ? ' selected' : '') + '>简单模式</option>';
         h += '<option value="gram"' + (oMode === 'gram' ? ' selected' : '') + '>按克消耗</option>';
         h += '<option value="pack"' + (oMode === 'pack' ? ' selected' : '') + '>按包消耗</option></select></div>';
+        h += '<div class="hrow"><label>匹配关键词</label><input class="inp" id="ai_matchKeyword" style="flex:2" value="' + (isEdit ? (item.matchKeyword || '').replace(/"/g, '&quot;') : '') + '">';
+        h += '<span style="font-size:.72rem;color:var(--tx-m)">采购单名称包含此关键词时自动匹配</span></div>';
 
         // 简单模式（同香烟/酒类）
         h += '<div id="otherSimple"' + (oMode !== 'simple' ? ' style="display:none"' : '') + '>';
@@ -1380,6 +1382,8 @@ function showAddInv(type, itemId) {
         h += '<div class="hrow"><label>品牌</label><input class="inp" id="ai_name" style="flex:2" value="' + (isEdit ? item.name.replace(/"/g, '&quot;') : '') + '">';
         h += '<label>成本/包</label><input class="inp" id="ai_costPerUnit" type="number" step="0.01" style="max-width:100px" value="' + (isEdit ? (item.costPerUnit || 0) : '') + '">元';
         h += ' <label>售价/包</label><input class="inp" id="ai_pricePerUnit" type="number" step="0.01" style="max-width:100px" value="' + (isEdit ? (item.pricePerUnit || 0) : '') + '">元</div>';
+        h += '<div class="hrow"><label>匹配关键词</label><input class="inp" id="ai_matchKeyword" style="flex:2" value="' + (isEdit ? (item.matchKeyword || '').replace(/"/g, '&quot;') : '') + '">';
+        h += '<span style="font-size:.72rem;color:var(--tx-m)">采购单名称包含此关键词时自动匹配</span></div>';
         h += '<div class="section-label">库存</div>';
         h += '<div class="hrow"><label>期初库存</label><input class="inp" id="ai_os" type="number" style="max-width:80px" value="' + (isEdit ? currentOS : 0) + '">包';
         h += ' <label>期初单价</label><input class="inp" id="ai_openCost" type="number" step="0.01" style="max-width:100px" value="' + (isEdit ? (item.openingUnitCost || 0) : '') + '">元/包';
@@ -1393,6 +1397,8 @@ function showAddInv(type, itemId) {
         h += '<div class="hrow"><label>品名</label><input class="inp" id="ai_name" style="flex:2" value="' + (isEdit ? item.name.replace(/"/g, '&quot;') : '') + '">';
         h += '<label>成本/瓶</label><input class="inp" id="ai_costPerUnit" type="number" step="0.01" style="max-width:100px" value="' + (isEdit ? (item.costPerUnit || 0) : '') + '">元';
         h += ' <label>售价/瓶</label><input class="inp" id="ai_pricePerUnit" type="number" step="0.01" style="max-width:100px" value="' + (isEdit ? (item.pricePerUnit || 0) : '') + '">元</div>';
+        h += '<div class="hrow"><label>匹配关键词</label><input class="inp" id="ai_matchKeyword" style="flex:2" value="' + (isEdit ? (item.matchKeyword || '').replace(/"/g, '&quot;') : '') + '">';
+        h += '<span style="font-size:.72rem;color:var(--tx-m)">采购单名称包含此关键词时自动匹配</span></div>';
         h += '<div class="section-label">库存</div>';
         h += '<div class="hrow"><label>期初库存</label><input class="inp" id="ai_os" type="number" style="max-width:80px" value="' + (isEdit ? currentOS : 0) + '">瓶';
         h += ' <label>期初单价</label><input class="inp" id="ai_openCost" type="number" step="0.01" style="max-width:100px" value="' + (isEdit ? (item.openingUnitCost || 0) : '') + '">元/瓶';
@@ -1477,6 +1483,7 @@ function doAddInv(type, itemId) {
                 it.name = name; it.calcMode = oMode === 'simple' ? '' : oMode;
                 it.category = $id('ai_category').value || '';
                 it.unit = $id('ai_unit').value || '个';
+                var mk = $id('ai_matchKeyword'); if (mk) it.matchKeyword = mk.value.trim();
                 if (oMode === 'simple') {
                     it.costPerUnit = parseFloat($id('ai_costPerUnit').value) || 0;
                     it.pricePerUnit = parseFloat($id('ai_pricePerUnit').value) || 0;
@@ -1501,6 +1508,8 @@ function doAddInv(type, itemId) {
             toast('已更新');
         } else {
             var item = { id: type + '_' + Date.now(), name: name, calcMode: oMode === 'simple' ? '' : oMode, category: $id('ai_category').value || '', unit: $id('ai_unit').value || '个', sales: [], purchases: [] };
+            var mk = $id('ai_matchKeyword');
+            item.matchKeyword = mk ? mk.value.trim() : '';
             if (oMode === 'simple') {
                 item.costPerUnit = parseFloat($id('ai_costPerUnit').value) || 0;
                 item.pricePerUnit = parseFloat($id('ai_pricePerUnit').value) || 0;
@@ -1539,6 +1548,7 @@ function doAddInv(type, itemId) {
                 it.restockAlert = parseInt($id('ai_ra').value) || 0;
                 var pu = $id('ai_pu'); if (pu) it.purchaseUnit = pu.value;
                 var cr = $id('ai_cr'); if (cr) it.purchaseConvRatio = parseInt(cr.value) || 10;
+                var mk = $id('ai_matchKeyword'); if (mk) it.matchKeyword = mk.value.trim();
             });
             toast('已更新');
         } else {
@@ -1554,6 +1564,8 @@ function doAddInv(type, itemId) {
             item.purchaseUnit = pu ? pu.value : (type === 'cig' ? '条' : '箱');
             var cr = $id('ai_cr');
             item.purchaseConvRatio = cr ? parseInt(cr.value) || 10 : (type === 'cig' ? 10 : 12);
+            var mk = $id('ai_matchKeyword');
+            item.matchKeyword = mk ? mk.value.trim() : '';
             upd(function(db) {
                 if (!db[cfg.key]) db[cfg.key] = [];
                 db[cfg.key].push(item);
