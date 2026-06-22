@@ -727,28 +727,43 @@ function renderDP() {
             dq = sv.qty || 0;
             da = sv.amount || 0;
         } else {
+            // 提取括号内的品牌名
+            var bracketMatch = item.name.match(/[（(]([\s\S]+?)[）)]/);
+            var itemNameInBracket = bracketMatch ? bracketMatch[1] : item.name;
+            var itemNameClean = itemNameInBracket.replace(/黄山|（|）|\(|\)/g, '');
+
+            // 找出所有匹配的解析键名，选择最佳匹配
+            var bestMatch = null;
+            var bestScore = -1;
             Object.keys(parsedCig).forEach(function(k) {
                 if (!parsedCig[k]) return;
-                // 提取括号内的品牌名进行匹配
-                var bracketMatch = item.name.match(/[（(]([\s\S]+?)[）)]/);
-                var itemNameInBracket = bracketMatch ? bracketMatch[1] : item.name;
-                var itemNameClean = itemNameInBracket.replace(/黄山|（|）|\(|\)/g, '');
                 var keyClean = k.replace(/黄山|（|）|\(|\)/g, '');
                 // 精确匹配：清理后的名称必须完全相同
                 if (itemNameClean === keyClean) {
-                    dq = parsedCig[k];
-                    da = dq * (item.pricePerUnit || 0);
+                    // 完全匹配得分最高
+                    var score = 1000 + keyClean.length;
+                    if (score > bestScore) {
+                        bestMatch = k;
+                        bestScore = score;
+                    }
                 }
-                // 模糊匹配：解析键名必须完整包含在品牌名中（不是品牌名包含解析键名）
-                else if (dq === 0 && keyClean.length >= 2 && itemNameClean.indexOf(keyClean) >= 0) {
-                    // 避免短名匹配长名（如"徽商"匹配"紫徽商新视界"）
-                    // 只有当品牌名长度<=解析键名长度*2+2时才匹配
-                    if (itemNameClean.length <= keyClean.length * 2 + 2) {
-                        dq = parsedCig[k];
-                        da = dq * (item.pricePerUnit || 0);
+                // 模糊匹配：解析键名必须完整包含在品牌名中
+                else if (keyClean.length >= 2 && itemNameClean.indexOf(keyClean) === 0) {
+                    // 只有当解析键名在品牌名开头时才匹配
+                    // 避免"徽商"匹配到"黄徽商新世界"
+                    var score = 500 + keyClean.length;
+                    if (score > bestScore) {
+                        bestMatch = k;
+                        bestScore = score;
                     }
                 }
             });
+
+            // 如果找到匹配，使用该解析键名的数量
+            if (bestMatch) {
+                dq = parsedCig[bestMatch];
+                da = dq * (item.pricePerUnit || 0);
+            }
         }
         h += '<div class="tea-sale-row" data-cid="' + item.id + '">';
         h += '<label>' + item.name + '</label>';
