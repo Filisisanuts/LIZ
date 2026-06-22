@@ -1417,6 +1417,7 @@ function showAddInv(type, itemId) {
 function doAddInv(type, itemId) {
     var cfg = INV[type];
     var name = ($id('ai_name').value || '').trim();
+    console.log('doAddInv: type=' + type + ', itemId=' + itemId + ', name=' + name);
     if (!name) { toast('填名称'); return; }
 
     if (type === 'tea') {
@@ -1581,6 +1582,9 @@ function doAddInv(type, itemId) {
 
 // 通过事件委托处理库存表格中的编辑/删除按钮（避免内联 onclick）
 document.addEventListener('click', function(e) {
+    // 如果点击的是保存按钮，直接返回，不阻止保存操作
+    if (e.target.closest('.btn.p') && e.target.textContent.includes('保存')) return;
+
     console.log('点击事件触发:', e.target);
     var card = e.target.closest('[data-inv]');
     console.log('找到的data-inv元素:', card);
