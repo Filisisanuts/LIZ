@@ -432,7 +432,8 @@ function editInvSale(type, itemId, si) {
         h += '<div class="hrow"><label>数量</label><input class="inp" id="esi_qty" type="number" step="0.01" value="' + (s.qty || 0) + '" style="max-width:80px"></div>';
     }
 
-    h += '<div class="hrow"><label>金额</label><input class="inp" id="esi_amount" type="number" step="0.01" value="' + (s.amount || 0) + '" style="max-width:120px"></div>';
+    h += '<div class="hrow"><label>应收</label><input class="inp" id="esi_expected" type="number" step="0.01" value="' + (s.expectedAmount || 0) + '" style="max-width:90px;background:var(--card-h)" readonly">';
+    h += '实收:<input class="inp" id="esi_amount" type="number" step="0.01" value="' + (s.amount || 0) + '" style="max-width:90px"></div>';
 
     h += '<div class="brow" style="margin-top:14px;justify-content:flex-end">';
     h += '<button class="btn p" onclick="saveEditInvSale(\'' + type + '\',\'' + itemId + '\',' + si + ')">保存</button>';
@@ -458,6 +459,7 @@ function saveEditInvSale(type, itemId, si) {
         item.sales[si].qty = parseFloat($id('esi_qty').value) || 0;
     }
 
+    item.sales[si].expectedAmount = parseFloat($id('esi_expected').value) || 0;
     item.sales[si].amount = parseFloat($id('esi_amount').value) || 0;
     saveDB(DB);
     syncInvToDaily(type, oldDate);
@@ -1046,8 +1048,9 @@ function updateMvF(type, dir) {
             h += '<label>来源</label><input class="inp" id="mvReason" style="max-width:150px"></div>';
             h += '<div class="hrow"><label>进货价</label><input class="inp" id="mvCost" type="number" step="0.01" style="max-width:100px">元</div>';
         } else {
-            h += '<div class="hrow"><label>数量</label><input class="inp" id="mvQty" type="number" value="0" style="max-width:60px" oninput="calcMvCigAmt()"> 包 ';
-            h += '金额:<input class="inp" id="mvAmount" type="number" step="0.01" value="0" style="max-width:100px;background:var(--card-h)" readonly></div>';
+            h += '<div class="hrow"><label>数量</label><input class="inp" id="mvQty" type="number" value="0" style="max-width:60px" oninput="calcMvCigAmt()"> 包 </div>';
+            h += '<div class="hrow"><label>应收</label><input class="inp" id="mvExpected" type="number" step="0.01" value="0" style="max-width:90px;background:var(--card-h)" readonly>';
+            h += '实收:<input class="inp" id="mvAmount" type="number" step="0.01" value="0" style="max-width:90px"></div>';
             h += '<div class="hrow"><label>原因</label><input class="inp" id="mvReason" style="max-width:150px" value="销售"></div>';
         }
     } else if (type === 'other') {
@@ -1094,7 +1097,15 @@ function calcMvCigAmt() {
     var item = DB.cigItems.find(function(i) { return i.id === itemId; });
     if (!item) return;
     var qty = parseInt($id('mvQty').value) || 0;
-    $id('mvAmount').value = (qty * (item.pricePerUnit || 0)).toFixed(2);
+    var expected = (qty * (item.pricePerUnit || 0)).toFixed(2);
+    $id('mvExpected').value = expected;
+    // 实收跟随应收更新（只有实收等于之前的应收时才更新）
+    var amtInput = $id('mvAmount');
+    var prevExpected = amtInput.dataset.prevExpected || '0';
+    if (parseFloat(amtInput.value) === parseFloat(prevExpected)) {
+        amtInput.value = expected;
+    }
+    amtInput.dataset.prevExpected = expected;
 }
 
 // 销售时自动计算酒类金额
@@ -1188,19 +1199,20 @@ function doInvMove(type, id, dir) {
             toast('销售 ' + cups + '杯' + pots + '壶 应收:' + expected.toFixed(2) + ' 实收:' + amount.toFixed(2));
         } else if (type === 'cig') {
             var qty = parseInt($id('mvQty').value) || 0;
-            var amount = parseFloat($id('mvAmount').value) || 0;
+            var expected = parseFloat($id('mvExpected').value) || 0;
+            var amount = parseFloat($id('mvAmount').value) || expected;
             if (qty <= 0) { toast('填数量'); return; }
             upd(function(db) {
                 var it = db[cfg.key].find(function(i) { return i.id === id; });
                 if (!it) return;
-                it.sales.push({ date: date, qty: qty, amount: amount });
+                it.sales.push({ date: date, qty: qty, expectedAmount: expected, amount: amount });
             });
 
             // ★ 同步日报
             syncInvToDaily(type, date);
 
             closeModal();
-            toast('销售 ' + qty + (item.unit || '包') + ' ' + amount.toFixed(2) + '元');
+            toast('销售 ' + qty + (item.unit || '包') + ' 应收:' + expected.toFixed(2) + ' 实收:' + amount.toFixed(2));
         } else {
             var qty = parseInt($id('mvQty').value) || 0;
             var amount = parseFloat($id('mvAmount').value) || 0;
