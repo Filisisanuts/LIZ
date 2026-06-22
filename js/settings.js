@@ -116,23 +116,8 @@ function rData() {
     h += '<div class="sec">采购匹配映射</div>';
     h += '<div style="background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:14px;margin-bottom:12px">';
     h += '<p style="font-size:.74rem;color:var(--tx-s);margin-bottom:10px">配置采购名称到库存物品的映射，优先级高于匹配关键词</p>';
-    var mapping = DB.settings.purchaseMapping || {};
-    var mappingKeys = Object.keys(mapping);
-    h += '<div id="mappingList">';
-    if (mappingKeys.length) {
-        mappingKeys.forEach(function(k, i) {
-            h += '<div class="hrow" style="margin-bottom:6px">';
-            h += '<input class="inp mapping-key" style="flex:1" value="' + k.replace(/"/g, '&quot;') + '" placeholder="采购名称">';
-            h += '<span style="margin:0 6px">→</span>';
-            h += '<input class="inp mapping-val" style="flex:1" value="' + (mapping[k] || '').replace(/"/g, '&quot;') + '" placeholder="库存物品名称">';
-            h += '<button class="btn s d" onclick="this.parentElement.remove()">×</button>';
-            h += '</div>';
-        });
-    }
-    h += '</div>';
-    h += '<div class="brow" style="margin-top:10px">';
-    h += '<button class="btn s" onclick="addMappingRow()">+添加映射</button>';
-    h += '<button class="btn p" onclick="saveMapping()">保存映射</button>';
+    h += '<div class="brow">';
+    h += '<button class="btn p" onclick="showMappingConfig()">配置物品映射</button>';
     h += '</div>';
     h += '</div>';
 
@@ -560,5 +545,114 @@ function saveMapping() {
         db.settings.purchaseMapping = mapping;
     });
     toast('映射已保存');
+}
+
+// 显示物品映射配置弹窗
+function showMappingConfig() {
+    var h = '<h3>物品映射配置</h3>';
+    h += '<p style="font-size:.78rem;color:var(--tx-s);margin-bottom:12px">按分类配置匹配关键词，未配置的物品会高亮显示</p>';
+
+    // 分类筛选
+    h += '<div class="hrow" style="margin-bottom:12px">';
+    h += '<button class="btn s" onclick="filterMapping(\'all\')" id="filterAll">全部</button>';
+    h += '<button class="btn s" onclick="filterMapping(\'cig\')" id="filterCig">🚬香烟</button>';
+    h += '<button class="btn s" onclick="filterMapping(\'alc\')" id="filterAlc">🍺酒类</button>';
+    h += '<button class="btn s" onclick="filterMapping(\'other\')" id="filterOther">📦其他</button>';
+    h += '<button class="btn s" onclick="filterMapping(\'wh\')" id="filterWh">🏠仓库</button>';
+    h += '</div>';
+
+    // 物品列表
+    h += '<div id="mappingItems" style="max-height:50vh;overflow-y:auto;padding-right:4px">';
+
+    // 按分类分组
+    var categories = [
+        { type: 'cig', label: '🚬香烟', items: DB.cigItems || [] },
+        { type: 'alc', label: '🍺酒类', items: DB.alcItems || [] },
+        { type: 'other', label: '📦其他贵重物品', items: DB.otherItems || [] },
+        { type: 'wh', label: '🏠仓库', items: DB.whItems || [] }
+    ];
+
+    categories.forEach(function(cat) {
+        if (!cat.items.length) return;
+        h += '<div class="mapping-category" data-type="' + cat.type + '">';
+        h += '<div style="font-size:.82rem;font-weight:600;color:var(--ac);margin:10px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--bd-l)">' + cat.label + ' (' + cat.items.length + ')</div>';
+        cat.items.forEach(function(item) {
+            var hasKeyword = item.matchKeyword && item.matchKeyword.trim();
+            var bgStyle = hasKeyword ? '' : 'background:var(--card-h);';
+            h += '<div class="mapping-item" data-type="' + cat.type + '" style="display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:4px;border-radius:6px;' + bgStyle + '">';
+            h += '<span style="flex:1;font-size:.8rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + item.name + '</span>';
+            h += '<input class="inp mapping-kw" data-id="' + item.id + '" data-type="' + cat.type + '" style="width:120px;font-size:.76rem" value="' + (item.matchKeyword || '').replace(/"/g, '&quot;') + '" placeholder="' + (hasKeyword ? '' : '未设置') + '">';
+            if (!hasKeyword) {
+                h += '<span style="font-size:.7rem;color:var(--rd)">⚠️</span>';
+            }
+            h += '</div>';
+        });
+        h += '</div>';
+    });
+
+    h += '</div>';
+
+    // 统计和按钮
+    var totalItems = (DB.cigItems || []).length + (DB.alcItems || []).length + (DB.otherItems || []).length + (DB.whItems || []).length;
+    var configuredItems = 0;
+    ['cigItems', 'alcItems', 'otherItems', 'whItems'].forEach(function(key) {
+        (DB[key] || []).forEach(function(item) {
+            if (item.matchKeyword && item.matchKeyword.trim()) configuredItems++;
+        });
+    });
+    var unconfigured = totalItems - configuredItems;
+
+    h += '<div style="margin-top:12px;padding-top:8px;border-top:1px solid var(--bd-l);font-size:.76rem;color:var(--tx-m)">';
+    h += '已配置: <span style="color:var(--gn);font-weight:600">' + configuredItems + '</span> / ' + totalItems + ' 个物品';
+    if (unconfigured > 0) {
+        h += ' · <span style="color:var(--rd);font-weight:600">' + unconfigured + '</span> 个未配置';
+    }
+    h += '</div>';
+
+    h += '<div class="brow" style="margin-top:12px;justify-content:flex-end">';
+    h += '<button class="btn p" onclick="saveMappingConfig()">保存配置</button>';
+    h += '<button class="btn" onclick="closeModal()">关闭</button>';
+    h += '</div>';
+
+    showModal(h, 600);
+}
+
+// 筛选映射配置
+function filterMapping(type) {
+    var items = document.querySelectorAll('.mapping-category');
+    items.forEach(function(el) {
+        if (type === 'all' || el.dataset.type === type) {
+            el.style.display = '';
+        } else {
+            el.style.display = 'none';
+        }
+    });
+
+    // 更新按钮状态
+    ['filterAll', 'filterCig', 'filterAlc', 'filterOther', 'filterWh'].forEach(function(id) {
+        var btn = $id(id);
+        if (btn) {
+            btn.classList.toggle('active', id === 'filter' + type.charAt(0).toUpperCase() + type.slice(1) || (type === 'all' && id === 'filterAll'));
+        }
+    });
+}
+
+// 保存映射配置
+function saveMappingConfig() {
+    var inputs = document.querySelectorAll('.mapping-kw');
+    inputs.forEach(function(inp) {
+        var id = inp.dataset.id;
+        var type = inp.dataset.type;
+        var keyword = inp.value.trim();
+        var key = type === 'cig' ? 'cigItems' : type === 'alc' ? 'alcItems' : type === 'other' ? 'otherItems' : 'whItems';
+        var item = DB[key].find(function(i) { return i.id === id; });
+        if (item) {
+            item.matchKeyword = keyword;
+        }
+    });
+    saveDB(DB);
+    sbScheduleSave();
+    toast('配置已保存');
+    closeModal();
 }
 
