@@ -401,7 +401,7 @@ function delInvSaleConfirm(type, itemId, si, date) {
     if (!confirm('删除 ' + item.name + ' 的销售记录？\n' + desc)) return;
 
     item.sales.splice(si, 1);
-    saveDB();
+    saveDB(DB);
     syncInvToDaily(type, date);
 
     toast('已删除');
@@ -456,7 +456,7 @@ function saveEditInvSale(type, itemId, si) {
     }
 
     item.sales[si].amount = parseFloat($id('esi_amount').value) || 0;
-    saveDB();
+    saveDB(DB);
     syncInvToDaily(type, oldDate);
     if (oldDate !== newDate) syncInvToDaily(type, newDate);
 

@@ -448,7 +448,7 @@ function saveWHMove(id, idx) {
     item.movements[idx].qty = newQty;
     item.movements[idx].reason = $id('ewm_reason').value.trim();
 
-    saveDB();
+    saveDB(DB);
     closeModal();
     toast('已更新');
     setTimeout(function() { whDetail(id); }, 100);
@@ -468,7 +468,7 @@ function delWHMove(id, idx) {
     item.stock = Math.round(item.stock * 100) / 100;
 
     item.movements.splice(idx, 1);
-    saveDB();
+    saveDB(DB);
     toast('已删除');
     setTimeout(function() { whDetail(id); }, 100);
 }

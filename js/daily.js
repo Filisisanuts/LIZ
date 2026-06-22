@@ -641,16 +641,16 @@ function renderDP() {
             Object.keys(parsedCig).forEach(function(k) {
                 if (!parsedCig[k]) return;
                 // 精确匹配优先
-                if (item.name.indexOf(k) >= 0 || k.indexOf(item.name) >= 0) {
+                if (item.name.indexOf(k) >= 0) {
                     dq = parsedCig[k];
                     da = dq * (item.pricePerUnit || 0);
                 }
                 // 只有在没有精确匹配时，才尝试模糊匹配
                 else if (dq === 0) {
-                    // 检查是否是相似名称（如"紫徽"匹配"紫徽商"）
+                    // 检查是否是相似名称（如"徽商"匹配"黄山（徽商）"）
                     var itemNameClean = item.name.replace(/黄山|（|）|\(|\)/g, '');
                     var keyClean = k.replace(/黄山|（|）|\(|\)/g, '');
-                    if (itemNameClean.indexOf(keyClean) >= 0 || keyClean.indexOf(itemNameClean) >= 0) {
+                    if (itemNameClean.indexOf(keyClean) >= 0) {
                         dq = parsedCig[k];
                         da = dq * (item.pricePerUnit || 0);
                     }
@@ -1190,7 +1190,7 @@ function syncInvToDaily(type, date) {
         }
     }
 
-    saveDB();
+    saveDB(DB);
 }
 
 // ==================== 日报数据校验 ====================
