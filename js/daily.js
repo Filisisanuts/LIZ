@@ -600,7 +600,13 @@ function renderDP() {
             ' oninput="setDVal(\'' + pa + '\',this.value)"></div>';
     };
 
-    var h = '<div class="pv-card"><h4>营收</h4>';
+    // 日期选择
+    var h = '<div class="pv-card"><h4>日期</h4>';
+    h += '<div class="pv-row"><span class="k">日报日期</span>';
+    h += '<input class="ed-input" id="dpDate" type="text" readonly value="' + r.date + '" onclick="_dpOpen(\'dpDate\')" onchange="setDVal(\'date\',this.value)" style="max-width:160px;cursor:pointer"></div>';
+    h += '</div>';
+
+    h += '<div class="pv-card"><h4>营收</h4>';
     h += inpRow('流水', r.revenue.grossSales, 'revenue.grossSales');
     h += inpRow('折扣', r.revenue.discount, 'revenue.discount');
     h += inpRow('实收', r.revenue.netSales, 'revenue.netSales');
@@ -731,7 +737,12 @@ function renderDP() {
 function setDVal(pa, val) {
     var p = pa.split('.'), o = _pd;
     for (var i = 0; i < p.length - 1; i++) o = o[p[i]];
-    o[p[p.length - 1]] = parseFloat(val) || 0;
+    // 日期字段特殊处理
+    if (pa === 'date') {
+        o[p[p.length - 1]] = val;
+    } else {
+        o[p[p.length - 1]] = parseFloat(val) || 0;
+    }
     if (pa.indexOf('delivery.') === 0 && pa !== 'delivery.total')
         _pd.delivery.total = (_pd.delivery.meituan || 0) + (_pd.delivery.taobao || 0) + (_pd.delivery.jd || 0);
     if (pa.indexOf('payment.ar.') === 0 && pa !== 'payment.ar.total')
