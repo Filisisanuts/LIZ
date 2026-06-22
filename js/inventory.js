@@ -1581,32 +1581,33 @@ function doAddInv(type, itemId) {
 // ------ 表格行操作事件委托 ------
 
 // 通过事件委托处理库存表格中的编辑/删除按钮（避免内联 onclick）
-document.addEventListener('click', function(e) {
+// 支持移动端触摸事件
+function handleInvAction(e) {
     // 如果点击的是保存按钮，直接返回，不阻止保存操作
     if (e.target.closest('.btn.p') && e.target.textContent.includes('保存')) return;
 
-    console.log('点击事件触发:', e.target);
     var card = e.target.closest('[data-inv]');
-    console.log('找到的data-inv元素:', card);
     if (!card) return;
     var parts = card.dataset.inv.split('_');
-    console.log('解析parts:', parts);
     var type = parts[0];
     var id = parts.slice(1).join('_');
-    console.log('type:', type, 'id:', id);
 
     if (e.target.closest('[data-act="del"]')) {
         if (!confirm('确认删除？')) return;
         DB[INV[type].key] = DB[INV[type].key].filter(function(i) { return i.id !== id; });
         DB._ts = Date.now();
         saveDB(DB);
-        sbScheduleSave;
+        sbScheduleSave();
         toast('已删除');
         rInv(type);
     } else if (e.target.closest('[data-act="edit"]')) {
-        console.log('点击编辑按钮');
         showAddInv(type, id);
     }
+}
+document.addEventListener('click', handleInvAction);
+document.addEventListener('touchend', function(e) {
+    // 延迟执行，避免与click事件重复
+    setTimeout(function() { handleInvAction(e); }, 100);
 });
 
 // 获取指定月份的期初库存
