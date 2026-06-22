@@ -1325,6 +1325,31 @@ function saveDailyModal(date) {
 function delDailyFromModal(date) {
     if (!confirm('删除 ' + date + ' 的日报？')) return;
     upd(function(db) {
+        // 先获取要删除的日报数据，用于同步删除销售记录
+        var oldReport = db.dailyReports.find(function(d) { return d.date === date; });
+        if (oldReport) {
+            // 删除茗茶销售记录
+            Object.keys(oldReport.teaSales || {}).forEach(function(tid) {
+                var item = db.teaItems.find(function(t) { return t.id === tid; });
+                if (item) item.sales = item.sales.filter(function(s) { return s.date !== date; });
+            });
+            // 删除香烟销售记录
+            Object.keys(oldReport.cigSales || {}).forEach(function(cid) {
+                var item = db.cigItems.find(function(c) { return c.id === cid; });
+                if (item) item.sales = item.sales.filter(function(s) { return s.date !== date; });
+            });
+            // 删除酒类销售记录
+            Object.keys(oldReport.alcSales || {}).forEach(function(aid) {
+                var item = db.alcItems.find(function(a) { return a.id === aid; });
+                if (item) item.sales = item.sales.filter(function(s) { return s.date !== date; });
+            });
+            // 删除其他贵重物品销售记录
+            Object.keys(oldReport.otherSales || {}).forEach(function(oid) {
+                var item = db.otherItems.find(function(o) { return o.id === oid; });
+                if (item) item.sales = item.sales.filter(function(s) { return s.date !== date; });
+            });
+        }
+        // 删除日报
         db.dailyReports = db.dailyReports.filter(function(d) { return d.date !== date; });
     });
     toast('已删除');
