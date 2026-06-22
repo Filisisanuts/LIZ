@@ -729,17 +729,21 @@ function renderDP() {
         } else {
             Object.keys(parsedCig).forEach(function(k) {
                 if (!parsedCig[k]) return;
-                // 精确匹配优先
-                if (item.name.indexOf(k) >= 0) {
+                // 提取括号内的品牌名进行匹配
+                var bracketMatch = item.name.match(/[（(]([\s\S]+?)[）)]/);
+                var itemNameInBracket = bracketMatch ? bracketMatch[1] : item.name;
+                var itemNameClean = itemNameInBracket.replace(/黄山|（|）|\(|\)/g, '');
+                var keyClean = k.replace(/黄山|（|）|\(|\)/g, '');
+                // 精确匹配：清理后的名称必须完全相同
+                if (itemNameClean === keyClean) {
                     dq = parsedCig[k];
                     da = dq * (item.pricePerUnit || 0);
                 }
-                // 只有在没有精确匹配时，才尝试模糊匹配
-                else if (dq === 0) {
-                    // 检查是否是相似名称（如"徽商"匹配"黄山（徽商）"）
-                    var itemNameClean = item.name.replace(/黄山|（|）|\(|\)/g, '');
-                    var keyClean = k.replace(/黄山|（|）|\(|\)/g, '');
-                    if (itemNameClean.indexOf(keyClean) >= 0) {
+                // 模糊匹配：解析键名必须完整包含在品牌名中（不是品牌名包含解析键名）
+                else if (dq === 0 && keyClean.length >= 2 && itemNameClean.indexOf(keyClean) >= 0) {
+                    // 避免短名匹配长名（如"徽商"匹配"紫徽商新视界"）
+                    // 只有当品牌名长度<=解析键名长度*2+2时才匹配
+                    if (itemNameClean.length <= keyClean.length * 2 + 2) {
                         dq = parsedCig[k];
                         da = dq * (item.pricePerUnit || 0);
                     }
