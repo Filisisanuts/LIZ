@@ -844,6 +844,22 @@ function doEditInvSale(type, itemId, idx) {
             it.sales[idx] = { date: date, cups: cups, pots: pots, expectedAmount: expected, amount: amount };
             syncDailyTeaSales(db, date, itemId, cups, pots, amount);
         });
+    } else if (type === 'alc') {
+        var qty = parseInt($id('eir_sqty').value) || 0;
+        upd(function(db) {
+            var it = db[INV[type].key].find(function(i) { return i.id === itemId; });
+            if (!it) return;
+            it.sales[idx] = { date: date, qty: qty, amount: amount };
+            syncDailyAlcSales(db, date, itemId, qty, amount);
+        });
+    } else if (type === 'other') {
+        var qty = parseFloat($id('eir_sqty').value) || 0;
+        upd(function(db) {
+            var it = db[INV[type].key].find(function(i) { return i.id === itemId; });
+            if (!it) return;
+            it.sales[idx] = { date: date, qty: qty, amount: amount };
+            syncDailyOtherSales(db, date, itemId, qty, amount);
+        });
     } else {
         var qty = parseInt($id('eir_sqty').value) || 0;
         upd(function(db) {
@@ -911,6 +927,26 @@ function syncDailyTeaSales(db, date, itemId, cups, pots, amt) {
         if (dr.date !== date) return;
         if (dr.teaSales && dr.teaSales[itemId]) {
             dr.teaSales[itemId] = { cups: cups, pots: pots, amount: amt };
+        }
+    });
+}
+
+// 同步酒类销售数据到日报
+function syncDailyAlcSales(db, date, itemId, qty, amt) {
+    db.dailyReports.forEach(function(dr) {
+        if (dr.date !== date) return;
+        if (dr.alcSales && dr.alcSales[itemId]) {
+            dr.alcSales[itemId] = { qty: qty, amount: amt };
+        }
+    });
+}
+
+// 同步其他贵重物品销售数据到日报
+function syncDailyOtherSales(db, date, itemId, qty, amt) {
+    db.dailyReports.forEach(function(dr) {
+        if (dr.date !== date) return;
+        if (dr.otherSales && dr.otherSales[itemId]) {
+            dr.otherSales[itemId] = { qty: qty, amount: amt };
         }
     });
 }

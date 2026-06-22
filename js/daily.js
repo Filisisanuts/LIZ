@@ -921,7 +921,13 @@ function saveDaily() {
             var amt = parseFloat(row.querySelector('.tea-amt').value) || expected;
             if (cups > 0 || pots > 0 || amt > 0) {
                 _pd.teaSales[id] = { cups: cups, pots: pots, expectedAmount: expected, amount: amt };
-                item.sales.push({ date: _pd.date, cups: cups, pots: pots, expectedAmount: expected, amount: amt });
+                // 检查是否已有该日期的记录，有则更新，无则添加
+                var existingIdx = item.sales.findIndex(function(s) { return s.date === _pd.date; });
+                if (existingIdx >= 0) {
+                    item.sales[existingIdx] = { date: _pd.date, cups: cups, pots: pots, expectedAmount: expected, amount: amt };
+                } else {
+                    item.sales.push({ date: _pd.date, cups: cups, pots: pots, expectedAmount: expected, amount: amt });
+                }
             }
         });
 
@@ -938,7 +944,13 @@ function saveDaily() {
             if (amt === 0 && expected > 0) amt = expected;
             if (qty > 0 || amt > 0) {
                 _pd.cigSales[id] = { qty: qty, expectedAmount: expected, amount: amt };
-                item.sales.push({ date: _pd.date, qty: qty, expectedAmount: expected, amount: amt });
+                // 检查是否已有该日期的记录，有则更新，无则添加
+                var existingIdx = item.sales.findIndex(function(s) { return s.date === _pd.date; });
+                if (existingIdx >= 0) {
+                    item.sales[existingIdx] = { date: _pd.date, qty: qty, expectedAmount: expected, amount: amt };
+                } else {
+                    item.sales.push({ date: _pd.date, qty: qty, expectedAmount: expected, amount: amt });
+                }
                 cigTotal += amt;
             }
         });
@@ -956,7 +968,13 @@ function saveDaily() {
             if (amt === 0 && expected > 0) amt = expected;
             if (qty > 0 || amt > 0) {
                 _pd.alcSales[id] = { qty: qty, expectedAmount: expected, amount: amt };
-                item.sales.push({ date: _pd.date, qty: qty, expectedAmount: expected, amount: amt });
+                // 检查是否已有该日期的记录，有则更新，无则添加
+                var existingIdx = item.sales.findIndex(function(s) { return s.date === _pd.date; });
+                if (existingIdx >= 0) {
+                    item.sales[existingIdx] = { date: _pd.date, qty: qty, expectedAmount: expected, amount: amt };
+                } else {
+                    item.sales.push({ date: _pd.date, qty: qty, expectedAmount: expected, amount: amt });
+                }
                 alcTotal += amt;
             }
         });
@@ -973,7 +991,13 @@ function saveDaily() {
             if (amt === 0 && expected > 0) amt = expected;
             if (qty > 0 || amt > 0) {
                 _pd.otherSales[id] = { qty: qty, expectedAmount: expected, amount: amt };
-                item.sales.push({ date: _pd.date, qty: qty, expectedAmount: expected, amount: amt });
+                // 检查是否已有该日期的记录，有则更新，无则添加
+                var existingIdx = item.sales.findIndex(function(s) { return s.date === _pd.date; });
+                if (existingIdx >= 0) {
+                    item.sales[existingIdx] = { date: _pd.date, qty: qty, expectedAmount: expected, amount: amt };
+                } else {
+                    item.sales.push({ date: _pd.date, qty: qty, expectedAmount: expected, amount: amt });
+                }
                 otherTotal += amt;
             }
         });
@@ -1428,6 +1452,21 @@ function syncInvToDaily(type, date) {
                 }
             });
             dr.alcSales = newAlcSales;
+        }
+
+        if (type === 'other') {
+            var newOtherSales = {};
+            DB.otherItems.forEach(function(item) {
+                var qty = 0, amount = 0;
+                item.sales.filter(function(s) { return s.date === date; }).forEach(function(s) {
+                    qty += (s.qty || 0);
+                    amount += (s.amount || 0);
+                });
+                if (qty > 0 || amount > 0) {
+                    newOtherSales[item.id] = { qty: qty, amount: amount };
+                }
+            });
+            dr.otherSales = newOtherSales;
         }
     }
 
