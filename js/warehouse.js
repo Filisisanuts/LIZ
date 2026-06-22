@@ -120,6 +120,9 @@ function showAddWH() {
     h += '<label>单位</label><input class="inp" id="wh_u" placeholder="个/箱/袋/瓶" style="max-width:100px">';
     h += '</div>';
     h += '<div class="hrow">';
+    h += '<label>匹配关键词</label><input class="inp" id="wh_mk" style="flex:2" placeholder="采购单名称包含此关键词时自动匹配">';
+    h += '</div>';
+    h += '<div class="hrow">';
     h += '<label>当前库存</label><input class="inp" id="wh_s" type="number" value="0" style="max-width:80px">';
     h += '<label>安全库存</label><input class="inp" id="wh_ss" type="number" value="0" style="max-width:80px">';
     h += '<span style="font-size:.72rem;color:var(--tx-m)">低于此数提醒</span>';
@@ -151,6 +154,7 @@ function doAddWH() {
             upd(function(db) { db.whCats = cats; });
         }
     }
+    var mk = $id('wh_mk') ? $id('wh_mk').value.trim() : '';
     upd(function(db) {
         db.whItems.push({
             id: 'wh_' + Date.now(),
@@ -159,6 +163,7 @@ function doAddWH() {
             unit: $id('wh_u').value.trim() || '个',
             stock: parseInt($id('wh_s').value) || 0,
             safeStock: parseInt($id('wh_ss').value) || 0,
+            matchKeyword: mk,
             movements: []
         });
     });
@@ -284,6 +289,10 @@ function showEditWH(id) {
     h += '<label>单位</label><input class="inp" id="ewh_u" style="max-width:80px" value="' + (item.unit || '') + '">';
     h += '</div>';
     h += '<div class="hrow">';
+    h += '<label>匹配关键词</label><input class="inp" id="ewh_mk" style="flex:2" value="' + (item.matchKeyword || '').replace(/"/g, '&quot;') + '">';
+    h += '<span style="font-size:.72rem;color:var(--tx-m)">采购单名称包含此关键词时自动匹配</span>';
+    h += '</div>';
+    h += '<div class="hrow">';
     h += '<label>当前库存</label><input class="inp" id="ewh_s" type="number" style="max-width:80px" value="' + item.stock + '">';
     h += '<label>安全库存</label><input class="inp" id="ewh_ss" type="number" style="max-width:80px" value="' + (item.safeStock || 0) + '">';
     h += '<span style="font-size:.72rem;color:var(--tx-m)">低于此数提醒</span>';
@@ -298,6 +307,7 @@ function showEditWH(id) {
 function doEditWH(id) {
     var n = document.getElementById('ewh_n').value.trim();
     if (!n) { toast('填品名'); return; }
+    var mk = document.getElementById('ewh_mk') ? document.getElementById('ewh_mk').value.trim() : '';
     upd(function(db) {
         var it = db.whItems.find(function(i) { return i.id === id; });
         if (!it) return;
@@ -306,6 +316,7 @@ function doEditWH(id) {
         it.unit = document.getElementById('ewh_u').value.trim() || '个';
         it.stock = parseInt(document.getElementById('ewh_s').value) || 0;
         it.safeStock = parseInt(document.getElementById('ewh_ss').value) || 0;
+        it.matchKeyword = mk;
     });
     closeModal();
     toast('已更新');
