@@ -21,16 +21,24 @@ function _sbDataId() {
 // 从云端下载当前用户的数据
 // force 参数：true 时强制下载，忽略时间戳比较
 async function sbLoad(force) {
-    if (!_sb.ready) return null;
+    if (!_sb.ready) { console.log('sbLoad: Supabase未就绪'); return null; }
     var dataId = _sbDataId();
-    if (!dataId) return null;
+    if (!dataId) { console.log('sbLoad: 未登录'); return null; }
     try {
+        console.log('sbLoad: 开始从云端获取数据, 数据ID:', dataId);
         var resp = await _sb.client.from('cafe_data').select('data, updated_at').eq('id', dataId).single();
-        if (resp.error || !resp.data) return null;
+        if (resp.error) { console.log('sbLoad: 查询出错', resp.error); return null; }
+        if (!resp.data) { console.log('sbLoad: 云端没有数据'); return null; }
         var remote = resp.data.data;
+        console.log('sbLoad: 获取到云端数据', '云端_ts:', remote._ts, '本地_ts:', DB._ts || 0);
         // 强制下载或云端数据更新时返回
-        if (force || (remote._ts && remote._ts > (DB._ts || 0))) return remote;
-    } catch (e) { console.warn('Supabase 读取失败:', e); }
+        if (force || (remote._ts && remote._ts > (DB._ts || 0))) {
+            console.log('sbLoad: 返回云端数据');
+            return remote;
+        } else {
+            console.log('sbLoad: 本地数据更新，跳过下载');
+        }
+    } catch (e) { console.error('Supabase 读取失败:', e); }
     return null;
 }
 
