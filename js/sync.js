@@ -30,14 +30,18 @@ async function sbLoad(force) {
         if (resp.error) { console.log('sbLoad: 查询出错', resp.error); return null; }
         if (!resp.data) { console.log('sbLoad: 云端没有数据'); return null; }
         var remote = resp.data.data;
-        console.log('sbLoad: 获取到云端数据', '云端_ts:', remote._ts, '本地_ts:', DB._ts || 0);
-        // 强制下载或云端数据更新时返回
-        if (force || (remote._ts && remote._ts > (DB._ts || 0))) {
-            console.log('sbLoad: 返回云端数据');
+        console.log('sbLoad: 获取到云端数据', 'force:', force, '云端_ts:', remote._ts, '本地_ts:', DB._ts || 0);
+        // 强制下载：直接返回云端数据
+        // 非强制：云端数据更新时返回
+        if (force) {
+            console.log('sbLoad: 强制下载，返回云端数据');
             return remote;
-        } else {
-            console.log('sbLoad: 本地数据更新，跳过下载');
         }
+        if (remote._ts && remote._ts > (DB._ts || 0)) {
+            console.log('sbLoad: 云端数据更新，返回云端数据');
+            return remote;
+        }
+        console.log('sbLoad: 本地数据更新，跳过下载');
     } catch (e) { console.error('Supabase 读取失败:', e); }
     return null;
 }

@@ -127,7 +127,7 @@ function rData() {
     h += '<p style="font-size:.74rem;color:var(--gn)">✓ 已连接 Supabase</p>';
     h += '<div style="font-size:.68rem;color:var(--tx-m);margin-top:4px">数据按账号隔离，每个登录账号独立存储</div>';
     h += '<div class="brow" style="margin-top:8px"><button class="btn p" onclick="sbSave().then(function(){toast(\'已上传\')})">上传</button>';
-    h += '<button class="btn" onclick="sbLoad(true).then(function(remote){if(remote){DB=remote;saveDB(DB);toast(\'已下载\');goPage(_curPage||\'dash\');}else{toast(\'云端没有数据\');}})">下载</button></div>';
+    h += '<button class="btn" onclick="doDownloadFromCloud()">下载</button></div>';
     h += '</div>';
 
     // 数据码（游客不可用）
@@ -654,5 +654,28 @@ function saveMappingConfig() {
     sbScheduleSave();
     toast('配置已保存');
     closeModal();
+}
+
+// 从云端下载数据
+function doDownloadFromCloud() {
+    toast('正在下载...');
+    sbLoad(true).then(function(remote) {
+        console.log('下载结果:', remote ? '成功' : '失败');
+        if (remote) {
+            console.log('云端数据大小:', JSON.stringify(remote).length);
+            console.log('云端数据_ts:', remote._ts);
+            // 直接替换本地数据
+            DB = remote;
+            saveDB(DB);
+            toast('已下载');
+            // 刷新当前页面
+            goPage(_curPage || 'dash');
+        } else {
+            toast('云端没有数据');
+        }
+    }).catch(function(e) {
+        console.error('下载失败:', e);
+        toast('下载失败: ' + e.message);
+    });
 }
 
