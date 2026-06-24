@@ -49,8 +49,16 @@ async function sbSave() {
         // 同时写入共享行，供 dashboard.html 读取
         var result2 = await _sb.client.from('cafe_data').upsert({ id: 'shop_data', data: DB, updated_at: new Date().toISOString() });
         console.log('共享行上传结果:', result2);
+        // 检查上传结果
+        if (result1.error) {
+            toast('上传失败: ' + (result1.error.message || '未知错误'));
+        } else if (result2.error) {
+            toast('共享行上传失败: ' + (result2.error.message || '未知错误'));
+        }
+        // 上传成功不显示提示，避免频繁打扰用户
     } catch (e) {
         console.error('Supabase 保存异常:', e);
+        toast('上传异常: ' + e.message);
     }
     _sb.saving = false;
     updSyncInd();
