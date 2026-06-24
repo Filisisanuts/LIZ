@@ -127,7 +127,7 @@ function rData() {
     h += '<p style="font-size:.74rem;color:var(--gn)">✓ 已连接 Supabase</p>';
     h += '<div style="font-size:.68rem;color:var(--tx-m);margin-top:4px">数据按账号隔离，每个登录账号独立存储</div>';
     h += '<div class="brow" style="margin-top:8px"><button class="btn p" onclick="sbSave().then(function(){toast(\'已上传\')})">上传</button>';
-    h += '<button class="btn" onclick="sbSyncOnStart().then(function(){goPage(_curPage||\'dash\');toast(\'已下载\')})">下载</button></div>';
+    h += '<button class="btn" onclick="sbLoad(true).then(function(remote){if(remote){DB=remote;saveDB(DB);toast(\'已下载\');goPage(_curPage||\'dash\');}else{toast(\'云端没有数据\');}})">下载</button></div>';
     h += '</div>';
 
     // 数据码（游客不可用）

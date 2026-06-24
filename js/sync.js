@@ -19,7 +19,8 @@ function _sbDataId() {
 }
 
 // 从云端下载当前用户的数据
-async function sbLoad() {
+// force 参数：true 时强制下载，忽略时间戳比较
+async function sbLoad(force) {
     if (!_sb.ready) return null;
     var dataId = _sbDataId();
     if (!dataId) return null;
@@ -27,24 +28,30 @@ async function sbLoad() {
         var resp = await _sb.client.from('cafe_data').select('data, updated_at').eq('id', dataId).single();
         if (resp.error || !resp.data) return null;
         var remote = resp.data.data;
-        if (remote._ts && remote._ts > (DB._ts || 0)) return remote;
+        // 强制下载或云端数据更新时返回
+        if (force || (remote._ts && remote._ts > (DB._ts || 0))) return remote;
     } catch (e) { console.warn('Supabase 读取失败:', e); }
     return null;
 }
 
 // 上传当前用户的数据到云端（同时写入共享行供报表页读取）
 async function sbSave() {
-    if (!_sb.ready || _sb.saving) return;
+    if (!_sb.ready || _sb.saving) { console.log('跳过保存: ready=' + _sb.ready + ', saving=' + _sb.saving); return; }
     var dataId = _sbDataId();
-    if (!dataId) return;
+    if (!dataId) { console.log('跳过保存: 未登录'); return; }
     _sb.saving = true;
     DB._ts = Date.now();
+    console.log('开始上传数据...', '数据ID:', dataId, '数据大小:', JSON.stringify(DB).length);
     try {
         var payload = { id: dataId, data: DB, updated_at: new Date().toISOString() };
-        await _sb.client.from('cafe_data').upsert(payload);
+        var result1 = await _sb.client.from('cafe_data').upsert(payload);
+        console.log('用户数据上传结果:', result1);
         // 同时写入共享行，供 dashboard.html 读取
-        await _sb.client.from('cafe_data').upsert({ id: 'shop_data', data: DB, updated_at: new Date().toISOString() });
-    } catch (e) { console.warn('Supabase 保存异常:', e); }
+        var result2 = await _sb.client.from('cafe_data').upsert({ id: 'shop_data', data: DB, updated_at: new Date().toISOString() });
+        console.log('共享行上传结果:', result2);
+    } catch (e) {
+        console.error('Supabase 保存异常:', e);
+    }
     _sb.saving = false;
     updSyncInd();
 }
