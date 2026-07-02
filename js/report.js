@@ -1,17 +1,24 @@
 
 // 月度财务报告主页：核心指标 + 子标签导航 + 多维度报表
 function rReport() {
-    // 先检查是否已有月份选择器，如果有就使用它的值
+    // 先检查是否已有月份选择器，如果没有则从URL参数或默认当月
     var existingPicker = document.getElementById('repM');
-    var ym = existingPicker ? existingPicker.value : curYM();
+    var ym = existingPicker ? existingPicker.value : (
+        (new URLSearchParams(window.location.search)).get('month') || curYM()
+    );
 
-    // 月份选择器 + 分享链接
-    var h = '<div class="hrow" style="flex-wrap:wrap;gap:8px;align-items:center"><label>月份</label>';
-    h += '<button class="btn s" onclick="reportCalNav(-1)">◀</button>';
-    h += '<input class="inp" id="repM" type="text" readonly placeholder="选择月份" value="' + ym + '" onclick="_mpOpen(\'repM\')" onchange="reportCalPickYM(this.value)" style="max-width:180px;cursor:pointer">';
-    h += '<button class="btn s" onclick="reportCalNav(1)">▶</button>';
-    h += '<button class="btn s" onclick="copyDashLink()" style="font-size:.7rem">📋 分享</button>';
-    h += '</div>';
+    // dashboard.html 分享页不显示月份选择器和分享按钮
+    var _isDashboard = window.location.pathname.indexOf('dashboard.html') >= 0;
+    var h = '';
+    if (!_isDashboard) {
+        // 月份选择器 + 分享链接
+        h += '<div class="hrow" style="flex-wrap:wrap;gap:8px;align-items:center"><label>月份</label>';
+        h += '<button class="btn s" onclick="reportCalNav(-1)">◀</button>';
+        h += '<input class="inp" id="repM" type="text" readonly placeholder="选择月份" value="' + ym + '" onclick="_mpOpen(\'repM\')" onchange="reportCalPickYM(this.value)" style="max-width:180px;cursor:pointer">';
+        h += '<button class="btn s" onclick="reportCalNav(1)">▶</button>';
+        h += '<button class="btn s" onclick="copyDashLink()" style="font-size:.7rem">📋 分享</button>';
+        h += '</div>';
+    }
 
     var m = $id('repM') ? $id('repM').value || ym : ym;
     var mr = getMR(m);
@@ -721,7 +728,7 @@ function initRepCharts(id) {
         AC('repChart', 'bar', {
             labels: ['营业收入', '营业成本', '毛利', '营业费用', '营业利润'],
             datasets: [{ data: [D.net || 0, D.netPur || 0, D.gp || 0, D.expTotal || 0, D.op || 0], backgroundColor: ['#34d399', '#f87171', '#c9a84c', '#f87171', '#34d399'], borderRadius: 4 }]
-        }, { responsive: true, maintainAspectRatio: true, aspectRatio: 3, plugins: { legend: { display: false } }, scales: { y: { grid: { color: 'rgba(45,48,65,.3)' }, ticks: { callback: function(v) { return (v / 10000).toFixed(1) + '万'; } } }, x: { grid: { display: false } } } });
+        }, { responsive: true, maintainAspectRatio: true, aspectRatio: 2, plugins: { legend: { display: false } }, scales: { y: { grid: { color: 'rgba(45,48,65,.3)' }, ticks: { callback: function(v) { return (v / 10000).toFixed(1) + '万'; } } }, x: { grid: { display: false } } } });
     }
 
     // 营收总表双饼图
@@ -729,11 +736,11 @@ function initRepCharts(id) {
         AC('repChart1', 'doughnut', {
             labels: ['厨房', '吧台', '外卖', '香烟', '其他'],
             datasets: [{ data: [D.kit || 0, D.bar || 0, D.del || 0, D.cig || 0, D.other || 0], backgroundColor: bgc, borderWidth: 0, hoverOffset: 6 }]
-        }, { responsive: true, maintainAspectRatio: true, aspectRatio: 1.5, cutout: '58%', plugins: { title: { display: true, text: '收入分类', font: { size: 12 } }, legend: { position: 'bottom', labels: { font: { size: 9 }, padding: 8 } } } });
+        }, { responsive: true, maintainAspectRatio: true, aspectRatio: 1.2, cutout: '58%', plugins: { title: { display: true, text: '收入分类', font: { size: 12 } }, legend: { position: 'bottom', labels: { font: { size: 9 }, padding: 8 } } } });
         AC('repChart2', 'doughnut', {
             labels: ['POS机', '建行', '现金', '会员', '外卖', '应收'],
             datasets: [{ data: [D.pos || 0, D.ccb || 0, D.cash || 0, D.member || 0, D.del || 0, D.ar || 0], backgroundColor: bgc, borderWidth: 0, hoverOffset: 6 }]
-        }, { responsive: true, maintainAspectRatio: true, aspectRatio: 1.5, cutout: '58%', plugins: { title: { display: true, text: '支付渠道', font: { size: 12 } }, legend: { position: 'bottom', labels: { font: { size: 9 }, padding: 8 } } } });
+        }, { responsive: true, maintainAspectRatio: true, aspectRatio: 1.2, cutout: '58%', plugins: { title: { display: true, text: '支付渠道', font: { size: 12 } }, legend: { position: 'bottom', labels: { font: { size: 9 }, padding: 8 } } } });
     }
 
     // 成本费用图表
@@ -745,12 +752,12 @@ function initRepCharts(id) {
         AC('repChart', 'bar', {
             labels: purItems.map(function(i) { return i[0]; }),
             datasets: [{ data: purItems.map(function(i) { return i[1]; }), backgroundColor: bgc, borderRadius: 4 }]
-        }, { indexAxis: 'y', responsive: true, maintainAspectRatio: true, aspectRatio: 2, plugins: { title: { display: true, text: '采购成本', font: { size: 12 } }, legend: { display: false } }, scales: { x: { grid: { color: 'rgba(45,48,65,.3)' } }, y: { grid: { display: false } } } });
+        }, { indexAxis: 'y', responsive: true, maintainAspectRatio: true, aspectRatio: 1.5, plugins: { title: { display: true, text: '采购成本', font: { size: 12 } }, legend: { display: false } }, scales: { x: { grid: { color: 'rgba(45,48,65,.3)' } }, y: { grid: { display: false } } } });
         if (expItems.length) {
             AC('repChart2', 'doughnut', {
                 labels: expItems.map(function(i) { return i[0]; }),
                 datasets: [{ data: expItems.map(function(i) { return i[1]; }), backgroundColor: bgc, borderWidth: 0 }]
-            }, { responsive: true, maintainAspectRatio: true, aspectRatio: 1.5, cutout: '55%', plugins: { title: { display: true, text: '费用构成', font: { size: 12 } }, legend: { position: 'bottom', labels: { font: { size: 9 }, padding: 8 } } } });
+            }, { responsive: true, maintainAspectRatio: true, aspectRatio: 1.2, cutout: '55%', plugins: { title: { display: true, text: '费用构成', font: { size: 12 } }, legend: { position: 'bottom', labels: { font: { size: 9 }, padding: 8 } } } });
         }
     }
 
@@ -762,7 +769,7 @@ function initRepCharts(id) {
                 { label: '收入', data: [D.kit || 0, D.barNoTea || 0, D.tea || 0, D.del || 0, D.cig || 0, D.alc || 0], backgroundColor: 'rgba(201,168,76,.25)', borderColor: '#c9a84c', borderWidth: 1, borderRadius: 4 },
                 { label: '毛利', data: [D.kitGP || 0, D.barGP || 0, D.teaGP || 0, D.delGP || 0, D.cigGP || 0, D.alcGP || 0], backgroundColor: 'rgba(52,211,153,.6)', borderColor: '#34d399', borderWidth: 1, borderRadius: 4 }
             ]
-        }, { responsive: true, maintainAspectRatio: true, aspectRatio: 2.5, scales: { y: { grid: { color: 'rgba(45,48,65,.3)' }, ticks: { callback: function(v) { return (v / 10000).toFixed(1) + '万'; } } }, x: { grid: { display: false } } } });
+        }, { responsive: true, maintainAspectRatio: true, aspectRatio: 1.5, scales: { y: { grid: { color: 'rgba(45,48,65,.3)' }, ticks: { callback: function(v) { return (v / 10000).toFixed(1) + '万'; } } }, x: { grid: { display: false } } } });
     }
 
     // 香烟/酒类图表
@@ -787,11 +794,11 @@ function initRepCharts(id) {
             AC('repChart1', 'bar', {
                 labels: stats.map(function(s) { return s.item.name; }),
                 datasets: [{ label: '实收', data: stats.map(function(s) { return s.revenue; }), backgroundColor: 'rgba(201,168,76,.6)', borderRadius: 4 }]
-            }, { indexAxis: 'y', responsive: true, maintainAspectRatio: true, aspectRatio: 2, plugins: { title: { display: true, text: '茗茶销售额', font: { size: 12 } }, legend: { display: false } }, scales: { x: { grid: { color: 'rgba(45,48,65,.3)' } }, y: { grid: { display: false } } } });
+            }, { indexAxis: 'y', responsive: true, maintainAspectRatio: true, aspectRatio: 1.5, plugins: { title: { display: true, text: '茗茶销售额', font: { size: 12 } }, legend: { display: false } }, scales: { x: { grid: { color: 'rgba(45,48,65,.3)' } }, y: { grid: { display: false } } } });
             AC('repChart2', 'doughnut', {
                 labels: stats.map(function(s) { return s.item.name; }),
                 datasets: [{ data: stats.map(function(s) { return s.cost; }), backgroundColor: bgc, borderWidth: 0 }]
-            }, { responsive: true, maintainAspectRatio: true, aspectRatio: 1.5, cutout: '55%', plugins: { title: { display: true, text: '成本占比', font: { size: 12 } }, legend: { position: 'bottom', labels: { font: { size: 9 }, padding: 8 } } } });
+            }, { responsive: true, maintainAspectRatio: true, aspectRatio: 1.2, cutout: '55%', plugins: { title: { display: true, text: '成本占比', font: { size: 12 } }, legend: { position: 'bottom', labels: { font: { size: 9 }, padding: 8 } } } });
         }
     }
 
@@ -810,7 +817,7 @@ function initRepCharts(id) {
                     { type: 'line', label: '实收', data: dRev, borderColor: '#c9a84c', backgroundColor: 'rgba(201,168,76,.08)', fill: true, pointRadius: 3, tension: 0.3, yAxisID: 'y' },
                     { label: '客流', data: dPpl, backgroundColor: 'rgba(96,165,250,.4)', borderRadius: 3, yAxisID: 'y1' }
                 ]
-            }, { responsive: true, maintainAspectRatio: true, aspectRatio: 2.5, interaction: { mode: 'index', intersect: false }, scales: { y: { position: 'left', grid: { color: 'rgba(45,48,65,.3)' }, title: { display: true, text: '实收', color: '#c9a84c', font: { size: 10 } }, ticks: { callback: function(v) { return (v / 10000).toFixed(1) + '万'; } } }, y1: { position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: '客流', color: '#60a5fa', font: { size: 10 } }, min: 0 }, x: { grid: { display: false }, ticks: { font: { size: 9 } } } } });
+            }, { responsive: true, maintainAspectRatio: true, aspectRatio: 1.5, interaction: { mode: 'index', intersect: false }, scales: { y: { position: 'left', grid: { color: 'rgba(45,48,65,.3)' }, title: { display: true, text: '实收', color: '#c9a84c', font: { size: 10 } }, ticks: { callback: function(v) { return (v / 10000).toFixed(1) + '万'; } } }, y1: { position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: '客流', color: '#60a5fa', font: { size: 10 } }, min: 0 }, x: { grid: { display: false }, ticks: { font: { size: 9 } } } } });
         } else {
             AC('repChart', 'bar', {
                 labels: labels,
@@ -818,7 +825,7 @@ function initRepCharts(id) {
                     { label: '客流', data: dPpl, backgroundColor: 'rgba(96,165,250,.6)', borderRadius: 3 },
                     { label: '包厢', data: dRoom, backgroundColor: 'rgba(201,168,76,.6)', borderRadius: 3 }
                 ]
-            }, { responsive: true, maintainAspectRatio: true, aspectRatio: 2.5, scales: { y: { grid: { color: 'rgba(45,48,65,.3)' } }, x: { grid: { display: false }, ticks: { font: { size: 9 } } } } });
+            }, { responsive: true, maintainAspectRatio: true, aspectRatio: 1.5, scales: { y: { grid: { color: 'rgba(45,48,65,.3)' } }, x: { grid: { display: false }, ticks: { font: { size: 9 } } } } });
         }
     }
 }
