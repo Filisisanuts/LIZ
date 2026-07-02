@@ -227,7 +227,7 @@ function initDashChart() {
         },
         options: {
             maintainAspectRatio: true,
-            aspectRatio: 3,
+            aspectRatio: 2,
             responsive: true,
             interaction: { mode: 'index', intersect: false },  // 悬停时同时显示两个数据
             plugins: {
