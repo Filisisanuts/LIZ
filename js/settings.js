@@ -287,14 +287,13 @@ function updateShopDisplay() {
 // ---- 复制报表链接 ----
 // 更新分享链接
 function copyDashLink() {
-    var input = document.getElementById('dashLinkInput');
-    var link = '';
-    if (input) {
-        link = input.value;
-    } else {
-        // 如果没有input元素，直接生成链接
-        link = window.location.origin + window.location.pathname.replace(/index\.html$/, '').replace(/\/$/, '/') + 'dashboard.html';
-    }
+    // 获取当前报告页面选择的月份
+    var repM = document.getElementById('repM');
+    var ym = repM ? repM.value : curYM();
+
+    // 生成带月份参数的分享链接
+    var link = window.location.origin + window.location.pathname.replace(/index\.html$/, '').replace(/\/$/, '/') + 'dashboard.html?month=' + ym;
+
     if (!link) return;
 
     try {
