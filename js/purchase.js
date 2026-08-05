@@ -433,13 +433,18 @@ function renderPmRelSelect() {
     var items = [];
     DB.purchases.forEach(function(p) {
         (p.items || []).forEach(function(item) {
-            if (item.qty > 0 && item.source !== '退货') {
+            // 获取物品的实际数量（支持字符串和数字）
+            var qty = parseFloat(item.qty) || 0;
+            // 获取物品的实际来源
+            var src = item.source || p.source || '外购';
+            // 筛选：数量大于0且不是退货
+            if (qty > 0 && src !== '退货') {
                 items.push({
                     date: p.date,
                     name: item.name,
-                    unitPrice: item.unitPrice || 0,
-                    total: item.total || 0,
-                    source: p.source || '外购'
+                    unitPrice: parseFloat(item.unitPrice) || 0,
+                    total: parseFloat(item.total) || 0,
+                    source: src
                 });
             }
         });
@@ -1440,7 +1445,6 @@ function showPurDayModal(date) {
     srcKeys.forEach(function(src) {
         si++;
         var srcId = 'srcBody' + si;
-        var isReturn = false; // 退货现在显示在原来源下，不再单独处理
 
         // 来源层
         h += '<div style="margin-bottom:12px">';
@@ -1545,7 +1549,8 @@ function showPurDayModal(date) {
                     h += '<button class="btn s" style="font-size:.65rem;padding:2px 6px" onclick="editPurFromModal(\'' + date + '\',\'' + item.name.replace(/'/g, "\\'") + '\')">编</button>';
                     h += '<button class="btn s d" style="font-size:.65rem;padding:2px 6px" onclick="delPurFromModal(\'' + date + '\',\'' + item.name.replace(/'/g, "\\'") + '\')">删</button>';
                     // 只有非退货物品才有退货按钮
-                    if (item.qty > 0) {
+                    var itemQty = parseFloat(item.qty) || 0;
+                    if (itemQty > 0 && item.source !== '退货') {
                         h += '<button class="btn s og" style="font-size:.65rem;padding:2px 6px" onclick="returnPurItem(\'' + date + '\',' + sq(item.name) + ')">退</button>';
                     }
                     h += '</div></div>';
