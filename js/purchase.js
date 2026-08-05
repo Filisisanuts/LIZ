@@ -271,8 +271,16 @@ function rPurchase() {
     // 日期和来源
     h += '<div class="hrow">';
     h += '<label>日期</label><input class="inp" id="pmDate" type="text" readonly placeholder="选择日期" value="' + td() + '" onclick="_dpOpen(\'pmDate\')" style="max-width:150px;cursor:pointer">';
-    h += '<label>来源</label><select class="inp" id="pmSrc" style="max-width:120px">';
-    h += '<option>岸香贸易</option><option>外购</option></select>';
+    h += '<label>来源</label><select class="inp" id="pmSrc" style="max-width:120px" onchange="pmSrcChanged()">';
+    h += '<option>岸香贸易</option><option>外购</option><option value="退货">退货</option></select>';
+    h += '</div>';
+
+    // 关联原采购（仅退货时显示）
+    h += '<div class="hrow" id="pmRelDiv" style="display:none">';
+    h += '<label>关联原采购</label>';
+    h += '<select class="inp" id="pmRelPur" style="flex:1" onchange="pmRelPurChanged()">';
+    h += '<option value="">不关联原采购</option>';
+    h += '</select>';
     h += '</div>';
 
     // 区域和分类
@@ -403,6 +411,78 @@ function batchSetField(field, value) {
     _pmItems.forEach(function(item) { item[field] = value; });
     renderPML();
     toast('已填充');
+}
+
+// 来源选择变化：显示/隐藏关联原采购字段
+function pmSrcChanged() {
+    var src = $id('pmSrc').value;
+    var relDiv = $id('pmRelDiv');
+    if (relDiv) {
+        relDiv.style.display = src === '退货' ? '' : 'none';
+        if (src === '退货') {
+            renderPmRelSelect();
+        }
+    }
+}
+
+// 渲染关联原采购下拉框
+function renderPmRelSelect() {
+    var sel = $id('pmRelPur');
+    if (!sel) return;
+
+    var items = [];
+    DB.purchases.forEach(function(p) {
+        (p.items || []).forEach(function(item) {
+            if (item.qty > 0 && item.source !== '退货') {
+                items.push({
+                    date: p.date,
+                    name: item.name,
+                    unitPrice: item.unitPrice || 0,
+                    total: item.total || 0,
+                    source: p.source || '外购'
+                });
+            }
+        });
+    });
+
+    var h = '<option value="">不关联原采购</option>';
+    items.forEach(function(item, idx) {
+        h += '<option value="' + idx + '">' + item.name + ' - ' + item.date + ' - ¥' + fmtC(item.total) + '</option>';
+    });
+    sel.innerHTML = h;
+}
+
+// 选中关联原采购后，自动填充品名、单价等信息
+function pmRelPurChanged() {
+    var sel = $id('pmRelPur');
+    if (!sel || !sel.value) return;
+
+    var items = getAllReturnableItems();
+    var item = items[parseInt(sel.value)];
+    if (!item) return;
+
+    $id('pmName').value = item.name;
+    $id('pmUnitPrice').value = item.unitPrice;
+    calcTotal();
+}
+
+// 获取所有可退货的采购物品
+function getAllReturnableItems() {
+    var items = [];
+    DB.purchases.forEach(function(p) {
+        (p.items || []).forEach(function(item) {
+            if (item.qty > 0 && item.source !== '退货') {
+                items.push({
+                    date: p.date,
+                    name: item.name,
+                    unitPrice: item.unitPrice || 0,
+                    total: item.total || 0,
+                    source: p.source || '外购'
+                });
+            }
+        });
+    });
+    return items;
 }
 
 // 自动计算单价：总价 ÷ 数量
@@ -778,9 +858,40 @@ function doMimoConfirm() {
 function saveMPur() {
     if (!_pmItems.length) { toast('无物品'); return; }
 
-    var savedItems = JSON.parse(JSON.stringify(_pmItems));
     var savedDate = $id('pmDate').value || td();
     var savedSrc = $id('pmSrc').value || '外购';
+    var relIdx = $id('pmRelPur') ? $id('pmRelPur').value : '';
+
+    // 如果选择了关联原采购，获取关联信息
+    var relatedTo = null;
+    if (relIdx && savedSrc === '退货') {
+        var relItems = getAllReturnableItems();
+        var relItem = relItems[parseInt(relIdx)];
+        if (relItem) {
+            relatedTo = { date: relItem.date, name: relItem.name };
+        }
+    }
+
+    // 处理物品：退货时数量/金额取负数
+    var savedItems = _pmItems.map(function(it) {
+        var qty = it.qty;
+        var total = it.total;
+        if (savedSrc === '退货') {
+            qty = -Math.abs(qty);
+            total = -Math.abs(total);
+        }
+        return {
+            name: it.name,
+            section: it.section,
+            category: it.category,
+            qty: qty,
+            unit: it.unit,
+            unitPrice: it.unitPrice,
+            total: total,
+            source: savedSrc,
+            relatedTo: relatedTo
+        };
+    });
 
     if (_editPurId) {
         upd(function(db) {
@@ -1167,36 +1278,36 @@ function renderPHist() {
         h += '<div class="card"><div class="card-l">天数</div><div class="card-v">' + Object.keys(dayTotals).length + '</div></div>';
         h += '<div class="card"><div class="card-l">日均</div><div class="card-v">' + fmtC(grandTotal / daysInMonth) + '</div></div>';
 
-        ['岸香贸易', '外购'].forEach(function(src) {
+        // 按来源分组显示
+        var srcDisplayOrder = ['岸香贸易', '外购', '退货'];
+        srcDisplayOrder.forEach(function(src) {
             var srcTotal = srcTotals[src] || 0;
             var srcReturn = srcReturnTotals[src] || 0;
             if (srcTotal <= 0 && srcReturn <= 0) return;
             var secs = srcSecTotals[src] || {};
             h += '<div class="card"><div class="card-l">' + src + '</div>';
-            h += '<div class="card-v" style="color:var(--gn)">' + fmtC(srcTotal) + '</div>';
-            // 显示退货总额（如果有）
-            if (srcReturn > 0) {
-                h += '<div style="font-size:.65rem;color:var(--rd);margin-top:2px">退 ¥' + fmtC(srcReturn) + '</div>';
+
+            if (src === '退货') {
+                // 退货分组特殊处理：显示退货总额（负数）
+                var returnTotal = srcTotal; // 已经是负数
+                h += '<div class="card-v" style="color:var(--rd)">' + fmtC(returnTotal) + '</div>';
+            } else {
+                h += '<div class="card-v" style="color:var(--gn)">' + fmtC(srcTotal) + '</div>';
+                // 显示退货总额（如果有）
+                if (srcReturn > 0) {
+                    h += '<div style="font-size:.65rem;color:var(--rd);margin-top:2px">退 ¥' + fmtC(srcReturn) + '</div>';
+                }
             }
+
             h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;margin-top:4px">';
             Object.keys(secs).sort(function(a, b) { return secs[b] - secs[a]; }).forEach(function(sec) {
                 h += '<div style="font-size:.65rem;color:var(--tx-m)">' + sec + '</div>';
-                h += '<div style="font-size:.65rem;text-align:right;font-family:var(--fm)">' + fmtC(secs[sec]) + '</div>';
+                var secVal = secs[sec];
+                var secColor = secVal < 0 ? 'var(--rd)' : 'var(--fm)';
+                h += '<div style="font-size:.65rem;text-align:right;font-family:var(--fm);color:' + secColor + '">' + (secVal < 0 ? '-' : '') + fmtC(Math.abs(secVal)) + '</div>';
             });
             h += '</div></div>';
         });
-
-        if (tuihuo < 0) {
-            var secs = srcSecTotals['退货'] || {};
-            h += '<div class="card"><div class="card-l">退货</div>';
-            h += '<div class="card-v" style="color:var(--rd)">-' + fmtC(Math.abs(tuihuo)) + '</div>';
-            h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;margin-top:4px">';
-            Object.keys(secs).sort(function(a, b) { return secs[b] - secs[a]; }).forEach(function(sec) {
-                h += '<div style="font-size:.65rem;color:var(--tx-m)">' + sec + '</div>';
-                h += '<div style="font-size:.65rem;text-align:right;font-family:var(--fm);color:var(--rd)">-' + fmtC(Math.abs(secs[sec])) + '</div>';
-            });
-            h += '</div></div>';
-        }
 
         h += '</div>';
     }
@@ -1316,7 +1427,12 @@ function showPurDayModal(date) {
         });
     });
 
-    var srcKeys = Object.keys(srcGroups).sort(function(a, b) { return srcTotals[b] - srcTotals[a]; });
+    // 排序：退货显示在最后
+    var srcKeys = Object.keys(srcGroups).sort(function(a, b) {
+        if (a === '退货') return 1;
+        if (b === '退货') return -1;
+        return srcTotals[b] - srcTotals[a];
+    });
 
     h += '<div style="max-height:60vh;overflow-y:auto;padding-right:4px">';
 
@@ -1638,6 +1754,11 @@ function returnPurItem(date, name) {
     h += '<div class="hrow"><label>退货金额</label><input class="inp" id="retTotal" type="number" step="0.01" value="' + orig.total + '" style="max-width:120px"></div>';
     h += '<div class="hrow"><label>退货原因</label><input class="inp" id="retReason" placeholder="可选" style="flex:1"></div>';
 
+    // 关联原采购复选框
+    h += '<div class="hrow"><label></label><label style="display:flex;align-items:center;gap:6px;cursor:pointer">';
+    h += '<input type="checkbox" id="retRelate" checked style="width:16px;height:16px">';
+    h += '<span style="font-size:.82rem">关联原采购记录</span></label></div>';
+
     h += '<div class="brow" style="margin-top:12px;justify-content:flex-end">';
     h += '<button class="btn p" onclick="doReturnPurItem(\'' + date + '\',' + sq(name) + ')">确认退货</button>';
     h += '<button class="btn" onclick="backToPurDetail(\'' + date + '\')">取消</button></div>';
@@ -1659,6 +1780,7 @@ function doReturnPurItem(date, name) {
     var retQty = parseFloat($id('retQty').value) || 0;
     var retTotal = parseFloat($id('retTotal').value) || 0;
     var retReason = $id('retReason').value.trim();
+    var retRelate = $id('retRelate') ? $id('retRelate').checked : true;
 
     if (retQty <= 0 && retTotal <= 0) { toast('请填写退货信息'); return; }
 
@@ -1708,7 +1830,7 @@ function doReturnPurItem(date, name) {
         h += '<button class="btn p" onclick="_doReturnConfirm(\'' + date + '\',' + sq(name) + ')">确认退货</button>';
         h += '</div></div>';
         showModal(h, 420);
-        window._returnData = { date: date, name: name, retDate: retDate, retQty: retQty, retTotal: retTotal, retReason: retReason };
+        window._returnData = { date: date, name: name, retDate: retDate, retQty: retQty, retTotal: retTotal, retReason: retReason, retRelate: retRelate };
     } else {
         // 非库存商品，直接执行
         _doReturnExec(date, name, retDate, retQty, retTotal, retReason);
@@ -1718,14 +1840,15 @@ function doReturnPurItem(date, name) {
 function _doReturnConfirm() {
     var d = window._returnData;
     closeModal();
-    _doReturnExec(d.date, d.name, d.retDate, d.retQty, d.retTotal, d.retReason);
+    _doReturnExec(d.date, d.name, d.retDate, d.retQty, d.retTotal, d.retReason, d.retRelate);
 }
 
-function _doReturnExec(date, name, retDate, retQty, retTotal, retReason) {
+function _doReturnExec(date, name, retDate, retQty, retTotal, retReason, retRelate) {
     retDate = retDate || td();
     retQty = retQty || 0;
     retTotal = retTotal || 0;
     retReason = retReason || '';
+    if (retRelate === undefined) retRelate = true;
 
     var purchases = DB.purchases.filter(function(pp) { return pp.date === date; });
     var orig = null;
@@ -1741,32 +1864,25 @@ function _doReturnExec(date, name, retDate, retQty, retTotal, retReason) {
     if (!orig) return;
 
     upd(function(db) {
-        // 退货应该显示在原来的来源下面，而不是单独作为"退货"来源
-        // 查找原采购记录所在的采购批次
-        var target = null;
-        for (var i = 0; i < db.purchases.length; i++) {
-            if (db.purchases[i].date === date) {
-                for (var k = 0; k < db.purchases[i].items.length; k++) {
-                    if (db.purchases[i].items[k].name === name && db.purchases[i].items[k].source !== '退货') {
-                        target = db.purchases[i];
-                        break;
-                    }
-                }
-                if (target) break;
-            }
-        }
-        if (!target) {
-            // 如果找不到原采购批次，创建新的（保留原来源）
-            target = { date: retDate, source: orig.source, items: [] };
-            db.purchases.push(target);
-        }
-        target.items.push({
-            name: name, section: orig.section, category: orig.category,
-            qty: -retQty, unit: orig.unit || '',
-            unitPrice: orig.unitPrice || 0, total: -retTotal,
-            source: orig.source, // 保留原来的来源，不设置为'退货'
-            note: retReason
-        });
+        // 创建新的退货批次，使用用户选择的退货日期
+        var relatedTo = retRelate ? { date: date, name: name } : null;
+        var target = {
+            date: retDate,
+            source: '退货',
+            items: [{
+                name: name,
+                section: orig.section,
+                category: orig.category,
+                qty: -Math.abs(retQty),
+                unit: orig.unit || '',
+                unitPrice: orig.unitPrice || 0,
+                total: -Math.abs(retTotal),
+                source: '退货',
+                note: retReason,
+                relatedTo: relatedTo
+            }]
+        };
+        db.purchases.push(target);
     });
 
     closeModal();
