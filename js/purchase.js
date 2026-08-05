@@ -435,13 +435,8 @@ function openRelPurModal() {
     h += '<input class="inp" id="relSearchInput" placeholder="搜索物品名称..." oninput="filterRelPurCalendar()" style="width:100%">';
     h += '</div>';
 
-    // 日历区域
+    // 日历区域（包含取消按钮）
     h += '<div id="relCalArea"></div>';
-
-    // 取消按钮
-    h += '<div class="brow" style="margin-top:12px;justify-content:flex-end">';
-    h += '<button class="btn" onclick="closeModal()">取消</button>';
-    h += '</div>';
 
     showModal(h, 600);
 
