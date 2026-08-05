@@ -278,9 +278,7 @@ function rPurchase() {
     // 关联原采购（仅退货时显示）
     h += '<div class="hrow" id="pmRelDiv" style="display:none">';
     h += '<label>关联原采购</label>';
-    h += '<select class="inp" id="pmRelPur" style="flex:1" onchange="pmRelPurChanged()">';
-    h += '<option value="">不关联原采购</option>';
-    h += '</select>';
+    h += '<button class="btn" id="pmRelBtn" onclick="openRelPurModal()" style="max-width:200px;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">选择关联采购物品</button>';
     h += '</div>';
 
     // 区域和分类
@@ -419,75 +417,225 @@ function pmSrcChanged() {
     var relDiv = $id('pmRelDiv');
     if (relDiv) {
         relDiv.style.display = src === '退货' ? '' : 'none';
-        if (src === '退货') {
-            renderPmRelSelect();
+        if (src !== '退货') {
+            // 清除已选择的关联
+            window._selectedRelPur = null;
+            var relBtn = $id('pmRelBtn');
+            if (relBtn) relBtn.textContent = '选择关联采购物品';
         }
     }
 }
 
-// 渲染关联原采购下拉框
-function renderPmRelSelect() {
-    var sel = $id('pmRelPur');
-    if (!sel) return;
+// 打开关联原采购选择弹窗
+function openRelPurModal() {
+    var h = '<h3>选择关联原采购物品</h3>';
 
-    var items = [];
-    DB.purchases.forEach(function(p) {
-        (p.items || []).forEach(function(item) {
-            // 获取物品的实际数量（支持字符串和数字）
+    // 搜索框
+    h += '<div style="margin-bottom:12px">';
+    h += '<input class="inp" id="relSearchInput" placeholder="搜索物品名称..." oninput="filterRelPurCalendar()" style="width:100%">';
+    h += '</div>';
+
+    // 日历区域
+    h += '<div id="relCalArea"></div>';
+
+    // 取消按钮
+    h += '<div class="brow" style="margin-top:12px;justify-content:flex-end">';
+    h += '<button class="btn" onclick="closeModal()">取消</button>';
+    h += '</div>';
+
+    showModal(h, 600);
+
+    // 渲染日历
+    window._relPurSearchKeyword = '';
+    renderRelPurCalendar();
+}
+
+// 渲染关联原采购选择日历
+function renderRelPurCalendar() {
+    var el = $id('relCalArea');
+    if (!el) return;
+
+    var keyword = window._relPurSearchKeyword || '';
+    var ym = curYM();
+
+    var year = parseInt(ym.split('-')[0]);
+    var month = parseInt(ym.split('-')[1]);
+    var daysInMonth = new Date(year, month, 0).getDate();
+    var firstDay = new Date(year, month - 1, 1).getDay();
+    firstDay = firstDay === 0 ? 6 : firstDay - 1;
+
+    // 统计每天的采购总额
+    var dayTotals = {};
+    DB.purchases.filter(function(p) { return p.date.startsWith(ym); }).forEach(function(p) {
+        var day = parseInt(p.date.substring(8, 10));
+        if (!dayTotals[day]) dayTotals[day] = 0;
+        p.items.forEach(function(item) {
             var qty = parseFloat(item.qty) || 0;
-            // 获取物品的实际来源
             var src = item.source || p.source || '外购';
-            // 筛选：数量大于0且不是退货
+            // 过滤：数量大于0且不是退货
             if (qty > 0 && src !== '退货') {
+                // 如果有搜索关键词，检查是否匹配
+                if (keyword && item.name.indexOf(keyword) < 0) return;
+                dayTotals[day] += item.total;
+            }
+        });
+    });
+
+    var h = '';
+    h += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">';
+    ['一','二','三','四','五','六','日'].forEach(function(w) {
+        h += '<div style="text-align:center;font-size:.7rem;color:var(--tx-m);padding:4px 0">' + w + '</div>';
+    });
+
+    for (var ix = 0; ix < firstDay; ix++) h += '<div></div>';
+
+    for (var d = 1; d <= daysInMonth; d++) {
+        var dateStr = ym + '-' + (d < 10 ? '0' + d : d);
+        var total = dayTotals[d] || 0;
+        var has = total > 0;
+        var bg = has ? 'var(--card)' : 'var(--card-h)';
+        var border = '1px solid var(--bd)';
+
+        h += '<div style="background:' + bg + ';border:' + border + ';border-radius:6px;padding:5px 4px;min-height:52px;cursor:' + (has ? 'pointer' : 'default') + '"';
+        if (has) h += ' onclick="showRelPurDayItems(\'' + dateStr + '\')"';
+        h += '><div style="font-size:.7rem;font-weight:600;color:var(--tx)">' + d + '</div>';
+        if (has) {
+            h += '<div style="font-family:var(--fm);font-size:.65rem;color:var(--ac);margin-top:2px">';
+            h += fmtC(total);
+            h += '</div>';
+        }
+        h += '</div>';
+    }
+
+    h += '</div>';
+    el.innerHTML = h;
+}
+
+// 过滤关联原采购日历（搜索功能）
+function filterRelPurCalendar() {
+    var input = $id('relSearchInput');
+    if (input) {
+        window._relPurSearchKeyword = input.value.trim();
+    }
+    renderRelPurCalendar();
+}
+
+// 显示某天的可关联采购物品
+function showRelPurDayItems(date) {
+    var el = $id('relCalArea');
+    if (!el) return;
+
+    var keyword = window._relPurSearchKeyword || '';
+    var dayPurchases = DB.purchases.filter(function(p) { return p.date === date; });
+    if (!dayPurchases.length) { toast('这天没有采购记录'); return; }
+
+    // 收集可关联的物品
+    var items = [];
+    dayPurchases.forEach(function(p) {
+        p.items.forEach(function(item) {
+            var qty = parseFloat(item.qty) || 0;
+            var src = item.source || p.source || '外购';
+            if (qty > 0 && src !== '退货') {
+                if (keyword && item.name.indexOf(keyword) < 0) return;
                 items.push({
-                    date: p.date,
                     name: item.name,
+                    qty: qty,
+                    unit: item.unit || '',
                     unitPrice: parseFloat(item.unitPrice) || 0,
                     total: parseFloat(item.total) || 0,
-                    source: src
+                    source: src,
+                    section: item.section || '',
+                    category: item.category || ''
                 });
             }
         });
     });
 
-    var h = '<option value="">不关联原采购</option>';
+    if (!items.length) { toast('没有可关联的物品'); return; }
+
+    var dateLabel = date.substring(5).replace('-', '/');
+    var total = items.reduce(function(s, item) { return s + item.total; }, 0);
+
+    var h = '<h3>' + dateLabel + ' 采购明细</h3>';
+    h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+    h += '<span style="font-size:.82rem;color:var(--tx-m)">' + items.length + ' 个可关联物品</span>';
+    h += '<span style="font-family:var(--fm);font-size:.88rem;font-weight:600;color:var(--ac)">¥' + fmtC(total) + '</span>';
+    h += '</div>';
+
+    // 物品列表
+    h += '<div style="max-height:50vh;overflow-y:auto">';
     items.forEach(function(item, idx) {
-        h += '<option value="' + idx + '">' + item.name + ' - ' + item.date + ' - ¥' + fmtC(item.total) + '</option>';
+        h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;margin-bottom:6px;background:var(--card-h);border:1px solid var(--bd);border-radius:6px">';
+        h += '<div style="flex:1;min-width:0">';
+        h += '<div style="font-size:.82rem;font-weight:600">' + item.name + '</div>';
+        h += '<div style="font-size:.65rem;color:var(--tx-m)">' + item.qty + item.unit + ' × ¥' + fmtC(item.unitPrice) + '</div>';
+        h += '</div>';
+        h += '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">';
+        h += '<span style="font-family:var(--fm);font-size:.82rem;font-weight:600;color:var(--ac)">¥' + fmtC(item.total) + '</span>';
+        h += '<button class="btn s og" onclick="selectRelPurItem(\'' + date + '\',' + idx + ')">选择</button>';
+        h += '</div></div>';
     });
-    sel.innerHTML = h;
+    h += '</div>';
+
+    // 返回日历按钮
+    h += '<div class="brow" style="margin-top:12px;justify-content:flex-end">';
+    h += '<button class="btn" onclick="renderRelPurCalendar()">返回日历</button>';
+    h += '<button class="btn" onclick="closeModal()">取消</button>';
+    h += '</div>';
+
+    el.innerHTML = h;
 }
 
-// 选中关联原采购后，自动填充品名、单价等信息
-function pmRelPurChanged() {
-    var sel = $id('pmRelPur');
-    if (!sel || !sel.value) return;
+// 选择关联原采购物品
+function selectRelPurItem(date, itemIdx) {
+    var keyword = window._relPurSearchKeyword || '';
+    var dayPurchases = DB.purchases.filter(function(p) { return p.date === date; });
 
-    var items = getAllReturnableItems();
-    var item = items[parseInt(sel.value)];
-    if (!item) return;
-
-    $id('pmName').value = item.name;
-    $id('pmUnitPrice').value = item.unitPrice;
-    calcTotal();
-}
-
-// 获取所有可退货的采购物品
-function getAllReturnableItems() {
+    // 收集可关联的物品
     var items = [];
-    DB.purchases.forEach(function(p) {
-        (p.items || []).forEach(function(item) {
-            if (item.qty > 0 && item.source !== '退货') {
+    dayPurchases.forEach(function(p) {
+        p.items.forEach(function(item) {
+            var qty = parseFloat(item.qty) || 0;
+            var src = item.source || p.source || '外购';
+            if (qty > 0 && src !== '退货') {
+                if (keyword && item.name.indexOf(keyword) < 0) return;
                 items.push({
-                    date: p.date,
+                    date: date,
                     name: item.name,
-                    unitPrice: item.unitPrice || 0,
-                    total: item.total || 0,
-                    source: p.source || '外购'
+                    qty: qty,
+                    unit: item.unit || '',
+                    unitPrice: parseFloat(item.unitPrice) || 0,
+                    total: parseFloat(item.total) || 0,
+                    source: src,
+                    section: item.section || '',
+                    category: item.category || ''
                 });
             }
         });
     });
-    return items;
+
+    var selectedItem = items[itemIdx];
+    if (!selectedItem) return;
+
+    // 保存选择结果
+    window._selectedRelPur = selectedItem;
+
+    // 更新按钮文本
+    var relBtn = $id('pmRelBtn');
+    if (relBtn) {
+        relBtn.textContent = '已关联: ' + selectedItem.name + ' - ' + date;
+        relBtn.style.color = 'var(--gn)';
+    }
+
+    // 自动填充表单
+    $id('pmName').value = selectedItem.name;
+    $id('pmUnitPrice').value = selectedItem.unitPrice;
+    $id('pmUnit').value = selectedItem.unit;
+    calcTotal();
+
+    // 关闭弹窗
+    closeModal();
+    toast('已选择关联物品: ' + selectedItem.name);
 }
 
 // 自动计算单价：总价 ÷ 数量
@@ -865,16 +1013,11 @@ function saveMPur() {
 
     var savedDate = $id('pmDate').value || td();
     var savedSrc = $id('pmSrc').value || '外购';
-    var relIdx = $id('pmRelPur') ? $id('pmRelPur').value : '';
 
-    // 如果选择了关联原采购，获取关联信息
+    // 获取关联原采购信息
     var relatedTo = null;
-    if (relIdx && savedSrc === '退货') {
-        var relItems = getAllReturnableItems();
-        var relItem = relItems[parseInt(relIdx)];
-        if (relItem) {
-            relatedTo = { date: relItem.date, name: relItem.name };
-        }
+    if (savedSrc === '退货' && window._selectedRelPur) {
+        relatedTo = { date: window._selectedRelPur.date, name: window._selectedRelPur.name };
     }
 
     // 处理物品：退货时数量/金额取负数
@@ -917,6 +1060,7 @@ function saveMPur() {
     }
 
     _pmItems = [];
+    window._selectedRelPur = null;
     checkPurInvLink(savedItems, savedDate);
 }
 
