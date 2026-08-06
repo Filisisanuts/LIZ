@@ -328,7 +328,10 @@ function rPurchase() {
     h += '</div>';
 
     setMain('采购', h);
-    setTimeout(renderPHist, 100);
+    setTimeout(function() {
+        renderPHist();
+        pmSrcChanged();
+    }, 100);
 }
 
 // 切换采购标签页（粘贴/手动/明细）
@@ -1196,6 +1199,7 @@ function editPur(id) {
     switchPT('manual');
     $id('pmDate').value = p.date;
     $id('pmSrc').value = p.source || '外购';
+    pmSrcChanged();
     renderPML();
     window.scrollTo(0, 0);
 }
@@ -1229,7 +1233,7 @@ function editPurByDate(date, name) {
 
     var secs = ['厨房', '吧台', '外场'];
     var cats = getPurCats(found.section);
-    var sources = ['岸香贸易', '外购', '其他'];
+    var sources = ['岸香贸易', '外购', '退货', '其他'];
     var curSource = found.source || foundP.source || '外购';
 
     var h = '<h3>编辑物品</h3>';
