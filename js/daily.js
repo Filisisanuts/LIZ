@@ -47,6 +47,56 @@ function rDaily() {
 }
 
 // 渲染日报历史列表
+// 日报明细页结算方式筛选器状态
+var _dailyPaymentFilter = {
+    // 支付方式
+    pos: false,
+    ccbLife: false,
+    cash: false,
+    memberCard: false,
+    treat: false,
+    // 应收账款
+    arMeituan: false,
+    arDouyin: false,
+    arTotal: false,
+    // 外卖配送
+    delMeituan: false,
+    delTaobao: false,
+    delJd: false,
+    delTotal: false
+};
+
+// 结算方式分组配置
+var _paymentGroups = [
+    {
+        name: '支付方式',
+        items: [
+            { key: 'pos', label: 'POS机' },
+            { key: 'ccbLife', label: '建行生活' },
+            { key: 'cash', label: '现金' },
+            { key: 'memberCard', label: '会员卡' },
+            { key: 'treat', label: '招待' }
+        ]
+    },
+    {
+        name: '应收账款',
+        items: [
+            { key: 'arMeituan', label: '美团团购' },
+            { key: 'arDouyin', label: '抖音团购' },
+            { key: 'arTotal', label: '应收合计' }
+        ]
+    },
+    {
+        name: '外卖配送',
+        items: [
+            { key: 'delMeituan', label: '美团外卖' },
+            { key: 'delTaobao', label: '淘宝闪购' },
+            { key: 'delJd', label: '京东外卖' },
+            { key: 'delTotal', label: '外卖合计' }
+        ]
+    }
+];
+
 function renderDHist() {
     var el = document.getElementById('dhArea');
     if (!el) return;
@@ -89,7 +139,33 @@ function renderDHist() {
         h += '</div>';
     }
 
-    // ★ 第二：日历
+    // ★ 第二：结算方式筛选器
+    h += '<div class="payment-filter" style="margin-bottom:14px;padding:10px;background:var(--card);border:1px solid var(--bd);border-radius:8px">';
+    h += '<div style="font-size:.78rem;font-weight:600;color:var(--tx);margin-bottom:8px">结算方式筛选</div>';
+
+    _paymentGroups.forEach(function(group) {
+        h += '<div style="margin-bottom:8px">';
+        h += '<div style="font-size:.72rem;color:var(--tx-m);margin-bottom:4px;font-weight:500">' + group.name + '</div>';
+        h += '<div style="display:flex;flex-wrap:wrap;gap:8px">';
+
+        group.items.forEach(function(item) {
+            var checked = _dailyPaymentFilter[item.key] ? 'checked' : '';
+            h += '<label style="display:flex;align-items:center;gap:4px;font-size:.72rem;color:var(--tx);cursor:pointer">';
+            h += '<input type="checkbox" ' + checked + ' onchange="togglePaymentFilter(\'' + item.key + '\', this.checked)" style="accent-color:var(--ac)">';
+            h += item.label;
+            h += '</label>';
+        });
+
+        h += '</div>';
+        h += '</div>';
+    });
+
+    h += '<div style="margin-top:8px">';
+    h += '<button class="btn s" onclick="resetPaymentFilter()" style="font-size:.72rem;padding:4px 8px">重置筛选</button>';
+    h += '</div>';
+    h += '</div>';
+
+    // ★ 第三：日历
     h += '<div class="daily-calendar" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:14px">';
     var weekNames = ['一', '二', '三', '四', '五', '六', '日'];
     weekNames.forEach(function(w) {
@@ -114,7 +190,43 @@ function renderDHist() {
         h += '<div style="font-size:.72rem;font-weight:600;color:' + dayColor + '">' + d + '</div>';
 
         if (r) {
-            h += '<div style="font-family:var(--fm);font-size:.7rem;color:var(--ac);margin-top:2px">' + fmtC(r.revenue.netSales) + '</div>';
+            // 检查是否有选中的筛选器
+            var hasFilter = Object.values(_dailyPaymentFilter).some(function(v) { return v; });
+
+            if (hasFilter) {
+                // 有筛选器时，显示选中结算方式的金额
+                var filterLines = [];
+
+                // 支付方式
+                if (_dailyPaymentFilter.pos && r.payment.pos) filterLines.push('POS: ' + fmtC(r.payment.pos));
+                if (_dailyPaymentFilter.ccbLife && r.payment.ccbLife) filterLines.push('建行: ' + fmtC(r.payment.ccbLife));
+                if (_dailyPaymentFilter.cash && r.payment.cash) filterLines.push('现金: ' + fmtC(r.payment.cash));
+                if (_dailyPaymentFilter.memberCard && r.payment.memberCard) filterLines.push('会员: ' + fmtC(r.payment.memberCard));
+                if (_dailyPaymentFilter.treat && r.payment.treat) filterLines.push('招待: ' + fmtC(r.payment.treat));
+
+                // 应收账款
+                if (_dailyPaymentFilter.arMeituan && r.payment.ar.meituan) filterLines.push('美团: ' + fmtC(r.payment.ar.meituan));
+                if (_dailyPaymentFilter.arDouyin && r.payment.ar.douyin) filterLines.push('抖音: ' + fmtC(r.payment.ar.douyin));
+                if (_dailyPaymentFilter.arTotal && r.payment.ar.total) filterLines.push('应收: ' + fmtC(r.payment.ar.total));
+
+                // 外卖配送
+                if (_dailyPaymentFilter.delMeituan && r.delivery.meituan) filterLines.push('美团外卖: ' + fmtC(r.delivery.meituan));
+                if (_dailyPaymentFilter.delTaobao && r.delivery.taobao) filterLines.push('淘宝: ' + fmtC(r.delivery.taobao));
+                if (_dailyPaymentFilter.delJd && r.delivery.jd) filterLines.push('京东: ' + fmtC(r.delivery.jd));
+                if (_dailyPaymentFilter.delTotal && r.delivery.total) filterLines.push('外卖: ' + fmtC(r.delivery.total));
+
+                // 显示筛选结果
+                if (filterLines.length > 0) {
+                    filterLines.forEach(function(line) {
+                        h += '<div style="font-family:var(--fm);font-size:.65rem;color:var(--ac);margin-top:1px;line-height:1.2">' + line + '</div>';
+                    });
+                } else {
+                    h += '<div style="font-family:var(--fm);font-size:.7rem;color:var(--tx-m);margin-top:2px">-</div>';
+                }
+            } else {
+                // 无筛选器时，显示实收金额
+                h += '<div style="font-family:var(--fm);font-size:.7rem;color:var(--ac);margin-top:2px">' + fmtC(r.revenue.netSales) + '</div>';
+            }
             h += '<div style="font-size:.6rem;color:var(--tx-m)">' + r.guest.count + '人</div>';
         } else {
             h += '<div style="font-size:.6rem;color:var(--tx-m);margin-top:4px">-</div>';
@@ -124,6 +236,20 @@ function renderDHist() {
     h += '</div>';
 
     el.innerHTML = h;
+}
+
+// 切换结算方式筛选器
+function togglePaymentFilter(key, checked) {
+    _dailyPaymentFilter[key] = checked;
+    renderDHist();
+}
+
+// 重置结算方式筛选器
+function resetPaymentFilter() {
+    Object.keys(_dailyPaymentFilter).forEach(function(key) {
+        _dailyPaymentFilter[key] = false;
+    });
+    renderDHist();
 }
 
 // 切换日报标签页（粘贴/手动/明细）
