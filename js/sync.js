@@ -1,4 +1,5 @@
 var _sb = { client: null, ready: false, saving: false };
+var _sbSyncing = false;
 
 // Supabase 配置（内置）
 var _SB_URL = 'https://aahvuwdifuqhwyanrvwj.supabase.co';
@@ -86,12 +87,17 @@ function sbScheduleSave() {
 
 // 启动时同步：下载用户数据，同时同步到共享行
 async function sbSyncOnStart() {
-    if (!_sb.ready) return;
-    var remote = await sbLoad();
-    if (remote) { DB = remote; saveDB(DB); toast('云端已加载'); }
-    // 同步到共享行供报表页读取
-    if (_sbDataId()) {
-        try { await _sb.client.from('cafe_data').upsert({ id: 'shop_data', data: DB, updated_at: new Date().toISOString() }); } catch(e) {}
+    if (!_sb.ready || _sbSyncing) return;
+    _sbSyncing = true;
+    try {
+        var remote = await sbLoad();
+        if (remote) { DB = remote; saveDB(DB); toast('云端已加载'); }
+        // 同步到共享行供报表页读取
+        if (_sbDataId()) {
+            try { await _sb.client.from('cafe_data').upsert({ id: 'shop_data', data: DB, updated_at: new Date().toISOString() }); } catch(e) {}
+        }
+    } finally {
+        _sbSyncing = false;
     }
 }
 
