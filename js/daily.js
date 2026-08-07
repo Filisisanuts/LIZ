@@ -87,8 +87,6 @@ function renderDHist() {
         h += '<div class="card"><div class="card-l">已报天数</div><div class="card-v">' + mr.length + '</div></div>';
         h += '<div class="card"><div class="card-l">总客流</div><div class="card-v">' + mGuests + '</div></div>';
         h += '</div>';
-
-        h += '<div class="brow" style="margin-bottom:14px"><button class="btn" onclick="showDailyCheckMonth()">📋 校验日报</button></div>';
     }
 
     // ★ 第二：日历
@@ -494,6 +492,10 @@ function doSaveManual(date, mode) {
 
     if (teaData.length) syncInvToDaily('tea', date);
     if (cigData.length) syncInvToDaily('cig', date);
+
+    // 自动校验日报
+    var savedReport = DB.dailyReports.find(function(d) { return d.date === date; });
+    if (savedReport) autoCheckDaily(savedReport);
 
     closeModal();
     toast(mode === 'merge' ? '已合并保存' : '已覆盖保存');
@@ -1043,6 +1045,10 @@ function saveDaily() {
         else db.dailyReports.push(_pd);
     });
 
+    // 自动校验日报
+    var savedReport = DB.dailyReports.find(function(d) { return d.date === _pd.date; });
+    if (savedReport) autoCheckDaily(savedReport);
+
     toast('已保存');
     _pd = null;
     rDaily();
@@ -1375,6 +1381,10 @@ function saveDailyModal(date) {
         r.reporter = $id('dm_reporter').value.trim();
     });
 
+    // 自动校验日报
+    var savedReport = DB.dailyReports.find(function(d) { return d.date === date; });
+    if (savedReport) autoCheckDaily(savedReport);
+
     toast('已保存');
     closeModal();
     renderDHist();
@@ -1542,6 +1552,38 @@ function checkDailyData(r) {
     }
 
     return issues;
+}
+
+// 自动校验日报（保存后后台校验，有问题弹窗显示）
+function autoCheckDaily(dr) {
+    var issues = checkDailyData(dr);
+    if (issues.length === 0) return; // 无问题，静默返回
+
+    // 有问题，弹窗显示
+    var date = dr.date;
+    var h = '<h3>' + date + ' 日报校验异常</h3>';
+    h += '<div style="margin-bottom:12px">';
+    h += '<div style="font-size:.78rem;color:var(--rd);font-weight:600;margin-bottom:8px">发现 ' + issues.length + ' 项异常：</div>';
+    issues.forEach(function(iss, i) {
+        h += '<div style="padding:8px 12px;background:var(--rd-b);border:1px solid rgba(199,84,80,.15);border-radius:6px;margin-bottom:6px;font-size:.78rem;color:var(--rd)">';
+        h += '<b>' + (i + 1) + '.</b> ' + iss;
+        h += '</div>';
+    });
+    h += '</div>';
+
+    // 显示原始数据参考
+    h += '<div style="margin-top:14px;padding:10px;background:var(--card-h);border:1px solid var(--bd);border-radius:6px">';
+    h += '<div style="font-size:.72rem;color:var(--tx-m);margin-bottom:6px;font-weight:600">数据参考</div>';
+    h += '<div style="font-size:.74rem;color:var(--tx-s);line-height:1.8">';
+    h += '流水 <b>' + fmtC(dr.revenue.grossSales || 0) + '</b> − 折扣 <b>' + fmtC(dr.revenue.discount || 0) + '</b> = 实收 <b>' + fmtC(dr.revenue.netSales || 0) + '</b><br>';
+    h += 'POS <b>' + fmtC(dr.payment.pos || 0) + '</b> + 建行 <b>' + fmtC(dr.payment.ccbLife || 0) + '</b> + 现金 <b>' + fmtC(dr.payment.cash || 0) + '</b><br>';
+    h += '+ 会员 <b>' + fmtC(dr.payment.memberCard || 0) + '</b> + 招待 <b>' + fmtC(dr.payment.treat || 0) + '</b><br>';
+    h += '+ 应收 <b>' + fmtC(dr.payment.ar.total || 0) + '</b>（美团 <b>' + fmtC(dr.payment.ar.meituan || 0) + '</b> + 抖音 <b>' + fmtC(dr.payment.ar.douyin || 0) + '</b>）<br>';
+    h += '+ 外卖 <b>' + fmtC(dr.delivery.total || 0) + '</b>（美团 <b>' + fmtC(dr.delivery.meituan || 0) + '</b> + 淘宝 <b>' + fmtC(dr.delivery.taobao || 0) + '</b> + 京东 <b>' + fmtC(dr.delivery.jd || 0) + '</b>）';
+    h += '</div></div>';
+
+    h += '<div class="brow" style="margin-top:12px;justify-content:flex-end"><button class="btn" onclick="closeModal()">我知道了</button></div>';
+    showModal(h, 560);
 }
 
 // 校验结果弹窗
