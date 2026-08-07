@@ -79,9 +79,11 @@ function renderDHist() {
             mNet += r.revenue.netSales || 0;
             mGuests += r.guest.count || 0;
         });
+        var mAvgDaily = mr.length > 0 ? Math.round(mNet / mr.length) : 0;
 
         h += '<div class="cards">';
         h += '<div class="card"><div class="card-l">本月实收</div><div class="card-v ac">' + fmtC(mNet) + '</div></div>';
+        h += '<div class="card"><div class="card-l">日均实收</div><div class="card-v ac">' + fmtC(mAvgDaily) + '</div></div>';
         h += '<div class="card"><div class="card-l">已报天数</div><div class="card-v">' + mr.length + '</div></div>';
         h += '<div class="card"><div class="card-l">总客流</div><div class="card-v">' + mGuests + '</div></div>';
         h += '</div>';
