@@ -30,7 +30,7 @@ var NAV = [
 
 // 数据库初始化模板
 function initDB() {
-    return { dailyReports:[],purchases:[],expenses:[],teaItems:[],cigItems:[],alcItems:[],otherItems:[],areaCats:{},aiHistory:[],whItems:[],damageRecords:[],settings:{} };
+    return { dailyReports:[],purchases:[],expenses:[],teaItems:[],cigItems:[],alcItems:[],otherItems:[],areaCats:{},aiHistory:[],whItems:[],damageRecords:[],exchangeRecords:[],settings:{} };
 }
 
 // 默认配置
@@ -93,5 +93,3 @@ function restoreSettings() {
     var savedR = localStorage.getItem('ax_radius');
     if (savedR) document.documentElement.style.setProperty('--r', savedR + 'px');
 }
-
-

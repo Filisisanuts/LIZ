@@ -52,6 +52,21 @@ function rInv(type) {
     h += '<div class="card"><div class="card-l">毛利率</div><div class="card-v">' + (tA > 0 ? fmtP(tP / tA * 100) : '0%') + '</div></div>';
     h += '</div>';
 
+
+    // ===== 兑奖状态提示（仅贵重物品） =====
+    if (type === 'other' && DB.exchangeRecords) {
+        var pendingExchanges = DB.exchangeRecords.filter(function(r) { return r.status === 'pending'; });
+        if (pendingExchanges.length > 0) {
+            var pendingNames = [];
+            pendingExchanges.forEach(function(r) {
+                var found = pendingNames.find(function(n) { return n.name === r.itemName; });
+                if (found) { found.qty += r.qty; } else { pendingNames.push({ name: r.itemName, qty: r.qty }); }
+            });
+            var tipText = pendingNames.map(function(n) { return n.name + ' ×' + n.qty; }).join('、');
+            h += '<div style="margin:0 0 10px;padding:8px 12px;background:#fff3e0;border:1px solid #ffb74d;border-radius:6px;font-size:.76rem;color:#e65100">⚠️ 待兑奖: ' + tipText + '（共' + pendingExchanges.reduce(function(s,r){return s+r.qty},0) + '包未向供应商兑奖）</div>';
+        }
+    }
+
     // ===== 共享月份选择器 =====
     h += '<div class="hrow" style="margin-bottom:10px"><label>月份</label>';
     h += '<button class="btn s" onclick="invCalNav(\'' + type + '\',-1)">◀</button>';
@@ -71,6 +86,7 @@ function rInv(type) {
     h += '<button class="btn" onclick="showAddInv(\'' + type + '\')">+添加</button> ';
     h += '<button class="btn" onclick="invMoveAll(\'' + type + '\',1)">入库</button> ';
     h += '<button class="btn" onclick="invMoveAll(\'' + type + '\',-1)">销售</button>';
+    if (type === 'other') h += ' <button class="btn p" onclick="showExchangeModal()">🎰兑换</button> <button class="btn" onclick="showExchangeList()">📋兑奖明细</button>';
     h += '</div>';
 
     if (items.length) {
@@ -1876,3 +1892,276 @@ function invCalPickYM(type, val) {
         rInv(type);
     });
 }
+
+
+// ====== 抽奖兑换功能 ======
+
+// 显示兑换弹窗（客人兑换）
+function showExchangeModal() {
+    // 只显示其他贵重物品类型
+    var items = DB.otherItems || [];
+    if (items.length === 0) {
+        toast('请先添加贵重物品');
+        return;
+    }
+
+    var h = '<h3>🎰 客人兑换</h3>';
+    h += '<p style="font-size:.76rem;color:var(--tx-m);margin:0 0 14px">客人中奖后，收取客人的钱，给客人一包新的</p>';
+
+    // 商品选择
+    h += '<div class="hrow"><label>商品</label>';
+    h += '<select class="inp" id="exc_item" style="flex:1">';
+    items.forEach(function(item) {
+        h += '<option value="' + item.id + '">' + item.name + ' (库存:' + (item.openingStock || 0) + ')</option>';
+    });
+    h += '</select></div>';
+
+    // 数量
+    h += '<div class="hrow"><label>数量</label>';
+    h += '<input class="inp" id="exc_qty" type="number" min="1" value="1" style="max-width:80px">';
+    h += '<span style="font-size:.72rem;color:var(--tx-m)">支持批量兑换</span></div>';
+
+    // 收到金额
+    h += '<div class="hrow"><label>收到金额</label>';
+    h += '<input class="inp" id="exc_amount" type="number" step="0.01" placeholder="客人支付的金额" style="max-width:120px">';
+    h += '<span style="font-size:.72rem;color:var(--tx-m)">元</span></div>';
+
+    // 日期
+    h += '<div class="hrow"><label>日期</label>';
+    h += '<input class="inp" id="exc_date" type="text" readonly placeholder="选择日期" value="' + td() + '" onclick="_dpOpen(\'exc_date\')" style="max-width:140px;cursor:pointer"></div>';
+
+    // 备注
+    h += '<div class="hrow"><label>备注</label>';
+    h += '<input class="inp" id="exc_note" type="text" placeholder="可选" style="flex:1"></div>';
+
+    h += '<div class="brow" style="margin-top:16px;justify-content:flex-end;gap:6px">';
+    h += '<button class="btn" onclick="closeModal()">取消</button>';
+    h += '<button class="btn p" onclick="doExchange()">确认兑换</button>';
+    h += '</div>';
+
+    showModal(h, 420);
+}
+
+// 执行兑换
+function doExchange() {
+    var itemId = $id('exc_item').value;
+    var qty = parseInt($id('exc_qty').value) || 0;
+    var amount = parseFloat($id('exc_amount').value) || 0;
+    var date = $id('exc_date').value || td();
+    var note = ($id('exc_note').value || '').trim();
+
+    // 验证
+    if (!itemId) { toast('请选择商品'); return; }
+    if (qty <= 0) { toast('数量必须大于0'); return; }
+    if (amount < 0) { toast('金额不能为负'); return; }
+
+    // 查找商品
+    var item = DB.otherItems.find(function(i) { return i.id === itemId; });
+    if (!item) { toast('商品不存在'); return; }
+
+    // 检查库存
+    var calc = invCalc(item, 'other', curYM());
+    if (calc.stock < qty) {
+        toast('库存不足，当前库存: ' + calc.stock);
+        return;
+    }
+
+    // 创建兑换记录
+    var record = {
+        id: 'exc_' + Date.now(),
+        itemId: itemId,
+        itemName: item.name,
+        qty: qty,
+        status: 'pending',
+        customerDate: date,
+        customerAmount: amount,
+        supplierDate: null,
+        supplierAmount: null,
+        note: note
+    };
+
+    // 保存记录
+    if (!DB.exchangeRecords) DB.exchangeRecords = [];
+    DB.exchangeRecords.push(record);
+
+    // 库存 -1（给客人新货）
+    if (!item.purchases) item.purchases = [];
+    item.purchases.push({
+        date: date,
+        qty: -qty,
+        amount: 0,
+        note: '兑换扣减 - ' + (note || '客人兑换')
+    });
+
+    upd(function() {});
+
+    toast('兑换成功，已扣除库存 ' + qty + ' 包');
+    closeModal();
+    rInv('other');
+    showExchangeList();
+}
+
+// 显示兑换明细列表
+function showExchangeList() {
+    var records = DB.exchangeRecords || [];
+    var pending = records.filter(function(r) { return r.status === 'pending'; });
+    var done = records.filter(function(r) { return r.status === 'done'; });
+
+    // 统计
+    var pendingQty = pending.reduce(function(s, r) { return s + r.qty; }, 0);
+    var receivedTotal = pending.reduce(function(s, r) { return s + (r.customerAmount || 0); }, 0);
+    var paidTotal = pending.reduce(function(s, r) { return s + (r.supplierAmount || 0); }, 0);
+
+    var h = '<h3>🎰 兑换明细</h3>';
+
+    // 统计卡片
+    h += '<div class="cards" style="margin-bottom:14px">';
+    h += '<div class="card"><div class="card-l">待兑数量</div><div class="card-v ac">' + pendingQty + '</div></div>';
+    h += '<div class="card"><div class="card-l">已收金额</div><div class="card-v gn">' + fmtC(receivedTotal) + '</div></div>';
+    h += '<div class="card"><div class="card-l">应付金额</div><div class="card-v rd">' + fmtC(paidTotal) + '</div></div>';
+    h += '</div>';
+
+    // 待兑列表
+    h += '<div style="margin-bottom:14px">';
+    h += '<div style="font-weight:600;margin-bottom:8px;color:var(--ac)">待供应商兑换 (' + pending.length + ')</div>';
+
+    if (pending.length === 0) {
+        h += '<div style="text-align:center;color:var(--tx-m);padding:20px">暂无待兑换记录</div>';
+    } else {
+        pending.forEach(function(r) {
+            h += '<div style="display:flex;align-items:center;gap:8px;padding:10px;margin-bottom:6px;background:var(--card-h);border:1px solid var(--bd);border-radius:8px">';
+            h += '<div style="flex:1">';
+            h += '<div style="font-size:.82rem;font-weight:600">' + r.itemName + ' ×' + r.qty + '</div>';
+            h += '<div style="font-size:.72rem;color:var(--tx-m)">' + r.customerDate + ' · 收 ¥' + fmtC(r.customerAmount) + '</div>';
+            if (r.note) h += '<div style="font-size:.68rem;color:var(--tx-m)">' + r.note + '</div>';
+            h += '</div>';
+            h += '<button class="btn s p" onclick="settleExchange(\'' + r.id + '\')">已兑</button>';
+            h += '<button class="btn s d" onclick="cancelExchange(\'' + r.id + '\')">作废</button>';
+            h += '</div>';
+        });
+    }
+    h += '</div>';
+
+    // 已兑列表
+    if (done.length > 0) {
+        h += '<div>';
+        h += '<div style="font-weight:600;margin-bottom:8px;color:var(--tx-m)">已兑完成 (' + done.length + ')</div>';
+        done.slice(-10).reverse().forEach(function(r) {
+            h += '<div style="display:flex;align-items:center;gap:8px;padding:8px;margin-bottom:4px;background:var(--card-h);border:1px solid var(--bd);border-radius:6px;opacity:.7">';
+            h += '<div style="flex:1">';
+            h += '<div style="font-size:.78rem">' + r.itemName + ' ×' + r.qty + '</div>';
+            h += '<div style="font-size:.68rem;color:var(--tx-m)">' + r.customerDate + ' → ' + r.supplierDate + '</div>';
+            h += '</div>';
+            h += '<span style="font-size:.72rem;color:var(--gn)">收¥' + fmtC(r.customerAmount) + ' 付¥' + fmtC(r.supplierAmount) + '</span>';
+            h += '</div>';
+        });
+        if (done.length > 10) h += '<div style="text-align:center;font-size:.72rem;color:var(--tx-m);margin-top:8px">仅显示最近10条</div>';
+        h += '</div>';
+    }
+
+    h += '<div class="brow" style="margin-top:16px;justify-content:flex-end">';
+    h += '<button class="btn" onclick="closeModal()">关闭</button>';
+    h += '</div>';
+
+    showModal(h, 500);
+}
+
+// 供应商兑付
+function settleExchange(id) {
+    var records = DB.exchangeRecords || [];
+    var record = records.find(function(r) { return r.id === id; });
+    if (!record) return;
+
+    var h = '<h3>供应商兑付</h3>';
+    h += '<p style="font-size:.76rem;color:var(--tx-m);margin:0 0 14px">供应商兑奖，支付给我们钱，补一包新的</p>';
+
+    h += '<div style="padding:10px;background:var(--card-h);border-radius:8px;margin-bottom:14px">';
+    h += '<div style="font-weight:600">' + record.itemName + ' ×' + record.qty + '</div>';
+    h += '<div style="font-size:.76rem;color:var(--tx-m)">客人兑换: ' + record.customerDate + ' · 收 ¥' + fmtC(record.customerAmount) + '</div>';
+    h += '</div>';
+
+    h += '<div class="hrow"><label>兑付日期</label>';
+    h += '<input class="inp" id="settle_date" type="text" readonly value="' + td() + '" onclick="_dpOpen(\'settle_date\')" style="max-width:140px;cursor:pointer"></div>';
+
+    h += '<div class="hrow"><label>支付金额</label>';
+    h += '<input class="inp" id="settle_amount" type="number" step="0.01" placeholder="供应商支付的金额" style="max-width:120px">';
+    h += '<span style="font-size:.72rem;color:var(--tx-m)">元</span></div>';
+
+    h += '<div class="brow" style="margin-top:16px;justify-content:flex-end;gap:6px">';
+    h += '<button class="btn" onclick="closeModal()">取消</button>';
+    h += '<button class="btn p" onclick="confirmSettle(\'' + id + '\')">确认兑付</button>';
+    h += '</div>';
+
+    showModal(h, 400);
+}
+
+// 确认兑付
+function confirmSettle(id) {
+    var records = DB.exchangeRecords || [];
+    var record = records.find(function(r) { return r.id === id; });
+    if (!record) return;
+
+    var date = $id('settle_date').value || td();
+    var amount = parseFloat($id('settle_amount').value) || 0;
+
+    if (amount < 0) { toast('金额不能为负'); return; }
+
+    // 更新记录
+    record.status = 'done';
+    record.supplierDate = date;
+    record.supplierAmount = amount;
+
+    // 库存 +1（供应商补货）
+    var item = DB.otherItems.find(function(i) { return i.id === record.itemId; });
+    if (item) {
+        if (!item.purchases) item.purchases = [];
+        item.purchases.push({
+            date: date,
+            qty: record.qty,
+            amount: amount,
+            note: '供应商兑付 - ' + record.itemName
+        });
+    }
+
+    upd(function() {});
+
+    toast('兑付成功，已入库 ' + record.qty + ' 包');
+    closeModal();
+    rInv('other');
+    showExchangeList();
+}
+
+// 作废兑换记录
+function cancelExchange(id) {
+    if (!confirm('确定要作废这条兑换记录吗？')) return;
+
+    var records = DB.exchangeRecords || [];
+    var idx = records.findIndex(function(r) { return r.id === id; });
+    if (idx < 0) return;
+
+    var record = records[idx];
+
+    // 恢复库存（之前扣了，现在加回来）
+    var item = DB.otherItems.find(function(i) { return i.id === record.itemId; });
+    if (item) {
+        if (!item.purchases) item.purchases = [];
+        item.purchases.push({
+            date: td(),
+            qty: record.qty,
+            amount: 0,
+            note: '兑换作废 - 恢复库存'
+        });
+    }
+
+    // 删除记录
+    records.splice(idx, 1);
+
+    upd(function() {});
+
+    toast('已作废，库存已恢复');
+    rInv('other');
+    showExchangeList();
+}
+
+
+
