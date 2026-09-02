@@ -1,0 +1,11 @@
+# 本地密钥与环境配置
+.env
+.env.*
+!.env.example
+
+# 自动化测试生成物
+test_screenshot.png
+
+# Python 缓存
+__pycache__/
+*.py[cod]
