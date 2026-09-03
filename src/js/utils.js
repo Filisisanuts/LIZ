@@ -120,6 +120,14 @@ function clearPendingMimo(){
     window._pendingMimoKey=null;
     window._pendingMimoDialog=false;
 }
+// release AI memory after recognition
+function releaseMimoMemory(){
+    try{
+        if(window._mimoObjectURL){URL.revokeObjectURL(window._mimoObjectURL);window._mimoObjectURL=null}
+    }catch(e){}
+    window._mimoBase64=null;
+    window._mimoProcessing=false;
+}
 function mimoErrorMessage(text){
     try{
         var data=JSON.parse(text||'');
@@ -127,25 +135,40 @@ function mimoErrorMessage(text){
     }catch(e){return (text||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().slice(0,160)}
 }
 function prepareMimoImage(file,cb){
-    var reader=new FileReader();reader.onload=function(ev){
-        var img=new Image();img.onload=function(){
-            // 采购单只需清晰文字：限制最长边与总像素，避免超长照片撑爆浏览器或视觉模型。
-            var maxSide=1600,maxPixels=1920000,w=img.width,h=img.height;
-            var scale=Math.min(1,maxSide/Math.max(w,h),Math.sqrt(maxPixels/(w*h)));
-            w=Math.max(1,Math.round(w*scale));h=Math.max(1,Math.round(h*scale));
-            var canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
-            canvas.getContext('2d').drawImage(img,0,0,w,h);
-            var base64=canvas.toDataURL('image/jpeg',.72).split(',')[1];
-            canvas.width=0;canvas.height=0;img.src='';
-            // Base64 比原文件大约多三分之一；限制在 2 MB，给服务端留出稳定的视觉推理空间。
-            if(base64.length>2*1024*1024){cb(new Error('图片压缩后仍超过 2 MB，请靠近单据重新拍摄，或分两张识别'));return}
-            cb(null,base64);
+    try{
+        // use createObjectURL to avoid FileReader base64 double memory
+        var objectURL=URL.createObjectURL(file);
+        window._mimoObjectURL=objectURL;
+        var img=new Image();
+        img.onload=function(){
+            // release objectURL immediately after load
+            URL.revokeObjectURL(objectURL);window._mimoObjectURL=null;
+            try{
+                // limit size for purchase order text recognition
+                var maxSide=1600,maxPixels=1920000,w=img.width,h=img.height;
+                var scale=Math.min(1,maxSide/Math.max(w,h),Math.sqrt(maxPixels/(w*h)));
+                w=Math.max(1,Math.round(w*scale));h=Math.max(1,Math.round(h*scale));
+                var canvas=document.createElement("canvas");canvas.width=w;canvas.height=h;
+                canvas.getContext("2d").drawImage(img,0,0,w,h);
+                var base64=canvas.toDataURL("image/jpeg",.72).split(",")[1];
+                // release canvas and img immediately
+                canvas.width=0;canvas.height=0;img.src="";
+                canvas=null;img=null;
+                // limit to 2MB for API
+                if(base64.length>2*1024*1024){cb(new Error("图片压缩后仍超过 2 MB，请靠近单据重新拍摄，或分两张识别"));return}
+                cb(null,base64);
+            }catch(canvasErr){
+                cb(new Error("内存不足，无法处理图片。请关闭其他标签页后重试"));
+            }
         };
-        img.onerror=function(){cb(new Error('图片无法读取，请重新拍摄'));};
-        img.src=ev.target.result;
-    };
-    reader.onerror=function(){cb(new Error('图片读取失败，请重新拍摄'));};
-    reader.readAsDataURL(file);
+        img.onerror=function(){
+            URL.revokeObjectURL(objectURL);window._mimoObjectURL=null;
+            cb(new Error("图片无法读取，请重新拍摄"));
+        };
+        img.src=objectURL;
+    }catch(e){
+        cb(new Error("内存不足，无法加载图片。请关闭其他标签页后重试"));
+    }
 }
 function doAIParse(){
     if(!localStorage.getItem('ax_mimo_key')){toast('请先在设置页配置MiMo API');return}
@@ -160,19 +183,23 @@ function doAIParse(){
     };input.click();
 }
 function doAIParseGo(){
+    if(window._mimoProcessing)return;
+    window._mimoProcessing=true;
     window._pendingMimoDialog=false;
     closeModal();showAILoading();
     var file=window._pendingMimoFile,ep=window._pendingMimoEp,key=window._pendingMimoKey;
-    if(!file){hideAILoading(false);toast('图片已失效，请重新拍摄');return}
+    if(!file){window._mimoProcessing=false;hideAILoading(false);toast("图片已失效，请重新拍摄");return}
     prepareMimoImage(file,function(imageError,base64){
-        if(imageError){clearPendingMimo();hideAILoading(false);toast(imageError.message);return}
+        if(imageError){window._mimoProcessing=false;clearPendingMimo();releaseMimoMemory();hideAILoading(false);toast(imageError.message);return}
+        window._mimoBase64=base64;
         var prompt='请识别这张采购单/出库单图片，提取所有商品信息。图片中会标注区域信息（如厨房、吧台、外场），请将每个商品对应的区域填入section字段。请严格按以下JSON格式返回：\n\n{"date":"YYYY-MM-DD","source":"供应商名称","items":[{"name":"商品名称","qty":数字,"unit":"单位","unitPrice":单价,"total":金额,"section":"区域"}]}\n\n区域只能是：厨房、吧台、外场。无法判断则留空。只返回JSON。';
         var body={model:localStorage.getItem('ax_mimo_model')||'mimo-v2.5',messages:[{role:'user',content:[{type:'text',text:prompt},{type:'image_url',image_url:{url:'data:image/jpeg;base64,'+base64}}]}],max_tokens:1024,temperature:.1};
         var xhr=new XMLHttpRequest();xhr.open('POST',ep,true);
     xhr.setRequestHeader('Content-Type','application/json');xhr.setRequestHeader('Authorization','Bearer '+key);xhr.timeout=120000;
     xhr.onload=function(){
-        if(xhr.status<200||xhr.status>=300){var message=mimoErrorMessage(xhr.responseText)||('服务返回 HTTP '+xhr.status);clearPendingMimo();hideAILoading(false);toast('识别失败：'+message);return}
-        clearPendingMimo();hideAILoading();
+        window._mimoProcessing=false;
+        if(xhr.status<200||xhr.status>=300){var message=mimoErrorMessage(xhr.responseText)||("服务返回 HTTP "+xhr.status);clearPendingMimo();releaseMimoMemory();hideAILoading(false);toast("识别失败："+message);return}
+        clearPendingMimo();releaseMimoMemory();hideAILoading();
         try{
             var data=JSON.parse(xhr.responseText);var reply='';
             if(data.choices&&data.choices[0])reply=data.choices[0].message.content||'';
@@ -195,7 +222,7 @@ function doAIParseGo(){
             setTimeout(function(){switchPT('manual');if(result.date&&$id('pmDate'))$id('pmDate').value=result.date;if($id('pmSrc')){for(var i=0;i<$id('pmSrc').options.length;i++){if($id('pmSrc').options[i].value==src){$id('pmSrc').selectedIndex=i;break}}}renderPML();toast('已识别 '+items.length+' 项物品')},200);
         }catch(e){toast('解析失败');console.error(e)}
     };
-    xhr.onerror=function(){clearPendingMimo();hideAILoading(false);toast('请求失败，请检查网络或 API 地址')};xhr.ontimeout=function(){clearPendingMimo();hideAILoading(false);toast('请求超时')};
+    xhr.onerror=function(){window._mimoProcessing=false;clearPendingMimo();releaseMimoMemory();hideAILoading(false);toast("请求失败，请检查网络或 API 地址")};xhr.ontimeout=function(){window._mimoProcessing=false;clearPendingMimo();releaseMimoMemory();hideAILoading(false);toast("请求超时")};
     xhr.send(JSON.stringify(body));
     });
 }
