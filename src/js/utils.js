@@ -185,6 +185,21 @@ function copyMimoDiagnostics(){
     }else{document.execCommand('copy');toast('诊断已复制')}
 }
 function prepareMimoImage(file,cb){
+    var finished=false;
+    function finish(error,base64){
+        if(finished){
+            mimoDiag('ignored_late_image_event',{outcome:error?'error':'success'});
+            return;
+        }
+        finished=true;
+        cb(error,base64);
+    }
+    function releaseImage(img){
+        if(!img)return;
+        img.onload=null;
+        img.onerror=null;
+        img.src='';
+    }
     // Shared canvas compression logic
     function compressImage(img){
         try{
@@ -194,14 +209,15 @@ function prepareMimoImage(file,cb){
             var canvas=document.createElement("canvas");canvas.width=w;canvas.height=h;
             canvas.getContext("2d").drawImage(img,0,0,w,h);
             var base64=canvas.toDataURL("image/jpeg",.65).split(",")[1];
-            canvas.width=0;canvas.height=0;img.src="";
-            canvas=null;img=null;
             mimoDiag('image_compressed',{width:w,height:h,base64Bytes:base64.length,memory:mimoMemorySnapshot()});
-            if(base64.length>2*1024*1024){mimoDiag('local_failure',{stage:'compressed_image_too_large',base64Bytes:base64.length});cb(new Error("图片压缩后仍超过 2 MB，请靠近单据重新拍摄，或分两张识别"));return}
-            cb(null,base64);
+            canvas.width=0;canvas.height=0;canvas=null;
+            if(base64.length>2*1024*1024){mimoDiag('local_failure',{stage:'compressed_image_too_large',base64Bytes:base64.length});finish(new Error("图片压缩后仍超过 2 MB，请靠近单据重新拍摄，或分两张识别"));releaseImage(img);return}
+            finish(null,base64);
+            releaseImage(img);
         }catch(canvasErr){
             mimoDiag('local_failure',{stage:'canvas_compress',errorName:canvasErr&&canvasErr.name||'Error',memory:mimoMemorySnapshot()});
-            cb(new Error("内存不足，无法处理图片。请关闭其他标签页后重试"));
+            finish(new Error("内存不足，无法处理图片。请关闭其他标签页后重试"));
+            releaseImage(img);
         }
     }
     try{
@@ -211,11 +227,13 @@ function prepareMimoImage(file,cb){
         var img=new Image();
         var triedObjectURL=true;
         img.onload=function(){
+            img.onload=null;img.onerror=null;
             URL.revokeObjectURL(objectURL);window._mimoObjectURL=null;
             mimoDiag('object_url_loaded',{width:img.naturalWidth||img.width,height:img.naturalHeight||img.height});
             compressImage(img);
         };
         img.onerror=function(){
+            if(finished){mimoDiag('ignored_late_image_event',{source:'object_url'});return}
             URL.revokeObjectURL(objectURL);window._mimoObjectURL=null;
             if(triedObjectURL){
                 triedObjectURL=false;
@@ -223,18 +241,18 @@ function prepareMimoImage(file,cb){
                 var reader=new FileReader();
                 reader.onload=function(ev){
                     var img2=new Image();
-                    img2.onload=function(){mimoDiag('file_reader_loaded',{width:img2.naturalWidth||img2.width,height:img2.naturalHeight||img2.height});compressImage(img2)};
-                    img2.onerror=function(){mimoDiag('local_failure',{stage:'file_reader_image_decode'});cb(new Error("图片无法读取，请重新拍摄"))};
+                    img2.onload=function(){img2.onload=null;img2.onerror=null;mimoDiag('file_reader_loaded',{width:img2.naturalWidth||img2.width,height:img2.naturalHeight||img2.height});compressImage(img2)};
+                    img2.onerror=function(){mimoDiag('local_failure',{stage:'file_reader_image_decode'});finish(new Error("图片无法读取，请重新拍摄"))};
                     img2.src=ev.target.result;
                 };
-                reader.onerror=function(){mimoDiag('local_failure',{stage:'file_reader_read'});cb(new Error("图片读取失败，请重新拍摄"))};
+                reader.onerror=function(){mimoDiag('local_failure',{stage:'file_reader_read'});finish(new Error("图片读取失败，请重新拍摄"))};
                 reader.readAsDataURL(file);
             }
         };
         img.src=objectURL;
     }catch(e){
         mimoDiag('local_failure',{stage:'object_url_create',errorName:e&&e.name||'Error',memory:mimoMemorySnapshot()});
-        cb(new Error("内存不足，无法加载图片。请关闭其他标签页后重试"));
+        finish(new Error("内存不足，无法加载图片。请关闭其他标签页后重试"));
     }
 }
 function doAIParse(){
