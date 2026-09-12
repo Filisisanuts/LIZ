@@ -135,35 +135,47 @@ function mimoErrorMessage(text){
     }catch(e){return (text||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().slice(0,160)}
 }
 function prepareMimoImage(file,cb){
+    // Shared canvas compression logic
+    function compressImage(img){
+        try{
+            var maxSide=1200,maxPixels=1200000,w=img.width,h=img.height;
+            var scale=Math.min(1,maxSide/Math.max(w,h),Math.sqrt(maxPixels/(w*h)));
+            w=Math.max(1,Math.round(w*scale));h=Math.max(1,Math.round(h*scale));
+            var canvas=document.createElement("canvas");canvas.width=w;canvas.height=h;
+            canvas.getContext("2d").drawImage(img,0,0,w,h);
+            var base64=canvas.toDataURL("image/jpeg",.65).split(",")[1];
+            canvas.width=0;canvas.height=0;img.src="";
+            canvas=null;img=null;
+            if(base64.length>2*1024*1024){cb(new Error("图片压缩后仍超过 2 MB，请靠近单据重新拍摄，或分两张识别"));return}
+            cb(null,base64);
+        }catch(canvasErr){
+            cb(new Error("内存不足，无法处理图片。请关闭其他标签页后重试"));
+        }
+    }
     try{
-        // use createObjectURL to avoid FileReader base64 double memory
+        // Try objectURL first (lower memory), fall back to FileReader if it fails
         var objectURL=URL.createObjectURL(file);
         window._mimoObjectURL=objectURL;
         var img=new Image();
+        var triedObjectURL=true;
         img.onload=function(){
-            // release objectURL immediately after load
             URL.revokeObjectURL(objectURL);window._mimoObjectURL=null;
-            try{
-                // limit size for purchase order text recognition
-                var maxSide=1600,maxPixels=1920000,w=img.width,h=img.height;
-                var scale=Math.min(1,maxSide/Math.max(w,h),Math.sqrt(maxPixels/(w*h)));
-                w=Math.max(1,Math.round(w*scale));h=Math.max(1,Math.round(h*scale));
-                var canvas=document.createElement("canvas");canvas.width=w;canvas.height=h;
-                canvas.getContext("2d").drawImage(img,0,0,w,h);
-                var base64=canvas.toDataURL("image/jpeg",.72).split(",")[1];
-                // release canvas and img immediately
-                canvas.width=0;canvas.height=0;img.src="";
-                canvas=null;img=null;
-                // limit to 2MB for API
-                if(base64.length>2*1024*1024){cb(new Error("图片压缩后仍超过 2 MB，请靠近单据重新拍摄，或分两张识别"));return}
-                cb(null,base64);
-            }catch(canvasErr){
-                cb(new Error("内存不足，无法处理图片。请关闭其他标签页后重试"));
-            }
+            compressImage(img);
         };
         img.onerror=function(){
             URL.revokeObjectURL(objectURL);window._mimoObjectURL=null;
-            cb(new Error("图片无法读取，请重新拍摄"));
+            if(triedObjectURL){
+                triedObjectURL=false;
+                var reader=new FileReader();
+                reader.onload=function(ev){
+                    var img2=new Image();
+                    img2.onload=function(){compressImage(img2)};
+                    img2.onerror=function(){cb(new Error("图片无法读取，请重新拍摄"))};
+                    img2.src=ev.target.result;
+                };
+                reader.onerror=function(){cb(new Error("图片读取失败，请重新拍摄"))};
+                reader.readAsDataURL(file);
+            }
         };
         img.src=objectURL;
     }catch(e){
