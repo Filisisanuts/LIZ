@@ -116,6 +116,7 @@ function hideAILoading(success){
 // ---- AI拍照识别（采购单，统一入口）----
 function clearPendingMimo(){
     window._pendingMimoFile=null;
+    window._pendingMimoBase64=null;
     window._pendingMimoEp=null;
     window._pendingMimoKey=null;
     window._pendingMimoDialog=false;
@@ -188,10 +189,19 @@ function doAIParse(){
     input.onchange=function(e){
         var file=e.target.files[0];if(!file)return;
         clearPendingMimo();
-        window._pendingMimoFile=file;window._pendingMimoEp=localStorage.getItem('ax_mimo_ep');window._pendingMimoKey=localStorage.getItem('ax_mimo_key');
-        window._pendingMimoDialog=true;
-        var h2='<div style="text-align:center;padding:10px"><div style="font-size:.88rem;font-weight:700;margin-bottom:8px">确认识别这张图片？</div><div class="brow"><button class="btn p" onclick="doAIParseGo()">确认识别</button> <button class="btn" onclick="clearPendingMimo();closeModal()">取消</button></div></div>';
-        showModal(h2,400);
+        // Eagerly load and compress image right away (before confirmation dialog)
+        window._pendingMimoBase64=null;
+        window._pendingMimoEp=localStorage.getItem('ax_mimo_ep');
+        window._pendingMimoKey=localStorage.getItem('ax_mimo_key');
+        showAILoading();
+        prepareMimoImage(file,function(imageError,base64){
+            hideAILoading();
+            if(imageError){toast(imageError.message);return}
+            window._pendingMimoBase64=base64;
+            window._pendingMimoDialog=true;
+            var h2='<div style="text-align:center;padding:10px"><div style="font-size:.88rem;font-weight:700;margin-bottom:8px">确认识别这张图片？</div><div class="brow"><button class="btn p" onclick="doAIParseGo()">确认识别</button> <button class="btn" onclick="clearPendingMimo();closeModal()">取消</button></div></div>';
+            showModal(h2,400);
+        });
     };input.click();
 }
 function doAIParseGo(){
@@ -199,14 +209,11 @@ function doAIParseGo(){
     window._mimoProcessing=true;
     window._pendingMimoDialog=false;
     closeModal();showAILoading();
-    var file=window._pendingMimoFile,ep=window._pendingMimoEp,key=window._pendingMimoKey;
-    if(!file){window._mimoProcessing=false;hideAILoading(false);toast("图片已失效，请重新拍摄");return}
-    prepareMimoImage(file,function(imageError,base64){
-        if(imageError){window._mimoProcessing=false;clearPendingMimo();releaseMimoMemory();hideAILoading(false);toast(imageError.message);return}
-        window._mimoBase64=base64;
-        var prompt='请识别这张采购单/出库单图片，提取所有商品信息。图片中会标注区域信息（如厨房、吧台、外场），请将每个商品对应的区域填入section字段。请严格按以下JSON格式返回：\n\n{"date":"YYYY-MM-DD","source":"供应商名称","items":[{"name":"商品名称","qty":数字,"unit":"单位","unitPrice":单价,"total":金额,"section":"区域"}]}\n\n区域只能是：厨房、吧台、外场。无法判断则留空。只返回JSON。';
-        var body={model:localStorage.getItem('ax_mimo_model')||'mimo-v2.5',messages:[{role:'user',content:[{type:'text',text:prompt},{type:'image_url',image_url:{url:'data:image/jpeg;base64,'+base64}}]}],max_tokens:1024,temperature:.1};
-        var xhr=new XMLHttpRequest();xhr.open('POST',ep,true);
+    var base64=window._pendingMimoBase64,ep=window._pendingMimoEp,key=window._pendingMimoKey;
+    if(!base64){window._mimoProcessing=false;hideAILoading(false);toast("图片已失效，请重新拍摄");return}
+    var prompt='请识别这张采购单/出库单图片，提取所有商品信息。图片中会标注区域信息（如厨房、吧台、外场），请将每个商品对应的区域填入section字段。请严格按以下JSON格式返回：\n\n{"date":"YYYY-MM-DD","source":"供应商名称","items":[{"name":"商品名称","qty":数字,"unit":"单位","unitPrice":单价,"total":金额,"section":"区域"}]}\n\n区域只能是：厨房、吧台、外场。无法判断则留空。只返回JSON。';
+    var body={model:localStorage.getItem('ax_mimo_model')||'mimo-v2.5',messages:[{role:'user',content:[{type:'text',text:prompt},{type:'image_url',image_url:{url:'data:image/jpeg;base64,'+base64}}]}],max_tokens:1024,temperature:.1};
+    var xhr=new XMLHttpRequest();xhr.open('POST',ep,true);
     xhr.setRequestHeader('Content-Type','application/json');xhr.setRequestHeader('Authorization','Bearer '+key);xhr.timeout=120000;
     xhr.onload=function(){
         window._mimoProcessing=false;
@@ -236,7 +243,6 @@ function doAIParseGo(){
     };
     xhr.onerror=function(){window._mimoProcessing=false;clearPendingMimo();releaseMimoMemory();hideAILoading(false);toast("请求失败，请检查网络或 API 地址")};xhr.ontimeout=function(){window._mimoProcessing=false;clearPendingMimo();releaseMimoMemory();hideAILoading(false);toast("请求超时")};
     xhr.send(JSON.stringify(body));
-    });
 }
 
 // ==== 日期选择器 ====
