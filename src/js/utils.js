@@ -135,6 +135,55 @@ function mimoErrorMessage(text){
         return (data.error&&(data.error.message||data.error.code))||data.message||'';
     }catch(e){return (text||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().slice(0,160)}
 }
+// ---- AI识图脱敏诊断 ----
+var MIMO_DIAG_KEY='ax_mimo_diag',MIMO_DIAG_LIMIT=80;
+function mimoMemorySnapshot(){
+    var memory=performance&&performance.memory;
+    return memory?{usedJSHeapSize:memory.usedJSHeapSize,totalJSHeapSize:memory.totalJSHeapSize,jsHeapSizeLimit:memory.jsHeapSizeLimit}:null;
+}
+function mimoDiag(event,detail){
+    var record={at:new Date().toISOString(),run:window._mimoRunId||'unknown',event:event,detail:detail||{}};
+    try{
+        var records=JSON.parse(localStorage.getItem(MIMO_DIAG_KEY)||'[]');
+        records.push(record);
+        localStorage.setItem(MIMO_DIAG_KEY,JSON.stringify(records.slice(-MIMO_DIAG_LIMIT)));
+    }catch(e){}
+    if(window.console&&console.info)console.info('[MiMo诊断]',record);
+}
+function startMimoRun(file){
+    window._mimoRunId='mimo-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
+    mimoDiag('file_selected',{type:file.type||'unknown',size:file.size||0,lastModified:file.lastModified||0,memory:mimoMemorySnapshot()});
+}
+function mimoEndpointSummary(endpoint){
+    try{return new URL(endpoint).origin}catch(e){return 'invalid-endpoint'}
+}
+function mimoResponseSummary(data,responseText){
+    var choice=data&&data.choices&&data.choices[0],message=choice&&choice.message,content=message&&message.content;
+    return {
+        responseBytes:(responseText||'').length,
+        topLevelKeys:data&&typeof data==='object'?Object.keys(data).slice(0,12):[],
+        choicesCount:data&&data.choices&&data.choices.length||0,
+        hasMessage:!!message,
+        contentType:typeof content,
+        contentLength:typeof content==='string'?content.length:0,
+        finishReason:choice&&choice.finish_reason||null,
+        errorCode:data&&data.error&&(data.error.code||data.error.type)||null
+    };
+}
+function showMimoDiagnostics(){
+    var records=[];
+    try{records=JSON.parse(localStorage.getItem(MIMO_DIAG_KEY)||'[]')}catch(e){}
+    var report=JSON.stringify(records,null,2);
+    var h='<h3>AI识图诊断</h3><p style="font-size:.75rem;color:var(--tx-m)">仅含阶段、尺寸、耗时与响应结构；不含图片、单据内容、API Key 或完整 AI 回复。</p><textarea id="mimoDiagReport" class="inp" readonly style="height:320px;font-family:monospace;font-size:.68rem;white-space:pre">'+report.replace(/</g,'&lt;')+'</textarea><div class="brow" style="margin-top:10px"><button class="btn p" onclick="copyMimoDiagnostics()">复制诊断</button><button class="btn" onclick="closeModal()">关闭</button></div>';
+    showModal(h,680);
+}
+function copyMimoDiagnostics(){
+    var report=$id('mimoDiagReport');if(!report)return;
+    report.select();
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+        navigator.clipboard.writeText(report.value).then(function(){toast('诊断已复制')}).catch(function(){document.execCommand('copy');toast('诊断已复制')});
+    }else{document.execCommand('copy');toast('诊断已复制')}
+}
 function prepareMimoImage(file,cb){
     // Shared canvas compression logic
     function compressImage(img){
@@ -147,9 +196,11 @@ function prepareMimoImage(file,cb){
             var base64=canvas.toDataURL("image/jpeg",.65).split(",")[1];
             canvas.width=0;canvas.height=0;img.src="";
             canvas=null;img=null;
-            if(base64.length>2*1024*1024){cb(new Error("图片压缩后仍超过 2 MB，请靠近单据重新拍摄，或分两张识别"));return}
+            mimoDiag('image_compressed',{width:w,height:h,base64Bytes:base64.length,memory:mimoMemorySnapshot()});
+            if(base64.length>2*1024*1024){mimoDiag('local_failure',{stage:'compressed_image_too_large',base64Bytes:base64.length});cb(new Error("图片压缩后仍超过 2 MB，请靠近单据重新拍摄，或分两张识别"));return}
             cb(null,base64);
         }catch(canvasErr){
+            mimoDiag('local_failure',{stage:'canvas_compress',errorName:canvasErr&&canvasErr.name||'Error',memory:mimoMemorySnapshot()});
             cb(new Error("内存不足，无法处理图片。请关闭其他标签页后重试"));
         }
     }
@@ -161,25 +212,28 @@ function prepareMimoImage(file,cb){
         var triedObjectURL=true;
         img.onload=function(){
             URL.revokeObjectURL(objectURL);window._mimoObjectURL=null;
+            mimoDiag('object_url_loaded',{width:img.naturalWidth||img.width,height:img.naturalHeight||img.height});
             compressImage(img);
         };
         img.onerror=function(){
             URL.revokeObjectURL(objectURL);window._mimoObjectURL=null;
             if(triedObjectURL){
                 triedObjectURL=false;
+                mimoDiag('object_url_failed',{fallback:'FileReader'});
                 var reader=new FileReader();
                 reader.onload=function(ev){
                     var img2=new Image();
-                    img2.onload=function(){compressImage(img2)};
-                    img2.onerror=function(){cb(new Error("图片无法读取，请重新拍摄"))};
+                    img2.onload=function(){mimoDiag('file_reader_loaded',{width:img2.naturalWidth||img2.width,height:img2.naturalHeight||img2.height});compressImage(img2)};
+                    img2.onerror=function(){mimoDiag('local_failure',{stage:'file_reader_image_decode'});cb(new Error("图片无法读取，请重新拍摄"))};
                     img2.src=ev.target.result;
                 };
-                reader.onerror=function(){cb(new Error("图片读取失败，请重新拍摄"))};
+                reader.onerror=function(){mimoDiag('local_failure',{stage:'file_reader_read'});cb(new Error("图片读取失败，请重新拍摄"))};
                 reader.readAsDataURL(file);
             }
         };
         img.src=objectURL;
     }catch(e){
+        mimoDiag('local_failure',{stage:'object_url_create',errorName:e&&e.name||'Error',memory:mimoMemorySnapshot()});
         cb(new Error("内存不足，无法加载图片。请关闭其他标签页后重试"));
     }
 }
@@ -189,6 +243,7 @@ function doAIParse(){
     input.onchange=function(e){
         var file=e.target.files[0];if(!file)return;
         clearPendingMimo();
+        startMimoRun(file);
         // Eagerly load and compress image right away (before confirmation dialog)
         window._pendingMimoBase64=null;
         window._pendingMimoEp=localStorage.getItem('ax_mimo_ep');
@@ -196,9 +251,10 @@ function doAIParse(){
         showAILoading();
         prepareMimoImage(file,function(imageError,base64){
             hideAILoading();
-            if(imageError){toast(imageError.message);return}
+            if(imageError){mimoDiag('run_failed',{stage:'prepare_image',message:imageError.message});toast(imageError.message+'（可查看识别诊断）');return}
             window._pendingMimoBase64=base64;
             window._pendingMimoDialog=true;
+            mimoDiag('confirmation_shown',{base64Bytes:base64.length});
             var h2='<div style="text-align:center;padding:10px"><div style="font-size:.88rem;font-weight:700;margin-bottom:8px">确认识别这张图片？</div><div class="brow"><button class="btn p" onclick="doAIParseGo()">确认识别</button> <button class="btn" onclick="clearPendingMimo();closeModal()">取消</button></div></div>';
             showModal(h2,400);
         });
@@ -210,21 +266,23 @@ function doAIParseGo(){
     window._pendingMimoDialog=false;
     closeModal();showAILoading();
     var base64=window._pendingMimoBase64,ep=window._pendingMimoEp,key=window._pendingMimoKey;
-    if(!base64){window._mimoProcessing=false;hideAILoading(false);toast("图片已失效，请重新拍摄");return}
+    if(!base64){window._mimoProcessing=false;mimoDiag('run_failed',{stage:'confirm_without_image'});hideAILoading(false);toast("图片已失效，请重新拍摄（可查看识别诊断）");return}
     var prompt='请识别这张采购单/出库单图片，提取所有商品信息。图片中会标注区域信息（如厨房、吧台、外场），请将每个商品对应的区域填入section字段。请严格按以下JSON格式返回：\n\n{"date":"YYYY-MM-DD","source":"供应商名称","items":[{"name":"商品名称","qty":数字,"unit":"单位","unitPrice":单价,"total":金额,"section":"区域"}]}\n\n区域只能是：厨房、吧台、外场。无法判断则留空。只返回JSON。';
     var body={model:localStorage.getItem('ax_mimo_model')||'mimo-v2.5',messages:[{role:'user',content:[{type:'text',text:prompt},{type:'image_url',image_url:{url:'data:image/jpeg;base64,'+base64}}]}],max_tokens:1024,temperature:.1};
     var xhr=new XMLHttpRequest();xhr.open('POST',ep,true);
     xhr.setRequestHeader('Content-Type','application/json');xhr.setRequestHeader('Authorization','Bearer '+key);xhr.timeout=120000;
+    mimoDiag('request_started',{endpoint:mimoEndpointSummary(ep),model:body.model,base64Bytes:base64.length,memory:mimoMemorySnapshot()});
     xhr.onload=function(){
         window._mimoProcessing=false;
-        if(xhr.status<200||xhr.status>=300){var message=mimoErrorMessage(xhr.responseText)||("服务返回 HTTP "+xhr.status);clearPendingMimo();releaseMimoMemory();hideAILoading(false);toast("识别失败："+message);return}
+        if(xhr.status<200||xhr.status>=300){var message=mimoErrorMessage(xhr.responseText)||("服务返回 HTTP "+xhr.status);mimoDiag('api_failure',{httpStatus:xhr.status,responseBytes:(xhr.responseText||'').length,message:message});clearPendingMimo();releaseMimoMemory();hideAILoading(false);toast("识别失败："+message+"（可查看识别诊断）");return}
+        mimoDiag('http_success',{httpStatus:xhr.status,responseBytes:(xhr.responseText||'').length});
         clearPendingMimo();releaseMimoMemory();hideAILoading();
         try{
-            var data=JSON.parse(xhr.responseText);var reply='';
+            var data=JSON.parse(xhr.responseText);mimoDiag('response_received',mimoResponseSummary(data,xhr.responseText));var reply='';
             if(data.choices&&data.choices[0])reply=data.choices[0].message.content||'';
-            if(!reply){toast('AI返回为空');return}
-            var m=reply.match(/\{[\s\S]*\}/);if(!m){toast('AI未返回JSON');return}
-            var result=JSON.parse(m[0]);if(!result.items||!result.items.length){toast('未识别到商品');return}
+            if(!reply){mimoDiag('run_failed',{stage:'empty_ai_content'});toast('AI返回为空（可查看识别诊断）');return}
+            var m=reply.match(/\{[\s\S]*\}/);if(!m){mimoDiag('run_failed',{stage:'missing_json',contentLength:reply.length});toast('AI未返回JSON（可查看识别诊断）');return}
+            var result=JSON.parse(m[0]);if(!result.items||!result.items.length){mimoDiag('run_failed',{stage:'empty_items'});toast('未识别到商品（可查看识别诊断）');return}
             if(!result.date)result.date=td();var src=result.source||'岸香贸易';
             if(/岸香.*贸易|贸易.*岸香/.test(src))src='岸香贸易';else if(!src)src='岸香贸易';
             var items=[];result.items.forEach(function(item){
@@ -232,16 +290,16 @@ function doAIParseGo(){
                 if(!unitPrice&&total>0&&qty>0)unitPrice=Math.round(total/qty*100)/100;
                 if(qty>0&&total>0)items.push({name:item.name||'',section:item.section||'',category:'',qty:qty,unit:item.unit||'',unitPrice:unitPrice,total:total,source:src});
             });
-            if(!items.length){toast('解析结果为空');return}
+            if(!items.length){mimoDiag('run_failed',{stage:'items_filtered_out',rawItems:result.items.length});toast('解析结果为空（可查看识别诊断）');return}
             // 英文括号转中文括号
             items.forEach(function(item){item.name=fixBrackets(item.name)});
             // 添加历史匹配
             items = addHistoryMatches(items);
             _pmItems=items.slice();goPage('purchase');
             setTimeout(function(){switchPT('manual');if(result.date&&$id('pmDate'))$id('pmDate').value=result.date;if($id('pmSrc')){for(var i=0;i<$id('pmSrc').options.length;i++){if($id('pmSrc').options[i].value==src){$id('pmSrc').selectedIndex=i;break}}}renderPML();toast('已识别 '+items.length+' 项物品')},200);
-        }catch(e){toast('解析失败');console.error(e)}
+        }catch(e){mimoDiag('run_failed',{stage:'response_parse',errorName:e&&e.name||'Error'});toast('解析失败（可查看识别诊断）');console.error(e)}
     };
-    xhr.onerror=function(){window._mimoProcessing=false;clearPendingMimo();releaseMimoMemory();hideAILoading(false);toast("请求失败，请检查网络或 API 地址")};xhr.ontimeout=function(){window._mimoProcessing=false;clearPendingMimo();releaseMimoMemory();hideAILoading(false);toast("请求超时")};
+    xhr.onerror=function(){window._mimoProcessing=false;mimoDiag('api_failure',{stage:'network_error'});clearPendingMimo();releaseMimoMemory();hideAILoading(false);toast("请求失败，请检查网络或 API 地址（可查看识别诊断）")};xhr.ontimeout=function(){window._mimoProcessing=false;mimoDiag('api_failure',{stage:'timeout',timeoutMs:xhr.timeout});clearPendingMimo();releaseMimoMemory();hideAILoading(false);toast("请求超时（可查看识别诊断）")};
     xhr.send(JSON.stringify(body));
 }
 

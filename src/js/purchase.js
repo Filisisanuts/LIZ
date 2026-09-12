@@ -263,6 +263,7 @@ function rPurchase() {
     h += '<div class="brow" style="display:flex;gap:8px;flex-wrap:wrap">';
     h += '<button class="btn p" onclick="doParsePur()">本地解析</button>';
     h += '<button class="btn p" onclick="doAIParse()">AI图片识别</button>';
+    h += '<button class="btn" onclick="showMimoDiagnostics()">识别诊断</button>';
     h += '</div></div>';
 
     // 手动录入页
