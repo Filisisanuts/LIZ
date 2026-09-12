@@ -95,11 +95,12 @@ function handleExpPhoto(e){var f=e.target.files[0];if(!f)return;processImage(f,8
 function handleDmgPhoto(e){var f=e.target.files[0];if(!f)return;processImage(f,800,function(d){_dmgPhotoData=d;toast('已选择照片')})}
 
 // ---- AI加载动画（供采购单识别使用）----
-function showAILoading(){
+function showAILoading(phase){
     if($id('aiLoadingOverlay'))return;
+    var preparing=phase==='preparing';
     var el=document.createElement('div');el.id='aiLoadingOverlay';
     el.style.cssText='position:fixed;bottom:20px;right:20px;background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px 16px;z-index:9999;display:flex;align-items:center;gap:10px;box-shadow:0 4px 16px rgba(0,0,0,.2)';
-    el.innerHTML='<div style="width:18px;height:18px;border:2px solid var(--bd);border-top-color:var(--ac);border-radius:50%;animation:aiSpin .8s linear infinite;flex-shrink:0"></div><div><div style="font-size:.78rem;font-weight:600;color:var(--tx)">MiMo 识别中</div><div id="aiLoadingTimer" style="font-size:.65rem;color:var(--tx-m)">0秒</div></div>';
+    el.innerHTML='<div style="width:18px;height:18px;border:2px solid var(--bd);border-top-color:var(--ac);border-radius:50%;animation:aiSpin .8s linear infinite;flex-shrink:0"></div><div><div style="font-size:.78rem;font-weight:600;color:var(--tx)">'+(preparing?'正在处理图片':'MiMo 识别中')+'</div><div id="aiLoadingTimer" style="font-size:.65rem;color:var(--tx-m)">'+(preparing?'压缩完成后请确认识别':'0秒')+'</div></div>';
     document.body.appendChild(el);
     window._aiStartTime=Date.now();
     window._aiTimerInterval=setInterval(function(){var el2=$id('aiLoadingTimer');if(el2)el2.textContent=Math.floor((Date.now()-window._aiStartTime)/1000)+'秒'},1000);
@@ -107,6 +108,7 @@ function showAILoading(){
 function hideAILoading(success){
     if(window._aiTimerInterval){clearInterval(window._aiTimerInterval);window._aiTimerInterval=null}
     var el=$id('aiLoadingOverlay');if(!el)return;
+    if(success===null){el.remove();return}
     var elapsed=Math.floor((Date.now()-(window._aiStartTime||Date.now()))/1000);
     var ok=success!==false, color=ok?'var(--gn)':'var(--rd)', icon=ok?'✓':'!';
     el.innerHTML='<div style="width:18px;height:18px;border-radius:50%;background:'+color+';display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;flex-shrink:0">'+icon+'</div><div><div style="font-size:.78rem;font-weight:600;color:'+color+'">'+(ok?'识别完成':'识别失败')+'</div><div style="font-size:.65rem;color:var(--tx-m)">耗时'+elapsed+'秒</div></div>';
@@ -158,7 +160,7 @@ function mimoEndpointSummary(endpoint){
     try{return new URL(endpoint).origin}catch(e){return 'invalid-endpoint'}
 }
 function mimoResponseSummary(data,responseText){
-    var choice=data&&data.choices&&data.choices[0],message=choice&&choice.message,content=message&&message.content;
+    var choice=data&&data.choices&&data.choices[0],message=choice&&choice.message,content=message&&message.content,reasoning=message&&(message.reasoning_content||message.reasoningContent);
     return {
         responseBytes:(responseText||'').length,
         topLevelKeys:data&&typeof data==='object'?Object.keys(data).slice(0,12):[],
@@ -166,6 +168,8 @@ function mimoResponseSummary(data,responseText){
         hasMessage:!!message,
         contentType:typeof content,
         contentLength:typeof content==='string'?content.length:0,
+        reasoningContentType:typeof reasoning,
+        reasoningContentLength:typeof reasoning==='string'?reasoning.length:0,
         finishReason:choice&&choice.finish_reason||null,
         errorCode:data&&data.error&&(data.error.code||data.error.type)||null
     };
@@ -266,9 +270,9 @@ function doAIParse(){
         window._pendingMimoBase64=null;
         window._pendingMimoEp=localStorage.getItem('ax_mimo_ep');
         window._pendingMimoKey=localStorage.getItem('ax_mimo_key');
-        showAILoading();
+        showAILoading('preparing');
         prepareMimoImage(file,function(imageError,base64){
-            hideAILoading();
+            hideAILoading(null);
             if(imageError){mimoDiag('run_failed',{stage:'prepare_image',message:imageError.message});toast(imageError.message+'（可查看识别诊断）');return}
             window._pendingMimoBase64=base64;
             window._pendingMimoDialog=true;
@@ -286,7 +290,7 @@ function doAIParseGo(){
     var base64=window._pendingMimoBase64,ep=window._pendingMimoEp,key=window._pendingMimoKey;
     if(!base64){window._mimoProcessing=false;mimoDiag('run_failed',{stage:'confirm_without_image'});hideAILoading(false);toast("图片已失效，请重新拍摄（可查看识别诊断）");return}
     var prompt='请识别这张采购单/出库单图片，提取所有商品信息。图片中会标注区域信息（如厨房、吧台、外场），请将每个商品对应的区域填入section字段。请严格按以下JSON格式返回：\n\n{"date":"YYYY-MM-DD","source":"供应商名称","items":[{"name":"商品名称","qty":数字,"unit":"单位","unitPrice":单价,"total":金额,"section":"区域"}]}\n\n区域只能是：厨房、吧台、外场。无法判断则留空。只返回JSON。';
-    var body={model:localStorage.getItem('ax_mimo_model')||'mimo-v2.5',messages:[{role:'user',content:[{type:'text',text:prompt},{type:'image_url',image_url:{url:'data:image/jpeg;base64,'+base64}}]}],max_tokens:1024,temperature:.1};
+    var body={model:localStorage.getItem('ax_mimo_model')||'mimo-v2.5',messages:[{role:'user',content:[{type:'text',text:prompt},{type:'image_url',image_url:{url:'data:image/jpeg;base64,'+base64}}]}],max_tokens:4096,temperature:.1};
     var xhr=new XMLHttpRequest();xhr.open('POST',ep,true);
     xhr.setRequestHeader('Content-Type','application/json');xhr.setRequestHeader('Authorization','Bearer '+key);xhr.timeout=120000;
     mimoDiag('request_started',{endpoint:mimoEndpointSummary(ep),model:body.model,base64Bytes:base64.length,memory:mimoMemorySnapshot()});
@@ -294,13 +298,13 @@ function doAIParseGo(){
         window._mimoProcessing=false;
         if(xhr.status<200||xhr.status>=300){var message=mimoErrorMessage(xhr.responseText)||("服务返回 HTTP "+xhr.status);mimoDiag('api_failure',{httpStatus:xhr.status,responseBytes:(xhr.responseText||'').length,message:message});clearPendingMimo();releaseMimoMemory();hideAILoading(false);toast("识别失败："+message+"（可查看识别诊断）");return}
         mimoDiag('http_success',{httpStatus:xhr.status,responseBytes:(xhr.responseText||'').length});
-        clearPendingMimo();releaseMimoMemory();hideAILoading();
+        clearPendingMimo();releaseMimoMemory();
         try{
             var data=JSON.parse(xhr.responseText);mimoDiag('response_received',mimoResponseSummary(data,xhr.responseText));var reply='';
             if(data.choices&&data.choices[0])reply=data.choices[0].message.content||'';
-            if(!reply){mimoDiag('run_failed',{stage:'empty_ai_content'});toast('AI返回为空（可查看识别诊断）');return}
-            var m=reply.match(/\{[\s\S]*\}/);if(!m){mimoDiag('run_failed',{stage:'missing_json',contentLength:reply.length});toast('AI未返回JSON（可查看识别诊断）');return}
-            var result=JSON.parse(m[0]);if(!result.items||!result.items.length){mimoDiag('run_failed',{stage:'empty_items'});toast('未识别到商品（可查看识别诊断）');return}
+            if(!reply){mimoDiag('run_failed',{stage:'empty_ai_content'});hideAILoading(false);toast('AI返回为空（可查看识别诊断）');return}
+            var m=reply.match(/\{[\s\S]*\}/);if(!m){mimoDiag('run_failed',{stage:'missing_json',contentLength:reply.length});hideAILoading(false);toast('AI未返回JSON（可查看识别诊断）');return}
+            var result=JSON.parse(m[0]);if(!result.items||!result.items.length){mimoDiag('run_failed',{stage:'empty_items'});hideAILoading(false);toast('未识别到商品（可查看识别诊断）');return}
             if(!result.date)result.date=td();var src=result.source||'岸香贸易';
             if(/岸香.*贸易|贸易.*岸香/.test(src))src='岸香贸易';else if(!src)src='岸香贸易';
             var items=[];result.items.forEach(function(item){
@@ -308,14 +312,15 @@ function doAIParseGo(){
                 if(!unitPrice&&total>0&&qty>0)unitPrice=Math.round(total/qty*100)/100;
                 if(qty>0&&total>0)items.push({name:item.name||'',section:item.section||'',category:'',qty:qty,unit:item.unit||'',unitPrice:unitPrice,total:total,source:src});
             });
-            if(!items.length){mimoDiag('run_failed',{stage:'items_filtered_out',rawItems:result.items.length});toast('解析结果为空（可查看识别诊断）');return}
+            if(!items.length){mimoDiag('run_failed',{stage:'items_filtered_out',rawItems:result.items.length});hideAILoading(false);toast('解析结果为空（可查看识别诊断）');return}
             // 英文括号转中文括号
             items.forEach(function(item){item.name=fixBrackets(item.name)});
             // 添加历史匹配
             items = addHistoryMatches(items);
+            hideAILoading();
             _pmItems=items.slice();goPage('purchase');
             setTimeout(function(){switchPT('manual');if(result.date&&$id('pmDate'))$id('pmDate').value=result.date;if($id('pmSrc')){for(var i=0;i<$id('pmSrc').options.length;i++){if($id('pmSrc').options[i].value==src){$id('pmSrc').selectedIndex=i;break}}}renderPML();toast('已识别 '+items.length+' 项物品')},200);
-        }catch(e){mimoDiag('run_failed',{stage:'response_parse',errorName:e&&e.name||'Error'});toast('解析失败（可查看识别诊断）');console.error(e)}
+        }catch(e){mimoDiag('run_failed',{stage:'response_parse',errorName:e&&e.name||'Error'});hideAILoading(false);toast('解析失败（可查看识别诊断）');console.error(e)}
     };
     xhr.onerror=function(){window._mimoProcessing=false;mimoDiag('api_failure',{stage:'network_error'});clearPendingMimo();releaseMimoMemory();hideAILoading(false);toast("请求失败，请检查网络或 API 地址（可查看识别诊断）")};xhr.ontimeout=function(){window._mimoProcessing=false;mimoDiag('api_failure',{stage:'timeout',timeoutMs:xhr.timeout});clearPendingMimo();releaseMimoMemory();hideAILoading(false);toast("请求超时（可查看识别诊断）")};
     xhr.send(JSON.stringify(body));

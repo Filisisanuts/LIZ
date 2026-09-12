@@ -70,6 +70,59 @@ def test_mimo_image_prepare_completes_once_after_image_cleanup():
         browser.close()
 
 
+def test_mimo_preparing_state_is_not_reported_as_recognition_complete():
+    """图片预处理仅显示处理中，确认识别前不可显示识别完成。"""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.goto("http://localhost:8080/index.html?guest=1")
+        page.wait_for_load_state("networkidle")
+
+        page.evaluate("showAILoading('preparing')")
+        overlay_text = page.locator("#aiLoadingOverlay").inner_text()
+        assert "正在处理图片" in overlay_text
+        assert "识别完成" not in overlay_text
+
+        page.evaluate("hideAILoading(null)")
+        assert page.locator("#aiLoadingOverlay").count() == 0
+        browser.close()
+
+
+def test_successful_http_with_empty_ai_content_is_reported_as_failure():
+    """HTTP 200 不能替代识别成功；空内容必须显示识别失败。"""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.goto("http://localhost:8080/index.html?guest=1")
+        page.wait_for_load_state("networkidle")
+
+        page.evaluate(
+            """() => {
+                class EmptyContentXHR {
+                    open() {}
+                    setRequestHeader() {}
+                    send() {
+                        this.status = 200;
+                        this.responseText = JSON.stringify({
+                            choices: [{ message: { content: '' }, finish_reason: 'length' }]
+                        });
+                        setTimeout(() => this.onload(), 0);
+                    }
+                }
+                window.XMLHttpRequest = EmptyContentXHR;
+                window._pendingMimoBase64 = 'aGVsbG8=';
+                window._pendingMimoEp = 'https://example.invalid/v1';
+                window._pendingMimoKey = 'test-key';
+                doAIParseGo();
+            }"""
+        )
+        page.wait_for_timeout(50)
+        assert "识别失败" in page.locator("#aiLoadingOverlay").inner_text()
+        browser.close()
+
+
 if __name__ == "__main__":
     test_mimo_diagnostics_are_persisted_and_visible()
     test_mimo_image_prepare_completes_once_after_image_cleanup()
+    test_mimo_preparing_state_is_not_reported_as_recognition_complete()
+    test_successful_http_with_empty_ai_content_is_reported_as_failure()
