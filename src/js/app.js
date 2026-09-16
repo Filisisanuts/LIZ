@@ -66,6 +66,14 @@ function appInit() {
             String(today.getDate()).padStart(2,'0') + ' 星期' + dow;
     }
 
+    // 登录页无法读取云端状态时先放行，避免已有账号被错误送入教程；提示一次即可。
+    try {
+        if (sessionStorage.getItem('ax_onboarding_gate') === 'deferred') {
+            sessionStorage.removeItem('ax_onboarding_gate');
+            setTimeout(function() { toast('云端数据正在同步，请稍后确认数据是否已加载'); }, 0);
+        }
+    } catch (e) {}
+
     sbInit();
     if (typeof authInit === 'function') authInit();
     updSyncInd();

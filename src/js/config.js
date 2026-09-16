@@ -77,6 +77,60 @@ function loadDB(){try{var d=JSON.parse(localStorage.getItem(STORE));return d&&d.
 function saveDB(d){localStorage.setItem(STORE,JSON.stringify(d))}
 var DB=loadDB();
 
+// 新手引导判定：旧系统与新配置体系都以当前登录用户的配置为准。
+// 业务数据仍沿用全局 DB 存储，因此这里只把明确的业务集合视为已有使用记录。
+var ONBOARDING_BUSINESS_COLLECTIONS = [
+    'dailyReports', 'purchases', 'expenses', 'salaryRecords', 'salaryTrash',
+    'teaItems', 'cigItems', 'alcItems', 'otherItems', 'whItems',
+    'damageRecords', 'exchangeRecords'
+];
+
+function getOnboardingConfigKey() {
+    try {
+        for (var i = 0; i < localStorage.length; i++) {
+            var key = localStorage.key(i);
+            if (!key || key.indexOf('sb-') !== 0 || key.indexOf('auth-token') <= 0) continue;
+            var tokenData = JSON.parse(localStorage.getItem(key) || '{}');
+            if (tokenData && tokenData.user && tokenData.user.id) return 'ax_app_config_' + tokenData.user.id;
+        }
+    } catch (e) {}
+    return 'ax_app_config';
+}
+
+function hasLegacyAuthSession() {
+    try {
+        for (var i = 0; i < localStorage.length; i++) {
+            var key = localStorage.key(i);
+            if (key && key.indexOf('sb-') === 0 && key.indexOf('auth-token') > 0) return true;
+        }
+    } catch (e) {}
+    return false;
+}
+
+function getOnboardingConfig() {
+    try {
+        var configKey = getOnboardingConfigKey();
+        var saved = localStorage.getItem(configKey);
+        // 兼容早期版本写入的公共配置键。
+        if (!saved && configKey !== 'ax_app_config') saved = localStorage.getItem('ax_app_config');
+        return JSON.parse(saved || '{}');
+    } catch (e) {
+        return {};
+    }
+}
+
+function hasExistingBusinessData(db) {
+    if (!db || typeof db !== 'object') return false;
+    return ONBOARDING_BUSINESS_COLLECTIONS.some(function(key) {
+        return Array.isArray(db[key]) && db[key].length > 0;
+    });
+}
+
+function shouldShowLegacyOnboarding() {
+    var config = getOnboardingConfig();
+    return !config.onboardingCompleted && !hasExistingBusinessData(DB);
+}
+
 // 通用更新方法：执行回调 → 保存 → 触发云同步（需登录）
 function upd(fn){if(typeof requireAuth==='function'&&!requireAuth())return;fn(DB);DB._ts=Date.now();saveDB(DB);sbScheduleSave()}
 

@@ -7,9 +7,11 @@
 import {
   isOnboardingCompleted,
   completeOnboarding,
+  hasExistingBusinessData,
   saveConfig,
   type AppConfig,
 } from '../config/config-manager';
+import legacyBridge from '@/legacy/legacy-bridge';
 
 // ===== 类型 =====
 
@@ -66,7 +68,7 @@ let config: Partial<AppConfig> = {
  * 检查是否需要显示引导
  */
 export function shouldShowOnboarding(): boolean {
-  return !isOnboardingCompleted();
+  return !isOnboardingCompleted() && !hasExistingBusinessData(legacyBridge.getDatabase());
 }
 
 /**

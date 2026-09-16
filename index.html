@@ -27,28 +27,6 @@
   </div>
 </div>
 <script>
-// 检查是否需要显示引导（仅对完全没有数据的新用户）
-(function(){
-    try {
-        // 游客模式应直接进入只读主页面，不应被新手引导拦截。
-        if (new URLSearchParams(window.location.search).get('guest') === '1') return;
-        // 如果有配置且已完成引导，跳过
-        var config = JSON.parse(localStorage.getItem('ax_app_config') || '{}');
-        if (config.onboardingCompleted) return;
-        
-        // 如果有业务数据（日报、采购等），说明是现有用户，跳过引导
-        var db = JSON.parse(localStorage.getItem('ax_cafe_v8') || '{}');
-        if (db.dailyReports && db.dailyReports.length > 0) return;
-        if (db.purchases && db.purchases.length > 0) return;
-        if (db.expenses && db.expenses.length > 0) return;
-        if (db.teaItems && db.teaItems.length > 0) return;
-        if (db.cigItems && db.cigItems.length > 0) return;
-        if (db.alcItems && db.alcItems.length > 0) return;
-        
-        // 真正的新用户，显示引导
-        window.location.href = 'onboarding.html';
-    } catch(e) {}
-})();
 // 未登录跳转登录页（游客模式和已登录不跳转）
 (function(){
     if (new URLSearchParams(window.location.search).get('guest') === '1') return;
@@ -117,6 +95,22 @@
 
 <!-- 基础模块 -->
 <script src="src/js/config.js"></script>
+<script>
+// 配置与旧数据已初始化后再决定是否引导，避免把已有工资、仓库等数据的用户误判为新用户。
+(function(){
+    try {
+        if (new URLSearchParams(window.location.search).get('guest') === '1') return;
+        // 未登录时由上方登录守卫处理，不能被新手引导覆盖跳转目标。
+        if (typeof hasLegacyAuthSession === 'function' && !hasLegacyAuthSession()) return;
+        // 登录页已经核验到云端既有数据，或云端状态暂不可确认时，先让原有同步流程完成。
+        var onboardingGate = sessionStorage.getItem('ax_onboarding_gate');
+        if (onboardingGate === 'existing' || onboardingGate === 'deferred') return;
+        if (typeof shouldShowLegacyOnboarding === 'function' && shouldShowLegacyOnboarding()) {
+            window.location.href = 'onboarding.html';
+        }
+    } catch(e) {}
+})();
+</script>
 <script src="src/js/utils.js?v=20260912-mimo-result-state"></script>
 <script src="src/js/category.js"></script>
 

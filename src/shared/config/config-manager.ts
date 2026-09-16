@@ -54,6 +54,32 @@ const DEFAULT_CONFIG: AppConfig = {
 
 const CONFIG_KEY = 'ax_app_config';
 
+const BUSINESS_COLLECTION_KEYS = [
+  'dailyReports', 'purchases', 'expenses', 'salaryRecords', 'salaryTrash',
+  'teaItems', 'cigItems', 'alcItems', 'otherItems', 'whItems',
+  'damageRecords', 'exchangeRecords',
+] as const;
+
+function getConfigStorageKey(): string {
+  try {
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith('sb-') || !key.includes('auth-token')) continue;
+      const tokenData = JSON.parse(localStorage.getItem(key) || '{}');
+      if (tokenData?.user?.id) return `${CONFIG_KEY}_${tokenData.user.id}`;
+    }
+  } catch (e) {
+    console.error('Failed to resolve user config key:', e);
+  }
+  return CONFIG_KEY;
+}
+
+export function hasExistingBusinessData(database: unknown): boolean {
+  if (!database || typeof database !== 'object') return false;
+  const record = database as Record<string, unknown>;
+  return BUSINESS_COLLECTION_KEYS.some((key) => Array.isArray(record[key]) && record[key].length > 0);
+}
+
 // ===== 服务函数 =====
 
 /**
@@ -61,7 +87,10 @@ const CONFIG_KEY = 'ax_app_config';
  */
 export function getConfig(): AppConfig {
   try {
-    const saved = localStorage.getItem(CONFIG_KEY);
+    const storageKey = getConfigStorageKey();
+    // 兼容升级前写入的公共配置键。
+    const saved = localStorage.getItem(storageKey)
+      || (storageKey !== CONFIG_KEY ? localStorage.getItem(CONFIG_KEY) : null);
     if (saved) {
       return { ...DEFAULT_CONFIG, ...JSON.parse(saved) };
     }
@@ -77,12 +106,13 @@ export function getConfig(): AppConfig {
 export function saveConfig(config: Partial<AppConfig>): void {
   const current = getConfig();
   const updated = { ...current, ...config };
-  localStorage.setItem(CONFIG_KEY, JSON.stringify(updated));
+  const storageKey = getConfigStorageKey();
+  localStorage.setItem(storageKey, JSON.stringify(updated));
 
   // 同步到 DB.settings
   legacyBridge.update((db) => {
     if (!db.settings) db.settings = {};
-    db.settings[CONFIG_KEY] = updated;
+    db.settings[storageKey] = updated;
   });
 }
 
@@ -141,6 +171,9 @@ export function migrateFromLegacy(): void {
     config.roomTypes = ['普通包厢', '500+包厢'];
   }
 
+  if (hasExistingBusinessData(legacyBridge.getDatabase())) {
+    config.onboardingCompleted = true;
+  }
   saveConfig(config);
 }
 

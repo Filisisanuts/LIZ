@@ -252,13 +252,51 @@ var _sbClient = null;
     var url = 'https://aahvuwdifuqhwyanrvwj.supabase.co';
     var key = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhaHZ1d2RpZnVxaHd5YW5ydndqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyMDc5MzMsImV4cCI6MjA5NDc4MzkzM30.6DByxb_Pk_wGVzp189SslD3B8gDoY9H7CpyWEySgFS8';
     _sbClient = supabase.createClient(url, key);
-    // 已登录则直接跳转主页
+    // 已登录则先核验云端账户是否已有业务数据，避免新浏览器误入新手引导。
     _sbClient.auth.getSession().then(function(res) {
         if (res.data && res.data.session) {
-            window.location.href = 'index.html';
+            routeAuthenticatedUser(res.data.session);
         }
     });
 })();
+
+function hasCloudBusinessData(data) {
+    if (!data || typeof data !== 'object') return false;
+    var collections = [
+        'dailyReports', 'purchases', 'expenses', 'salaryRecords', 'salaryTrash',
+        'teaItems', 'cigItems', 'alcItems', 'otherItems', 'whItems',
+        'damageRecords', 'exchangeRecords'
+    ];
+    return collections.some(function(key) {
+        return Array.isArray(data[key]) && data[key].length > 0;
+    });
+}
+
+function setOnboardingGate(value) {
+    try { sessionStorage.setItem('ax_onboarding_gate', value); } catch (e) {}
+}
+
+function routeAuthenticatedUser(session) {
+    var userId = session && session.user && session.user.id;
+    if (!userId) { window.location.href = 'index.html'; return; }
+
+    // 使用当前认证用户 ID 查询，RLS 仍由 Supabase 执行；这里只判断是否已有业务记录。
+    _sbClient.from('cafe_data').select('data').eq('id', userId).limit(1).then(function(result) {
+        if (result.error) {
+            // 无法确认时绝不把老用户导向教程，首页会继续执行原有同步。
+            setOnboardingGate('deferred');
+        } else if (result.data && result.data[0] && hasCloudBusinessData(result.data[0].data)) {
+            setOnboardingGate('existing');
+        } else {
+            window.location.href = 'onboarding.html';
+            return;
+        }
+        window.location.href = 'index.html';
+    }).catch(function() {
+        setOnboardingGate('deferred');
+        window.location.href = 'index.html';
+    });
+}
 
 function switchTab(tab) {
     document.getElementById('tabLogin').className = tab === 'login' ? 'tab active' : 'tab';
@@ -304,7 +342,7 @@ function doLogin() {
     _sbClient.auth.signInWithPassword({ email: email, password: pass }).then(function(res) {
         setLoading('loginBtn', false);
         if (res.error) { showError('loginError', '登录失败：' + res.error.message); return; }
-        window.location.href = 'index.html';
+        routeAuthenticatedUser(res.data.session);
     }).catch(function() {
         setLoading('loginBtn', false);
         showError('loginError', '网络错误，请重试');
