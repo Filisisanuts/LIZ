@@ -1,0 +1,21 @@
+[
+  {
+    "id": "dmg-001",
+    "date": "2026-08-02",
+    "item": "青岛啤酒",
+    "qty": 2,
+    "reason": "过期",
+    "amount": 16,
+    "photo": null
+  },
+  {
+    "id": "dmg-002",
+    "date": "2026-08-06",
+    "item": "碧螺春",
+    "qty": 50,
+    "unit": "克",
+    "reason": "受潮",
+    "amount": 28,
+    "photo": null
+  }
+]

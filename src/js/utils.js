@@ -81,9 +81,38 @@ function backToModal(callback) {
 // 获取某月全部日报
 function getMR(ym){return DB.dailyReports.filter(function(r){return r.date.startsWith(ym)})}
 
+// 获取采购来源列表
+// 优先从配置读取，否则返回空数组（新用户通过引导配置）
+function getPurchaseSources() {
+    try {
+        var key = typeof getConfigKey === 'function' ? getConfigKey() : 'ax_app_config';
+        var config = JSON.parse(localStorage.getItem(key) || '{}');
+        if (config.purchaseSources && config.purchaseSources.length > 0) {
+            return config.purchaseSources;
+        }
+    } catch(e) {}
+    return [];
+}
+
 // 获取自定义标签列表
+// 优先从配置管理模块读取，否则使用旧逻辑
 function getFreeLabels(){
-    var d=['流水','实收业绩','厨房业绩','吧台业绩','折扣','香烟','其他收入','智能POS','建行生活','现金','会员卡','招待','美团团购','抖音团购','应收账款','美团外卖','淘宝闪购','京东外卖','外卖合计','人数','人均消费','500+包厢数'];
+    // 尝试从新配置读取
+    try {
+        var key = typeof getConfigKey === 'function' ? getConfigKey() : 'ax_app_config';
+        var config = JSON.parse(localStorage.getItem(key) || '{}');
+        if (config.dailyLabels && config.dailyLabels.length > 0) {
+            return config.dailyLabels;
+        }
+    } catch(e) {}
+
+    // 兼容旧逻辑（从已有日报中提取标签）
+    var d = [];
+    try {
+        if (DB && DB.dailyReports) {
+            // 可以从历史日报中提取常用标签
+        }
+    } catch(e) {}
     try{var s=JSON.parse(localStorage.getItem('ax_fl')||'[]');s.forEach(function(l){if(d.indexOf(l)<0)d.push(l)})}catch(e){}
     return d;
 }
@@ -305,8 +334,10 @@ function doAIParseGo(){
             if(!reply){mimoDiag('run_failed',{stage:'empty_ai_content'});hideAILoading(false);toast('AI返回为空（可查看识别诊断）');return}
             var m=reply.match(/\{[\s\S]*\}/);if(!m){mimoDiag('run_failed',{stage:'missing_json',contentLength:reply.length});hideAILoading(false);toast('AI未返回JSON（可查看识别诊断）');return}
             var result=JSON.parse(m[0]);if(!result.items||!result.items.length){mimoDiag('run_failed',{stage:'empty_items'});hideAILoading(false);toast('未识别到商品（可查看识别诊断）');return}
-            if(!result.date)result.date=td();var src=result.source||'岸香贸易';
-            if(/岸香.*贸易|贸易.*岸香/.test(src))src='岸香贸易';else if(!src)src='岸香贸易';
+            if(!result.date)result.date=td();
+            // 获取默认来源（优先从AI识别结果读取）
+            var src=result.source||'';
+            if(!src){var sources=getPurchaseSources();if(sources.length>0)src=sources[0];}
             var items=[];result.items.forEach(function(item){
                 var qty=parseFloat(item.qty)||0,total=parseFloat(item.total)||0,unitPrice=parseFloat(item.unitPrice)||0;
                 if(!unitPrice&&total>0&&qty>0)unitPrice=Math.round(total/qty*100)/100;

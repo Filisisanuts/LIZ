@@ -2,8 +2,17 @@
 // ------ 库存主页 ------
 
 // 库存主页：顶部统计卡片 + 标签栏（库存/明细）+ 库存表格
-function rInv(type) {
+// customCategory: 可选，用于自定义贵重物品类型筛选
+function rInv(type, customCategory) {
     var items = DB[INV[type].key] || [];
+
+    // 如果指定了自定义类型，过滤只显示该类型的商品
+    if (customCategory && type === 'other') {
+        items = items.filter(function(item) {
+            return item.category === customCategory;
+        });
+    }
+
     var ym = $id('invMonth') ? $id('invMonth').value || curYM() : curYM();
     var unit = type === 'tea' ? (items[0] && items[0].calcMode === 'pack' ? '包' : '克') :
                type === 'other' ? (items[0] && items[0].unit || '个') :

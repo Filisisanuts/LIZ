@@ -1,0 +1,48 @@
+[
+  {
+    "id": "alc-001",
+    "name": "茅台",
+    "pricePerUnit": 380,
+    "openingStock": {
+      "2026-08": 3
+    },
+    "purchases": [
+      { "date": "2026-08-03", "qty": 2, "total": 580 }
+    ],
+    "sales": [
+      { "date": "2026-08-01", "qty": 1, "amount": 380 },
+      { "date": "2026-08-03", "qty": 1, "amount": 380 },
+      { "date": "2026-08-05", "qty": 1, "amount": 380 }
+    ]
+  },
+  {
+    "id": "alc-002",
+    "name": "青岛啤酒",
+    "pricePerUnit": 8,
+    "openingStock": {
+      "2026-08": 30
+    },
+    "purchases": [
+      { "date": "2026-08-03", "qty": 24, "total": 96 }
+    ],
+    "sales": [
+      { "date": "2026-08-01", "qty": 6, "amount": 48 },
+      { "date": "2026-08-02", "qty": 4, "amount": 32 },
+      { "date": "2026-08-03", "qty": 8, "amount": 64 },
+      { "date": "2026-08-04", "qty": 5, "amount": 40 },
+      { "date": "2026-08-05", "qty": 3, "amount": 24 }
+    ]
+  },
+  {
+    "id": "alc-ret-001",
+    "name": "青岛啤酒",
+    "pricePerUnit": 8,
+    "openingStock": {
+      "2026-08": 30
+    },
+    "purchases": [
+      { "date": "2026-08-10", "qty": -6, "total": -24 }
+    ],
+    "sales": []
+  }
+]

@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+/docs/cc.pem
 
 # 自动化测试生成物
 test_screenshot.png
@@ -9,3 +10,9 @@ test_screenshot.png
 # Python 缓存
 __pycache__/
 *.py[cod]
+
+# 临时文件与测试
+_temp/
+logs/
+dist/
+node_modules/

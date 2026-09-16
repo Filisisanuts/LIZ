@@ -23,12 +23,33 @@ function rDaily() {
     h += '<div id="dMan" style="display:none">';
     h += '<div class="hrow"><label>日期</label><input class="inp" id="dmDate" type="text" readonly placeholder="选择日期" value="' + td() + '" onclick="_dpOpen(\'dmDate\')" style="cursor:pointer"></div>';
     h += '<div class="section-label">经营数据</div><div id="dmFreeList"></div>';
-    h += '<div class="section-label">茗茶销售</div><div id="dmTeaList"></div>';
-    h += '<div class="section-label">香烟销售</div><div id="dmCigList"></div>';
-    h += '<div class="section-label">酒类销售</div><div id="dmAlcList"></div>';
-    h += '<div class="section-label">其他贵重物品</div><div id="dmOtherList"></div>';
-    h += '<div class="section-label">包厢预定</div><div id="dmRoomList"></div>';
-    h += '<div class="hrow"><label>汇报人</label><input class="inp" id="dmReporter" style="max-width:160px"></div>';
+
+    // 根据配置显示贵重物品销售区块
+    var config = getAppConfig();
+    var invTypes = (config && config.inventoryTypes) ? config.inventoryTypes : ['tea', 'cig', 'alc', 'other'];
+
+    if (invTypes.includes('tea') || (DB.teaItems && DB.teaItems.length > 0)) {
+        h += '<div class="section-label">茗茶销售</div><div id="dmTeaList"></div>';
+    }
+    if (invTypes.includes('cig') || (DB.cigItems && DB.cigItems.length > 0)) {
+        h += '<div class="section-label">香烟销售</div><div id="dmCigList"></div>';
+    }
+    if (invTypes.includes('alc') || (DB.alcItems && DB.alcItems.length > 0)) {
+        h += '<div class="section-label">酒类销售</div><div id="dmAlcList"></div>';
+    }
+    if (invTypes.includes('other') || (DB.otherItems && DB.otherItems.length > 0)) {
+        h += '<div class="section-label">其他贵重物品</div><div id="dmOtherList"></div>';
+    }
+
+    // 根据配置显示包厢预定和汇报人
+    var dailyFeatures = (config && config.dailyFeatures) || {};
+    if (dailyFeatures.roomEnabled) {
+        h += '<div class="section-label">包厢预定</div><div id="dmRoomList"></div>';
+    }
+    if (dailyFeatures.reporterEnabled) {
+        h += '<div class="hrow"><label>汇报人</label><input class="inp" id="dmReporter" style="max-width:160px"></div>';
+    }
+
     h += '<div class="brow"><button class="btn p" onclick="doManualDaily()">保存</button></div>';
     h += '</div>';
 
@@ -261,31 +282,43 @@ function switchDT(tab) {
     document.querySelectorAll('#dT .tab-btn').forEach(function(b, i) {
         b.classList.toggle('active', (i === 0 && tab === 'text') || (i === 1 && tab === 'manual') || (i === 2 && tab === 'hist'));
     });
-    if (tab === 'manual') { initFreeRows(); initTeaBlock(); initCigBlock(); initAlcBlock(); initOtherBlock(); initRoomBlock(); }
+    if (tab === 'manual') {
+        // 只初始化存在的区块
+        initFreeRows();
+        if ($id('dmTeaList')) initTeaBlock();
+        if ($id('dmCigList')) initCigBlock();
+        if ($id('dmAlcList')) initAlcBlock();
+        if ($id('dmOtherList')) initOtherBlock();
+        if ($id('dmRoomList')) initRoomBlock();
+    }
     if (tab === 'hist') renderDHist();
 }
 
 // 日报自定义标签行
 // 手动填写日报时，经营数据区域支持自定义标签（如：实收、厨房、外卖等快捷标签）
-// 初始化标签行：渲染快捷标签按钮 + 默认一行空输入框
+// 初始化标签行：渲染快捷标签按钮 + 一行空输入框 + 添加按钮
 function initFreeRows() {
     var labels = getFreeLabels();
     var html = '<div class="tag-btns">';
     labels.forEach(function(l) {
-        html += '<button class="tag-btn" onclick="setLastFree(\'' + l + '\')">' + l + '</button>';
+        html += '<button class="tag-btn" onclick="addFreeRowWithValue(\'' + l + '\')">' + l + '</button>';
     });
-    html += '</div>' + freeRowHTML();
+    html += '</div>';
+    html += '<div id="dmFreeRows">' + freeRowHTML() + '</div>';
+    html += '<div style="margin-top:6px"><button class="btn s" onclick="addFreeRow()">+添加</button></div>';
     $id('dmFreeList').innerHTML = html;
 }
-// 点击快捷标签后，自动填入最后一个空行的标签输入框
-function setLastFree(label) {
-    var rows = document.querySelectorAll('#dmFreeList .free-row');
-    if (!rows.length) { addFreeRow(); rows = document.querySelectorAll('#dmFreeList .free-row'); }
-    var last = rows[rows.length - 1];
-    if (last) {
-        var inp = last.querySelector('[data-type="fl"]');
-        if (inp && !inp.value) inp.value = label;
-    }
+// 点击快捷标签后，添加一行并填入标签值
+function addFreeRowWithValue(label) {
+    var d = document.createElement('div');
+    d.innerHTML = freeRowHTML();
+    var row = d.firstElementChild;
+    var inp = row.querySelector('[data-type="fl"]');
+    if (inp) inp.value = label;
+    $id('dmFreeRows').appendChild(row);
+    // 自动聚焦到数值输入框
+    var valInp = row.querySelector('[data-type="fv"]');
+    if (valInp) valInp.focus();
 }
 // 生成一行标签行 HTML（标签名 + 数值 + 删除按钮）
 function freeRowHTML() {
@@ -298,7 +331,7 @@ function freeRowHTML() {
 function addFreeRow() {
     var d = document.createElement('div');
     d.innerHTML = freeRowHTML();
-    $id('dmFreeList').appendChild(d.firstElementChild);
+    $id('dmFreeRows').appendChild(d.firstElementChild);
 }
 
 // 日报茗茶/香烟销售录入
@@ -435,15 +468,27 @@ function calcOtherExpected(el) {
 }
 
 // 包厢预定录入
+// 从配置中读取包厢类型，不再硬编码
 function initRoomBlock() {
+    // 获取包厢类型配置
+    var roomTypes = [];
+    try {
+        var key = typeof getConfigKey === 'function' ? getConfigKey() : 'ax_app_config';
+        var config = JSON.parse(localStorage.getItem(key) || '{}');
+        if (config.roomTypes && config.roomTypes.length > 0) {
+            roomTypes = config.roomTypes;
+        }
+    } catch(e) {}
+
     var h = '<div id="dmRoomRows">';
-    h += roomRowHTML('李海燕', 0, 0);
-    h += roomRowHTML('文心月', 0, 0);
-    h += roomRowHTML('李海榕', 0, 0);
-    h += roomRowHTML('蒯祯', 0, 0);
+    // 如果有配置的包厢类型，显示对应的输入行
+    if (roomTypes.length > 0) {
+        roomTypes.forEach(function(type) {
+            h += roomRowHTML(type, 0, 0);
+        });
+    }
     h += '</div>';
     h += '<div style="margin-top:6px"><button class="btn s" onclick="addRoomRow()">+添加</button></div>';
-    h += '<div class="hrow" style="margin-top:8px"><label>累计500+包厢</label><input class="inp" id="dmPremCum" type="number" value="0" style="max-width:80px"></div>';
     $id('dmRoomList').innerHTML = h;
 }
 

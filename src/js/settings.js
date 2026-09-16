@@ -121,6 +121,18 @@ function rData() {
     h += '</div>';
     h += '</div>';
 
+    // 分类配置
+    h += '<div class="sec">分类配置</div>';
+    h += '<div style="background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:14px;margin-bottom:12px">';
+    h += '<p style="font-size:.74rem;color:var(--tx-s);margin-bottom:10px">管理各模块的分类和标签，修改后立即生效</p>';
+    h += '<div class="brow">';
+    h += '<button class="btn" onclick="showDailyLabelsConfig()">日报标签</button>';
+    h += '<button class="btn" onclick="showPurchaseSectionConfig()">采购区域</button>';
+    h += '<button class="btn" onclick="showExpenseCatConfig()">费用分类</button>';
+    h += '<button class="btn" onclick="showWarehouseCatConfig()">仓库分类</button>';
+    h += '</div>';
+    h += '</div>';
+
     // Supabase 云同步
     h += '<div class="sec">Supabase 云同步</div>';
     h += '<div style="background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:14px;margin-bottom:12px">';
@@ -676,5 +688,304 @@ function doDownloadFromCloud() {
         console.error('下载失败:', e);
         toast('下载失败: ' + e.message);
     });
+}
+
+// ===== 分类配置函数 =====
+
+// 使用 nav.js 中的 getConfigKey 获取用户特定的配置键
+function getAppConfig() {
+    try {
+        var key = typeof getConfigKey === 'function' ? getConfigKey() : 'ax_app_config';
+        var saved = localStorage.getItem(key);
+        if (saved) {
+            var parsed = JSON.parse(saved);
+            return {
+                enabledModules: parsed.enabledModules || [],
+                dailyLabels: parsed.dailyLabels || [],
+                roomTypes: parsed.roomTypes || [],
+                purchaseSections: parsed.purchaseSections || [],
+                purchaseSources: parsed.purchaseSources || [],
+                purchaseCategories: parsed.purchaseCategories || {},
+                expenseCategories: parsed.expenseCategories || [],
+                warehouseCategories: parsed.warehouseCategories || [],
+                inventoryTypes: parsed.inventoryTypes || [],
+                customInventoryTypes: parsed.customInventoryTypes || [],
+                dailyFeatures: parsed.dailyFeatures || { roomEnabled: false, reporterEnabled: false },
+                onboardingCompleted: parsed.onboardingCompleted || false
+            };
+        }
+    } catch(e) {}
+    return {
+        enabledModules: [], dailyLabels: [], roomTypes: [],
+        purchaseSections: [], purchaseSources: [], purchaseCategories: {},
+        expenseCategories: [], warehouseCategories: [],
+        inventoryTypes: [], customInventoryTypes: [],
+        dailyFeatures: { roomEnabled: false, reporterEnabled: false },
+        onboardingCompleted: false
+    };
+}
+
+function saveAppConfig(config) {
+    var key = typeof getConfigKey === 'function' ? getConfigKey() : 'ax_app_config';
+    localStorage.setItem(key, JSON.stringify(config));
+    toast('配置已保存');
+}
+
+// 日报标签配置
+function showDailyLabelsConfig() {
+    var config = getAppConfig();
+    var labels = config.dailyLabels || [];
+
+    var h = '<h3>日报标签配置</h3>';
+    h += '<p style="font-size:.74rem;color:var(--tx-s);margin-bottom:12px">设置日报中常用的经营数据标签</p>';
+
+    // 添加输入
+    h += '<div class="hrow"><input class="inp" id="newDailyLabel" placeholder="输入标签名称" style="flex:1" onkeydown="if(event.key===\'Enter\')addDailyLabelFromConfig()">';
+    h += '<button class="btn p" onclick="addDailyLabelFromConfig()">添加</button></div>';
+
+    // 快速添加
+    h += '<div style="margin:12px 0"><label style="font-size:.72rem;color:var(--tx-m);display:block;margin-bottom:6px">快速添加</label>';
+    h += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+    ['实收', '厨房', '吧台', '外卖', '人数', '人均消费'].forEach(function(l) {
+        h += '<button class="btn s" onclick="addDailyLabelFromConfig(\'' + l + '\')" ' + (labels.indexOf(l) >= 0 ? 'disabled' : '') + '>' + l + '</button>';
+    });
+    h += '</div></div>';
+
+    // 已选标签
+    h += '<div><label style="font-size:.72rem;color:var(--tx-m);display:block;margin-bottom:6px">已选标签</label>';
+    h += '<div id="dailyLabelsList" style="display:flex;flex-wrap:wrap;gap:6px">';
+    labels.forEach(function(l) {
+        h += '<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--card-h);border-radius:6px;font-size:.76rem">' + l;
+        h += '<button onclick="removeDailyLabelFromConfig(\'' + l + '\')" style="background:none;border:none;color:var(--tx-m);cursor:pointer">×</button></span>';
+    });
+    h += '</div></div>';
+
+    h += '<div class="brow" style="margin-top:16px;justify-content:flex-end"><button class="btn" onclick="closeModal()">完成</button></div>';
+    showModal(h);
+}
+
+function addDailyLabelFromConfig(label) {
+    if (!label) {
+        var inp = document.getElementById('newDailyLabel');
+        label = inp ? inp.value.trim() : '';
+    }
+    if (!label) return;
+
+    var config = getAppConfig();
+    if (!config.dailyLabels) config.dailyLabels = [];
+    if (config.dailyLabels.indexOf(label) < 0) {
+        config.dailyLabels.push(label);
+        saveAppConfig(config);
+    }
+    showDailyLabelsConfig(); // 刷新弹窗
+}
+
+function removeDailyLabelFromConfig(label) {
+    var config = getAppConfig();
+    config.dailyLabels = (config.dailyLabels || []).filter(function(l) { return l !== label; });
+    saveAppConfig(config);
+    showDailyLabelsConfig(); // 刷新弹窗
+}
+
+// 采购区域配置
+function showPurchaseSectionConfig() {
+    var config = getAppConfig();
+    var sections = config.purchaseSections || [];
+    var categories = config.purchaseCategories || {};
+
+    var h = '<h3>采购区域配置</h3>';
+    h += '<p style="font-size:.74rem;color:var(--tx-s);margin-bottom:12px">设置采购单中的区域和分类</p>';
+
+    // 添加区域
+    h += '<div class="hrow"><input class="inp" id="newPurchaseSection" placeholder="输入区域名称" style="flex:1" onkeydown="if(event.key===\'Enter\')addPurchaseSectionFromConfig()">';
+    h += '<button class="btn p" onclick="addPurchaseSectionFromConfig()">添加区域</button></div>';
+
+    // 快速添加
+    h += '<div style="margin:12px 0"><label style="font-size:.72rem;color:var(--tx-m);display:block;margin-bottom:6px">快速添加</label>';
+    h += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+    ['厨房', '吧台', '外场'].forEach(function(s) {
+        h += '<button class="btn s" onclick="addPurchaseSectionFromConfig(\'' + s + '\')" ' + (sections.indexOf(s) >= 0 ? 'disabled' : '') + '>' + s + '</button>';
+    });
+    h += '</div></div>';
+
+    // 已选区域
+    h += '<div id="purchaseSectionsList">';
+    sections.forEach(function(s) {
+        h += '<div style="margin-bottom:12px;padding:10px;background:var(--card-h);border-radius:8px">';
+        h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
+        h += '<span style="font-weight:600">' + s + '</span>';
+        h += '<button class="btn s d" onclick="removePurchaseSectionFromConfig(\'' + s + '\')">×</button></div>';
+        // 该区域的分类
+        var cats = categories[s] || [];
+        h += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">';
+        cats.forEach(function(c) {
+            h += '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 6px;background:var(--card);border-radius:4px;font-size:.72rem">' + c;
+            h += '<button onclick="removePurchaseCategoryFromConfig(\'' + s + '\',\'' + c + '\')" style="background:none;border:none;color:var(--tx-m);cursor:pointer;font-size:.72rem">×</button></span>';
+        });
+        h += '</div>';
+        h += '<div class="hrow" style="margin:0"><input class="inp" id="newCat_' + s + '" placeholder="添加分类" style="flex:1;font-size:.72rem" onkeydown="if(event.key===\'Enter\')addPurchaseCategoryFromConfig(\'' + s + '\')">';
+        h += '<button class="btn s" onclick="addPurchaseCategoryFromConfig(\'' + s + '\')">+</button></div>';
+        h += '</div>';
+    });
+    h += '</div>';
+
+    h += '<div class="brow" style="margin-top:16px;justify-content:flex-end"><button class="btn" onclick="closeModal()">完成</button></div>';
+    showModal(h, 500);
+}
+
+function addPurchaseSectionFromConfig(section) {
+    if (!section) {
+        var inp = document.getElementById('newPurchaseSection');
+        section = inp ? inp.value.trim() : '';
+    }
+    if (!section) return;
+
+    var config = getAppConfig();
+    if (!config.purchaseSections) config.purchaseSections = [];
+    if (config.purchaseSections.indexOf(section) < 0) {
+        config.purchaseSections.push(section);
+        if (!config.purchaseCategories) config.purchaseCategories = {};
+        config.purchaseCategories[section] = [];
+        saveAppConfig(config);
+    }
+    showPurchaseSectionConfig();
+}
+
+function removePurchaseSectionFromConfig(section) {
+    var config = getAppConfig();
+    config.purchaseSections = (config.purchaseSections || []).filter(function(s) { return s !== section; });
+    if (config.purchaseCategories) delete config.purchaseCategories[section];
+    saveAppConfig(config);
+    showPurchaseSectionConfig();
+}
+
+function addPurchaseCategoryFromConfig(section) {
+    var inp = document.getElementById('newCat_' + section);
+    var cat = inp ? inp.value.trim() : '';
+    if (!cat) return;
+
+    var config = getAppConfig();
+    if (!config.purchaseCategories) config.purchaseCategories = {};
+    if (!config.purchaseCategories[section]) config.purchaseCategories[section] = [];
+    if (config.purchaseCategories[section].indexOf(cat) < 0) {
+        config.purchaseCategories[section].push(cat);
+        saveAppConfig(config);
+    }
+    showPurchaseSectionConfig();
+}
+
+function removePurchaseCategoryFromConfig(section, cat) {
+    var config = getAppConfig();
+    if (config.purchaseCategories && config.purchaseCategories[section]) {
+        config.purchaseCategories[section] = config.purchaseCategories[section].filter(function(c) { return c !== cat; });
+        saveAppConfig(config);
+    }
+    showPurchaseSectionConfig();
+}
+
+// 费用分类配置
+function showExpenseCatConfig() {
+    var config = getAppConfig();
+    var categories = config.expenseCategories || [];
+
+    var h = '<h3>费用分类配置</h3>';
+    h += '<p style="font-size:.74rem;color:var(--tx-s);margin-bottom:12px">设置费用记录的分类</p>';
+
+    h += '<div class="hrow"><input class="inp" id="newExpenseCat" placeholder="输入分类名称" style="flex:1" onkeydown="if(event.key===\'Enter\')addExpenseCatFromConfig()">';
+    h += '<button class="btn p" onclick="addExpenseCatFromConfig()">添加</button></div>';
+
+    h += '<div style="margin:12px 0"><label style="font-size:.72rem;color:var(--tx-m);display:block;margin-bottom:6px">快速添加</label>';
+    h += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+    ['水费', '电费', '燃气费', '物业费', '维修费', '其他'].forEach(function(c) {
+        h += '<button class="btn s" onclick="addExpenseCatFromConfig(\'' + c + '\')" ' + (categories.indexOf(c) >= 0 ? 'disabled' : '') + '>' + c + '</button>';
+    });
+    h += '</div></div>';
+
+    h += '<div><label style="font-size:.72rem;color:var(--tx-m);display:block;margin-bottom:6px">已选分类</label>';
+    h += '<div id="expenseCatsList" style="display:flex;flex-wrap:wrap;gap:6px">';
+    categories.forEach(function(c) {
+        h += '<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--card-h);border-radius:6px;font-size:.76rem">' + c;
+        h += '<button onclick="removeExpenseCatFromConfig(\'' + c + '\')" style="background:none;border:none;color:var(--tx-m);cursor:pointer">×</button></span>';
+    });
+    h += '</div></div>';
+
+    h += '<div class="brow" style="margin-top:16px;justify-content:flex-end"><button class="btn" onclick="closeModal()">完成</button></div>';
+    showModal(h);
+}
+
+function addExpenseCatFromConfig(cat) {
+    if (!cat) {
+        var inp = document.getElementById('newExpenseCat');
+        cat = inp ? inp.value.trim() : '';
+    }
+    if (!cat) return;
+
+    var config = getAppConfig();
+    if (!config.expenseCategories) config.expenseCategories = [];
+    if (config.expenseCategories.indexOf(cat) < 0) {
+        config.expenseCategories.push(cat);
+        saveAppConfig(config);
+    }
+    showExpenseCatConfig();
+}
+
+function removeExpenseCatFromConfig(cat) {
+    var config = getAppConfig();
+    config.expenseCategories = (config.expenseCategories || []).filter(function(c) { return c !== cat; });
+    saveAppConfig(config);
+    showExpenseCatConfig();
+}
+
+// 仓库分类配置
+function showWarehouseCatConfig() {
+    var config = getAppConfig();
+    var categories = config.warehouseCategories || [];
+
+    var h = '<h3>仓库分类配置</h3>';
+    h += '<p style="font-size:.74rem;color:var(--tx-s);margin-bottom:12px">设置仓库物品的分类</p>';
+
+    h += '<div class="hrow"><input class="inp" id="newWarehouseCat" placeholder="输入分类名称" style="flex:1" onkeydown="if(event.key===\'Enter\')addWarehouseCatFromConfig()">';
+    h += '<button class="btn p" onclick="addWarehouseCatFromConfig()">添加</button></div>';
+
+    h += '<div style="margin:12px 0"><label style="font-size:.72rem;color:var(--tx-m);display:block;margin-bottom:6px">快速添加</label>';
+    h += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+    ['包装', '调料', '清洁', '耗材', '设备', '其他'].forEach(function(c) {
+        h += '<button class="btn s" onclick="addWarehouseCatFromConfig(\'' + c + '\')" ' + (categories.indexOf(c) >= 0 ? 'disabled' : '') + '>' + c + '</button>';
+    });
+    h += '</div></div>';
+
+    h += '<div><label style="font-size:.72rem;color:var(--tx-m);display:block;margin-bottom:6px">已选分类</label>';
+    h += '<div id="warehouseCatsList" style="display:flex;flex-wrap:wrap;gap:6px">';
+    categories.forEach(function(c) {
+        h += '<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--card-h);border-radius:6px;font-size:.76rem">' + c;
+        h += '<button onclick="removeWarehouseCatFromConfig(\'' + c + '\')" style="background:none;border:none;color:var(--tx-m);cursor:pointer">×</button></span>';
+    });
+    h += '</div></div>';
+
+    h += '<div class="brow" style="margin-top:16px;justify-content:flex-end"><button class="btn" onclick="closeModal()">完成</button></div>';
+    showModal(h);
+}
+
+function addWarehouseCatFromConfig(cat) {
+    if (!cat) {
+        var inp = document.getElementById('newWarehouseCat');
+        cat = inp ? inp.value.trim() : '';
+    }
+    if (!cat) return;
+
+    var config = getAppConfig();
+    if (!config.warehouseCategories) config.warehouseCategories = [];
+    if (config.warehouseCategories.indexOf(cat) < 0) {
+        config.warehouseCategories.push(cat);
+        saveAppConfig(config);
+    }
+    showWarehouseCatConfig();
+}
+
+function removeWarehouseCatFromConfig(cat) {
+    var config = getAppConfig();
+    config.warehouseCategories = (config.warehouseCategories || []).filter(function(c) { return c !== cat; });
+    saveAppConfig(config);
+    showWarehouseCatConfig();
 }
 

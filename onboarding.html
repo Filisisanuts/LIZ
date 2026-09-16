@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>初始配置 - 经营管理</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Noto Sans SC', sans-serif;
+  background: #FAFAF5;
+  color: #1A1A1A;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.onboarding-container {
+  max-width: 600px;
+  width: 100%;
+  background: #fff;
+  border-radius: 16px;
+  padding: 40px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+}
+.progress-bar {
+  height: 4px;
+  background: #E0E0E0;
+  border-radius: 2px;
+  margin-bottom: 32px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: #8B6914;
+  transition: width 0.3s ease;
+}
+.step-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+.step-header h2 {
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #8B6914;
+}
+.step-header p {
+  color: #666;
+  font-size: 14px;
+}
+.step-content {
+  margin-bottom: 32px;
+}
+.input-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.input-row input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid #E0E0E0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+}
+.input-row input:focus {
+  outline: none;
+  border-color: #8B6914;
+}
+.quick-add {
+  margin-bottom: 16px;
+}
+.quick-add label {
+  display: block;
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 8px;
+}
+.quick-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.quick-btn {
+  padding: 6px 12px;
+  background: #F5F5F0;
+  border: 1px solid #E0E0E0;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.quick-btn:hover:not(:disabled) {
+  background: #8B6914;
+  color: #fff;
+  border-color: #8B6914;
+}
+.quick-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.selected-items {
+  min-height: 50px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.selected-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: #F5F5F0;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.selected-item button {
+  background: none;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+.selected-item button:hover {
+  color: #C62828;
+}
+.selected-item.dragging {
+  opacity: 0.5;
+  background: #E0E0E0;
+}
+.selected-item.drag-over {
+  border-left: 3px solid #8B6914;
+}
+.drag-handle {
+  cursor: grab;
+  color: #999;
+  margin-right: 4px;
+  user-select: none;
+}
+.drag-handle:active {
+  cursor: grabbing;
+}
+.btn-row {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 32px;
+}
+.btn {
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-primary {
+  background: #8B6914;
+  color: #fff;
+  border: none;
+}
+.btn-primary:hover {
+  background: #6B5010;
+}
+.btn-secondary {
+  background: #fff;
+  color: #333;
+  border: 1px solid #E0E0E0;
+}
+.btn-secondary:hover {
+  background: #F5F5F0;
+}
+.step-info {
+  text-align: center;
+  font-size: 12px;
+  color: #999;
+  margin-bottom: 8px;
+}
+/* 功能模块选择 */
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+.module-card {
+  padding: 20px;
+  border: 2px solid #E0E0E0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+.module-card:hover {
+  border-color: #8B6914;
+  background: #FFFBF0;
+}
+.module-card.selected {
+  border-color: #8B6914;
+  background: #8B6914;
+  color: #fff;
+}
+.module-card .icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+.module-card .name {
+  font-size: 14px;
+  font-weight: 600;
+}
+.module-card .desc {
+  font-size: 12px;
+  color: #666;
+  margin-top: 4px;
+}
+.module-card.selected .desc {
+  color: rgba(255,255,255,0.8);
+}
+</style>
+</head>
+<body>
+<div class="onboarding-container" id="onboardingApp"></div>
+
+<script>
+// 配置管理
+// 尝试获取用户特定的配置键
+function getConfigKey() {
+  try {
+    // 从 Supabase auth token 中提取用户ID
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (k && k.indexOf('sb-') === 0 && k.indexOf('auth-token') > 0) {
+        var tokenData = JSON.parse(localStorage.getItem(k));
+        if (tokenData && tokenData.user && tokenData.user.id) {
+          return 'ax_app_config_' + tokenData.user.id;
+        }
+      }
+    }
+  } catch(e) {}
+  return 'ax_app_config';
+}
+
+var CONFIG_KEY = getConfigKey();
+
+function getConfig() {
+  var defaults = {
+    enabledModules: [],
+    dailyLabels: [],
+    roomTypes: [],
+    purchaseSections: [],
+    purchaseSources: [],
+    purchaseCategories: {},
+    expenseCategories: [],
+    warehouseCategories: [],
+    inventoryTypes: [],
+    customInventoryTypes: [],
+    dailyFeatures: {
+      roomEnabled: false,
+      reporterEnabled: false
+    },
+    onboardingCompleted: false
+  };
+  try {
+    var saved = localStorage.getItem(CONFIG_KEY);
+    if (saved) {
+      var parsed = JSON.parse(saved);
+      // 合并默认值，确保所有字段都存在
+      return Object.assign({}, defaults, parsed);
+    }
+  } catch(e) {}
+  return defaults;
+}
+
+function saveConfig(config) {
+  localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+}
+
+// 步骤定义（动态生成）
+var allSteps = [
+  { id: 'welcome', title: '欢迎使用经营管理系统', desc: '让我们一起完成基础配置，开始您的经营之旅。' },
+  { id: 'modules', title: '选择功能模块', desc: '根据您的经营需求，选择需要使用的功能模块。' },
+  { id: 'daily', title: '日报标签配置', desc: '设置日报中常用的经营数据标签。', module: 'daily' },
+  { id: 'dailyFeatures', title: '日报功能配置', desc: '选择日报中需要的功能。', module: 'daily' },
+  { id: 'purchase', title: '采购区域配置', desc: '设置采购单中的区域。', module: 'purchase' },
+  { id: 'expense', title: '费用分类配置', desc: '设置费用记录的分类。', module: 'expense' },
+  { id: 'warehouse', title: '仓库分类配置', desc: '设置仓库物品的分类。', module: 'warehouse' },
+  { id: 'inventory', title: '贵重物品类型配置', desc: '选择需要管理的贵重物品类型。', module: 'inventory' }
+];
+
+// 功能模块定义
+var modules = [
+  { id: 'daily', icon: '📝', name: '日报管理', desc: '记录每日经营数据' },
+  { id: 'purchase', icon: '🛒', name: '采购管理', desc: '管理采购单和成本' },
+  { id: 'expense', icon: '💰', name: '费用管理', desc: '记录日常运营费用' },
+  { id: 'salary', icon: '👤', name: '工资管理', desc: '管理员工工资' },
+  { id: 'warehouse', icon: '📦', name: '仓库管理', desc: '管理通用物资库存' },
+  { id: 'damage', icon: '⚠️', name: '报损管理', desc: '记录物品报损' },
+  { id: 'report', icon: '📈', name: '报表', desc: '经营数据分析' },
+  { id: 'brief', icon: '📤', name: '汇报', desc: '生成经营汇报' }
+];
+
+// 模块分组
+var moduleGroups = [
+  {
+    name: '日常经营',
+    icon: '🏪',
+    modules: ['daily', 'purchase', 'expense', 'salary']
+  },
+  {
+    name: '贵重物品',
+    icon: '💎',
+    modules: ['tea', 'cig', 'alc', 'other']
+  },
+  {
+    name: '仓库管理',
+    icon: '📦',
+    modules: ['warehouse', 'damage']
+  },
+  {
+    name: '数据分析',
+    icon: '📈',
+    modules: ['report', 'brief']
+  }
+];
+
+// 贵重物品子类型
+var inventoryTypes = [
+  { id: 'tea', icon: '🍵', name: '茗茶' },
+  { id: 'cig', icon: '🚬', name: '香烟' },
+  { id: 'alc', icon: '🍺', name: '酒类' },
+  { id: 'other', icon: '💎', name: '其他贵重物品' }
+];
+
+// 所有可用模块（用于快速查找）
+var allModules = {};
+modules.forEach(function(m) { allModules[m.id] = m; });
+inventoryTypes.forEach(function(m) { allModules[m.id] = m; });
+allModules['damage'] = { id: 'damage', icon: '⚠️', name: '报损', desc: '记录物品报损' };
+allModules['report'] = { id: 'report', icon: '📈', name: '报表', desc: '经营数据分析' };
+allModules['brief'] = { id: 'brief', icon: '📤', name: '汇报', desc: '生成经营汇报' };
+
+var currentStep = 0;
+var config = getConfig();
+var steps = []; // 动态步骤列表
+
+// 初始化动态步骤列表
+function initSteps() {
+  steps = [allSteps[0], allSteps[1]]; // 始终保留欢迎和模块选择
+
+  // 日报相关配置
+  if (config.enabledModules && config.enabledModules.includes('daily')) {
+    steps.push(allSteps.find(s => s.id === 'daily'));
+    steps.push(allSteps.find(s => s.id === 'dailyFeatures'));
+  }
+
+  // 采购配置（来源+区域+分类）
+  if (config.enabledModules && config.enabledModules.includes('purchase')) {
+    steps.push(allSteps.find(s => s.id === 'purchase'));
+  }
+
+  // 费用配置
+  if (config.enabledModules && config.enabledModules.includes('expense')) {
+    steps.push(allSteps.find(s => s.id === 'expense'));
+  }
+
+  // 仓库配置
+  if (config.enabledModules && config.enabledModules.includes('warehouse')) {
+    steps.push(allSteps.find(s => s.id === 'warehouse'));
+  }
+
+  steps.push({ id: 'complete', title: '配置完成', desc: '所有配置已完成，开始使用系统吧！' });
+}
+
+// 渲染
+function render() {
+  var step = steps[currentStep];
+  var html = '';
+
+  // 进度条
+  html += '<div class="step-info">步骤 ' + (currentStep + 1) + ' / ' + steps.length + '</div>';
+  html += '<div class="progress-bar"><div class="progress-fill" style="width:' + ((currentStep + 1) / steps.length * 100) + '%"></div></div>';
+
+  // 标题
+  html += '<div class="step-header"><h2>' + step.title + '</h2><p>' + step.desc + '</p></div>';
+
+  // 内容
+  html += '<div class="step-content">';
+  switch(step.id) {
+    case 'welcome':
+      html += '<div style="text-align:center;padding:40px 0"><div style="font-size:64px;margin-bottom:16px">☕</div><p style="color:#666">这是您第一次使用系统，让我们一起完成基础配置。<br>您可以随时在设置页面修改这些配置。</p></div>';
+      break;
+    case 'modules':
+      html += renderModulesStep();
+      break;
+    case 'daily':
+      html += renderConfigStep('dailyLabels', '添加标签', '输入标签名称', ['实收', '厨房', '吧台', '外卖', '人数', '人均消费']);
+      break;
+    case 'dailyFeatures':
+      html += renderDailyFeaturesStep();
+      break;
+    case 'purchase':
+      html += renderPurchaseStep();
+      break;
+    case 'expense':
+      html += renderConfigStep('expenseCategories', '添加分类', '输入分类名称', ['水费', '电费', '燃气费', '物业费', '维修费', '其他']);
+      break;
+    case 'warehouse':
+      html += renderConfigStep('warehouseCategories', '添加分类', '输入分类名称', ['包装', '调料', '清洁', '耗材', '设备', '其他']);
+      break;
+    case 'inventory':
+      html += renderInventoryStep();
+      break;
+    case 'complete':
+      html += '<div style="text-align:center;padding:40px 0"><div style="font-size:64px;margin-bottom:16px">✅</div><p style="color:#666">配置已完成！<br>点击下方按钮开始使用系统。</p></div>';
+      break;
+  }
+  html += '</div>';
+
+  // 按钮
+  html += '<div class="btn-row">';
+  html += currentStep > 0 ? '<button class="btn btn-secondary" onclick="prev()">上一步</button>' : '<div></div>';
+  html += currentStep < steps.length - 1
+    ? '<button class="btn btn-primary" onclick="next()">下一步</button>'
+    : '<button class="btn btn-primary" onclick="complete()">开始使用</button>';
+  html += '</div>';
+
+  document.getElementById('onboardingApp').innerHTML = html;
+}
+
+function renderPurchaseStep() {
+  var sources = config.purchaseSources || [];
+  var sections = config.purchaseSections || [];
+  var categories = config.purchaseCategories || {};
+
+  var html = '';
+
+  // 来源配置
+  html += '<div style="margin-bottom: 24px;">';
+  html += '<div style="font-weight: 600; margin-bottom: 8px; color: #8B6914;">📦 采购来源</div>';
+  html += '<div class="input-row">';
+  html += '<input type="text" id="newSource" placeholder="输入来源名称" onkeydown="if(event.key===\'Enter\')addSource()">';
+  html += '<button class="btn btn-primary" onclick="addSource()">添加</button>';
+  html += '</div>';
+  html += '<div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;">';
+  ['供应商', '外购', '网购', '退货'].forEach(function(s) {
+    html += '<button class="quick-btn" onclick="quickAddSource(\'' + s + '\')" ' + (sources.includes(s) ? 'disabled' : '') + '>' + s + '</button>';
+  });
+  html += '</div>';
+  html += '<div id="sourcesList" style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px;">';
+  sources.forEach(function(s) {
+    html += '<span class="selected-item"><span class="drag-handle">⋮⋮</span>' + s + '<button onclick="removeSource(\'' + s + '\')">×</button></span>';
+  });
+  html += '</div></div>';
+
+  // 区域-分类配置
+  html += '<div style="margin-top: 24px;">';
+  html += '<div style="font-weight: 600; margin-bottom: 8px; color: #8B6914;">🗂️ 区域与分类</div>';
+  html += '<div style="font-size: 12px; color: #666; margin-bottom: 12px;">为每个区域添加分类，如厨房下的"调料"、"食材"等</div>';
+
+  // 快速添加区域
+  html += '<div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;">';
+  ['厨房', '吧台', '外场'].forEach(function(s) {
+    html += '<button class="quick-btn" onclick="quickAddSection(\'' + s + '\')" ' + (sections.includes(s) ? 'disabled' : '') + '>' + s + '</button>';
+  });
+  html += '</div>';
+
+  // 添加新区域
+  html += '<div class="input-row">';
+  html += '<input type="text" id="newSection" placeholder="输入区域名称" onkeydown="if(event.key===\'Enter\')addSection()">';
+  html += '<button class="btn btn-primary" onclick="addSection()">添加区域</button>';
+  html += '</div>';
+
+  // 各区域的分类配置
+  html += '<div id="sectionsList">';
+  sections.forEach(function(section) {
+    var cats = categories[section] || [];
+    html += '<div style="padding: 12px; background: #F5F5F0; border-radius: 8px; margin-top: 12px;">';
+    html += '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">';
+    html += '<span style="font-weight: 600;">' + section + '</span>';
+    html += '<button onclick="removeSection(\'' + section + '\')" style="background: none; border: none; color: #999; cursor: pointer;">×</button>';
+    html += '</div>';
+
+    // 该区域的分类
+    html += '<div id="cats_' + section + '" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px;">';
+    cats.forEach(function(c) {
+      html += '<span class="selected-item">' + c + '<button onclick="removeCat(\'' + section + '\', \'' + c + '\')">×</button></span>';
+    });
+    html += '</div>';
+
+    // 添加分类
+    html += '<div class="input-row" style="margin: 0;">';
+    html += '<input type="text" id="newCat_' + section + '" placeholder="输入分类名称" style="flex: 1; font-size: 12px;" onkeydown="if(event.key===\'Enter\')addCat(\'' + section + '\')">';
+    html += '<button class="btn btn-secondary" style="font-size: 12px; padding: 4px 8px;" onclick="addCat(\'' + section + '\')">添加</button>';
+    html += '</div>';
+
+    // 快速添加分类
+    var defaultCats = getSectionDefaultCats(section);
+    if (defaultCats.length > 0) {
+      html += '<div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px;">';
+      defaultCats.forEach(function(c) {
+        html += '<button class="quick-btn" style="font-size: 11px; padding: 2px 6px;" onclick="quickAddCat(\'' + section + '\', \'' + c + '\')" ' + (cats.includes(c) ? 'disabled' : '') + '>' + c + '</button>';
+      });
+      html += '</div>';
+    }
+
+    html += '</div>';
+  });
+  html += '</div>';
+
+  html += '</div>';
+
+  return html;
+}
+
+function getSectionDefaultCats(section) {
+  var defaults = {
+    '厨房': ['调料/粮油', '食材', '茶叶/干货'],
+    '吧台': ['饮品', '耗材', '香烟', '酒类'],
+    '外场': ['清洁', '包装', '设备']
+  };
+  return defaults[section] || [];
+}
+
+// 来源相关函数
+function addSource() {
+  var input = document.getElementById('newSource');
+  var value = input ? input.value.trim() : '';
+  if (!value) return;
+
+  if (!config.purchaseSources) config.purchaseSources = [];
+  if (!config.purchaseSources.includes(value)) {
+    config.purchaseSources.push(value);
+    saveConfig(config);
+  }
+  render();
+}
+
+function quickAddSource(source) {
+  if (!config.purchaseSources) config.purchaseSources = [];
+  if (!config.purchaseSources.includes(source)) {
+    config.purchaseSources.push(source);
+    saveConfig(config);
+    render();
+  }
+}
+
+function removeSource(source) {
+  config.purchaseSources = (config.purchaseSources || []).filter(function(s) { return s !== source; });
+  saveConfig(config);
+  render();
+}
+
+// 区域相关函数
+function addSection() {
+  var input = document.getElementById('newSection');
+  var value = input ? input.value.trim() : '';
+  if (!value) return;
+
+  if (!config.purchaseSections) config.purchaseSections = [];
+  if (!config.purchaseSections.includes(value)) {
+    config.purchaseSections.push(value);
+    if (!config.purchaseCategories) config.purchaseCategories = {};
+    config.purchaseCategories[value] = [];
+    saveConfig(config);
+  }
+  render();
+}
+
+function quickAddSection(section) {
+  if (!config.purchaseSections) config.purchaseSections = [];
+  if (!config.purchaseSections.includes(section)) {
+    config.purchaseSections.push(section);
+    if (!config.purchaseCategories) config.purchaseCategories = {};
+    config.purchaseCategories[section] = [];
+    saveConfig(config);
+    render();
+  }
+}
+
+function removeSection(section) {
+  config.purchaseSections = (config.purchaseSections || []).filter(function(s) { return s !== section; });
+  if (config.purchaseCategories) delete config.purchaseCategories[section];
+  saveConfig(config);
+  render();
+}
+
+// 分类相关函数
+function addCat(section) {
+  var input = document.getElementById('newCat_' + section);
+  var value = input ? input.value.trim() : '';
+  if (!value) return;
+
+  if (!config.purchaseCategories) config.purchaseCategories = {};
+  if (!config.purchaseCategories[section]) config.purchaseCategories[section] = [];
+  if (!config.purchaseCategories[section].includes(value)) {
+    config.purchaseCategories[section].push(value);
+    saveConfig(config);
+  }
+  render();
+}
+
+function quickAddCat(section, cat) {
+  if (!config.purchaseCategories) config.purchaseCategories = {};
+  if (!config.purchaseCategories[section]) config.purchaseCategories[section] = [];
+  if (!config.purchaseCategories[section].includes(cat)) {
+    config.purchaseCategories[section].push(cat);
+    saveConfig(config);
+    render();
+  }
+}
+
+function removeCat(section, cat) {
+  if (config.purchaseCategories && config.purchaseCategories[section]) {
+    config.purchaseCategories[section] = config.purchaseCategories[section].filter(function(c) { return c !== cat; });
+    saveConfig(config);
+    render();
+  }
+}
+
+function renderModulesStep() {
+  var html = '';
+
+  // 总览始终启用，显示提示
+  html += '<div style="padding: 12px; background: #F5F5F0; border-radius: 8px; margin-bottom: 20px; font-size: 13px; color: #666;">';
+  html += '📊 <strong>总览</strong> - 已默认启用，显示经营概况';
+  html += '</div>';
+
+  // 分组显示模块
+  moduleGroups.forEach(function(group) {
+    html += '<div style="margin-bottom: 20px;">';
+    html += '<div style="font-weight: 600; margin-bottom: 10px; color: #8B6914; font-size: 14px;">' + group.icon + ' ' + group.name + '</div>';
+    html += '<div class="module-grid">';
+
+    group.modules.forEach(function(moduleId) {
+      var mod = allModules[moduleId];
+      if (!mod) return;
+
+      // 贵重物品使用 inventoryTypes 选择
+      if (moduleId === 'tea' || moduleId === 'cig' || moduleId === 'alc' || moduleId === 'other') {
+        var isSelected = config.inventoryTypes && config.inventoryTypes.includes(moduleId);
+        html += '<div class="module-card ' + (isSelected ? 'selected' : '') + '" onclick="toggleInventoryType(\'' + moduleId + '\')">';
+      } else {
+        var isSelected = config.enabledModules && config.enabledModules.includes(moduleId);
+        html += '<div class="module-card ' + (isSelected ? 'selected' : '') + '" onclick="toggleModule(\'' + moduleId + '\')">';
+      }
+
+      html += '<div class="icon">' + mod.icon + '</div>';
+      html += '<div class="name">' + mod.name + '</div>';
+      if (mod.desc) html += '<div class="desc">' + mod.desc + '</div>';
+      html += '</div>';
+    });
+
+    html += '</div>';
+
+    // 贵重物品分组下添加自定义输入
+    if (group.name === '贵重物品') {
+      html += '<div style="margin-top: 12px; padding: 12px; background: #F5F5F0; border-radius: 8px;">';
+      html += '<div style="font-size: 12px; color: #666; margin-bottom: 8px;">自定义贵重物品类型</div>';
+      html += '<div style="display: flex; gap: 8px;">';
+      html += '<input type="text" id="newInventoryType" placeholder="输入类型名称" style="flex: 1; padding: 6px 10px; border: 1px solid #E0E0E0; border-radius: 6px; font-size: 13px;" onkeydown="if(event.key===\'Enter\')addCustomInventoryType()">';
+      html += '<button style="padding: 6px 12px; background: #8B6914; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px;" onclick="addCustomInventoryType()">添加</button>';
+      html += '</div>';
+
+      // 已添加的自定义类型
+      var customTypes = config.customInventoryTypes || [];
+      if (customTypes.length > 0) {
+        html += '<div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;">';
+        customTypes.forEach(function(item) {
+          html += '<span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; background: white; border: 1px solid #E0E0E0; border-radius: 6px; font-size: 12px;">';
+          html += '💎 ' + item;
+          html += '<button onclick="removeCustomInventoryType(\'' + item + '\')" style="background: none; border: none; color: #999; cursor: pointer; font-size: 14px; line-height: 1;">×</button>';
+          html += '</span>';
+        });
+        html += '</div>';
+      }
+
+      html += '</div>';
+    }
+
+    html += '</div>';
+  });
+
+  return html;
+}
+
+function renderInventoryStep() {
+  var html = '<div style="margin-bottom: 16px;"><label style="font-size: 13px; color: #666;">选择需要管理的贵重物品类型</label></div>';
+  html += '<div class="module-grid">';
+  inventoryTypes.forEach(function(type) {
+    var isSelected = config.inventoryTypes.includes(type.id);
+    html += '<div class="module-card ' + (isSelected ? 'selected' : '') + '" onclick="toggleInventoryType(\'' + type.id + '\')">';
+    html += '<div class="icon">' + type.icon + '</div>';
+    html += '<div class="name">' + type.name + '</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+
+  // 自定义类型输入
+  html += '<div style="margin-top: 20px; margin-bottom: 16px;"><label style="font-size: 13px; color: #666;">自定义贵重物品类型</label></div>';
+  html += '<div class="input-row">';
+  html += '<input type="text" id="newInventoryType" placeholder="输入类型名称" onkeydown="if(event.key===\'Enter\')addCustomInventoryType()">';
+  html += '<button class="btn btn-primary" onclick="addCustomInventoryType()">添加</button>';
+  html += '</div>';
+
+  // 已选自定义类型
+  var customTypes = config.customInventoryTypes || [];
+  if (customTypes.length > 0) {
+    html += '<div class="quick-add"><label>已添加的自定义类型（拖拽可调整顺序）</label><div class="selected-items" id="selectedInventoryTypes">';
+    customTypes.forEach(function(item, index) {
+      html += '<span class="selected-item" draggable="true" data-index="' + index + '" ondragstart="onDragStart(event)" ondragover="onDragOver(event)" ondrop="onDropCustomInventory(event)" ondragend="onDragEnd(event)"><span class="drag-handle">⋮⋮</span>💎 ' + item + '<button onclick="removeCustomInventoryType(\'' + item + '\')">×</button></span>';
+    });
+    html += '</div></div>';
+  }
+
+  return html;
+}
+
+function renderDailyFeaturesStep() {
+  var features = config.dailyFeatures || { roomEnabled: false, reporterEnabled: false };
+
+  var html = '<div style="max-width: 500px; margin: 0 auto;">';
+
+  // 包厢预定
+  html += '<div style="padding: 16px; border: 2px solid ' + (features.roomEnabled ? '#8B6914' : '#E0E0E0') + '; border-radius: 12px; margin-bottom: 16px; cursor: pointer; transition: all 0.2s;" onclick="toggleDailyFeature(\'roomEnabled\')">';
+  html += '<div style="display: flex; align-items: center; gap: 12px;">';
+  html += '<div style="width: 24px; height: 24px; border-radius: 6px; border: 2px solid ' + (features.roomEnabled ? '#8B6914' : '#E0E0E0') + '; background: ' + (features.roomEnabled ? '#8B6914' : 'transparent') + '; display: flex; align-items: center; justify-content: center;">';
+  if (features.roomEnabled) html += '<span style="color: white; font-size: 14px;">✓</span>';
+  html += '</div>';
+  html += '<div><div style="font-weight: 600;">📦 包厢预定</div><div style="font-size: 12px; color: #666;">记录包厢预定和累计数据</div></div>';
+  html += '</div></div>';
+
+  // 汇报人
+  html += '<div style="padding: 16px; border: 2px solid ' + (features.reporterEnabled ? '#8B6914' : '#E0E0E0') + '; border-radius: 12px; margin-bottom: 16px; cursor: pointer; transition: all 0.2s;" onclick="toggleDailyFeature(\'reporterEnabled\')">';
+  html += '<div style="display: flex; align-items: center; gap: 12px;">';
+  html += '<div style="width: 24px; height: 24px; border-radius: 6px; border: 2px solid ' + (features.reporterEnabled ? '#8B6914' : '#E0E0E0') + '; background: ' + (features.reporterEnabled ? '#8B6914' : 'transparent') + '; display: flex; align-items: center; justify-content: center;">';
+  if (features.reporterEnabled) html += '<span style="color: white; font-size: 14px;">✓</span>';
+  html += '</div>';
+  html += '<div><div style="font-weight: 600;">👤 汇报人</div><div style="font-size: 12px; color: #666;">记录每日汇报人信息</div></div>';
+  html += '</div></div>';
+
+  html += '</div>';
+  return html;
+}
+
+function toggleDailyFeature(feature) {
+  if (!config.dailyFeatures) config.dailyFeatures = { roomEnabled: false, reporterEnabled: false };
+  config.dailyFeatures[feature] = !config.dailyFeatures[feature];
+  saveConfig(config);
+  render();
+}
+
+function renderConfigStep(configKey, addLabel, placeholder, quickItems) {
+  var items = config[configKey] || [];
+  var html = '';
+
+  // 添加输入（支持回车）
+  html += '<div class="input-row">';
+  html += '<input type="text" id="newItem" placeholder="' + placeholder + '" onkeydown="if(event.key===\'Enter\')addItem(\'' + configKey + '\')">';
+  html += '<button class="btn btn-primary" onclick="addItem(\'' + configKey + '\')">添加</button>';
+  html += '</div>';
+
+  // 快速添加
+  html += '<div class="quick-add"><label>快速添加</label><div class="quick-btns">';
+  quickItems.forEach(function(item) {
+    html += '<button class="quick-btn" onclick="quickAdd(\'' + configKey + '\', \'' + item + '\')" ' + (items.indexOf(item) >= 0 ? 'disabled' : '') + '>' + item + '</button>';
+  });
+  html += '</div></div>';
+
+  // 已选项目（支持拖拽排序）
+  html += '<div class="quick-add"><label>已选项目（拖拽可调整顺序）</label><div class="selected-items" id="selectedItems">';
+  items.forEach(function(item, index) {
+    html += '<span class="selected-item" draggable="true" data-index="' + index + '" ondragstart="onDragStart(event)" ondragover="onDragOver(event)" ondrop="onDrop(event, \'' + configKey + '\')" ondragend="onDragEnd(event)"><span class="drag-handle">⋮⋮</span>' + item + '<button onclick="removeItem(\'' + configKey + '\', \'' + item + '\')">×</button></span>';
+  });
+  html += '</div></div>';
+
+  return html;
+}
+
+// 切换模块选择
+function toggleModule(moduleId) {
+  if (!config.enabledModules) config.enabledModules = [];
+  var index = config.enabledModules.indexOf(moduleId);
+  if (index >= 0) {
+    config.enabledModules.splice(index, 1);
+  } else {
+    config.enabledModules.push(moduleId);
+  }
+  saveConfig(config);
+  initSteps();
+  render();
+}
+
+// 切换贵重物品类型
+function toggleInventoryType(typeId) {
+  if (!config.inventoryTypes) config.inventoryTypes = [];
+  var index = config.inventoryTypes.indexOf(typeId);
+  if (index >= 0) {
+    config.inventoryTypes.splice(index, 1);
+  } else {
+    config.inventoryTypes.push(typeId);
+  }
+  saveConfig(config);
+  initSteps();
+  render();
+}
+
+// 添加自定义贵重物品类型
+function addCustomInventoryType() {
+  var input = document.getElementById('newInventoryType');
+  var value = input.value.trim();
+  if (!value) return;
+
+  if (!config.customInventoryTypes) config.customInventoryTypes = [];
+  if (config.customInventoryTypes.indexOf(value) < 0) {
+    config.customInventoryTypes.push(value);
+    saveConfig(config);
+  }
+  render();
+  var newItem = document.getElementById('newInventoryType');
+  if (newItem) newItem.focus();
+}
+
+// 删除自定义贵重物品类型
+function removeCustomInventoryType(item) {
+  if (config.customInventoryTypes) {
+    config.customInventoryTypes = config.customInventoryTypes.filter(function(i) { return i !== item; });
+    saveConfig(config);
+    render();
+  }
+}
+
+// 拖拽排序自定义贵重物品类型
+function onDropCustomInventory(e) {
+  e.preventDefault();
+  var target = e.target.closest('.selected-item');
+  if (!target) return;
+
+  var targetIndex = parseInt(target.dataset.index);
+  if (draggedIndex === null || draggedIndex === targetIndex) return;
+
+  var items = config.customInventoryTypes || [];
+  var draggedItem = items[draggedIndex];
+  items.splice(draggedIndex, 1);
+  items.splice(targetIndex, 0, draggedItem);
+
+  saveConfig(config);
+  render();
+}
+
+// 添加项目
+function addItem(configKey) {
+  var input = document.getElementById('newItem');
+  var value = input.value.trim();
+  if (!value) return;
+
+  if (!config[configKey]) config[configKey] = [];
+  if (config[configKey].indexOf(value) < 0) {
+    config[configKey].push(value);
+    saveConfig(config);
+  }
+  render();
+  var newItem = document.getElementById('newItem');
+  if (newItem) newItem.focus();
+}
+
+function quickAdd(configKey, item) {
+  if (!config[configKey]) config[configKey] = [];
+  if (config[configKey].indexOf(item) < 0) {
+    config[configKey].push(item);
+    saveConfig(config);
+    render();
+  }
+}
+
+function removeItem(configKey, item) {
+  if (config[configKey]) {
+    config[configKey] = config[configKey].filter(function(i) { return i !== item; });
+    saveConfig(config);
+    render();
+  }
+}
+
+// 拖拽排序
+var draggedIndex = null;
+
+function onDragStart(e) {
+  var item = e.target.closest('.selected-item');
+  if (!item) return;
+  draggedIndex = parseInt(item.dataset.index);
+  item.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+function onDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  var target = e.target.closest('.selected-item');
+  if (target) {
+    document.querySelectorAll('.selected-item').forEach(function(item) {
+      item.classList.remove('drag-over');
+    });
+    target.classList.add('drag-over');
+  }
+}
+
+function onDrop(e, configKey) {
+  e.preventDefault();
+  var target = e.target.closest('.selected-item');
+  if (!target) return;
+
+  var targetIndex = parseInt(target.dataset.index);
+  if (draggedIndex === null || draggedIndex === targetIndex) return;
+
+  var items = config[configKey] || [];
+  var draggedItem = items[draggedIndex];
+  items.splice(draggedIndex, 1);
+  items.splice(targetIndex, 0, draggedItem);
+
+  saveConfig(config);
+  render();
+}
+
+function onDragEnd(e) {
+  var item = e.target.closest('.selected-item');
+  if (item) item.classList.remove('dragging');
+  document.querySelectorAll('.selected-item').forEach(function(el) {
+    el.classList.remove('drag-over');
+  });
+  draggedIndex = null;
+}
+
+function prev() {
+  if (currentStep > 0) {
+    currentStep--;
+    render();
+  }
+}
+
+function next() {
+  if (currentStep < steps.length - 1) {
+    currentStep++;
+    render();
+  }
+}
+
+function complete() {
+  config.onboardingCompleted = true;
+  saveConfig(config);
+  window.location.href = 'index.html';
+}
+
+// 初始化
+initSteps();
+render();
+</script>
+</body>
+</html>

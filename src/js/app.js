@@ -95,7 +95,15 @@ window.addEventListener('scroll', function() {
 });
 
 // ---------- 初始化工具栏 ----------
+// 使用 nav.js 中的 renderNav 函数，根据配置动态生成侧边栏
 function initToolbar() {
+  // 调用 nav.js 中的 renderNav 函数
+  if (typeof renderNav === 'function') {
+    renderNav();
+    return;
+  }
+
+  // 兼容：如果 renderNav 不存在，使用旧的 NAV 常量
   var groups = {
     toolbarMain: [],
     toolbarInv: [],

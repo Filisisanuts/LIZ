@@ -1,0 +1,55 @@
+[
+  {
+    "id": "pur-001",
+    "date": "2026-08-01",
+    "source": "岸香贸易",
+    "items": [
+      { "name": "碧螺春", "qty": 500, "unit": "克", "total": 280, "section": "厨房", "category": "茶叶/干货", "unitPrice": 0.56 },
+      { "name": "龙井", "qty": 300, "unit": "克", "total": 210, "section": "厨房", "category": "茶叶/干货", "unitPrice": 0.7 },
+      { "name": "花生米", "qty": 2, "unit": "斤", "total": 18, "section": "厨房", "category": "食材", "unitPrice": 9 },
+      { "name": "纸巾", "qty": 10, "unit": "包", "total": 45, "section": "外场", "category": "耗材", "unitPrice": 4.5 }
+    ],
+    "total": 553
+  },
+  {
+    "id": "pur-002",
+    "date": "2026-08-03",
+    "source": "岸香贸易",
+    "items": [
+      { "name": "中华软", "qty": 5, "unit": "条", "total": 340, "section": "吧台", "category": "香烟", "unitPrice": 68 },
+      { "name": "茅台", "qty": 2, "unit": "瓶", "total": 580, "section": "吧台", "category": "酒类", "unitPrice": 290 },
+      { "name": "青岛啤酒", "qty": 24, "unit": "瓶", "total": 96, "section": "吧台", "category": "酒类", "unitPrice": 4 }
+    ],
+    "total": 1016
+  },
+  {
+    "id": "pur-003",
+    "date": "2026-08-05",
+    "source": "外购",
+    "items": [
+      { "name": "垃圾袋", "qty": 5, "unit": "卷", "total": 25, "section": "外场", "category": "清洁", "unitPrice": 5 },
+      { "name": "洗洁精", "qty": 2, "unit": "瓶", "total": 36, "section": "外场", "category": "清洁", "unitPrice": 18 }
+    ],
+    "total": 61
+  },
+  {
+    "id": "pur-004",
+    "date": "2026-08-08",
+    "source": "岸香贸易",
+    "items": [
+      { "name": "碧螺春", "qty": 200, "unit": "克", "total": 112, "section": "厨房", "category": "茶叶/干货", "unitPrice": 0.56 },
+      { "name": "铁观音", "qty": 400, "unit": "克", "total": 160, "section": "厨房", "category": "茶叶/干货", "unitPrice": 0.4 },
+      { "name": "利群", "qty": 3, "unit": "条", "total": 120, "section": "吧台", "category": "香烟", "unitPrice": 40 }
+    ],
+    "total": 392
+  },
+  {
+    "id": "pur-ret-001",
+    "date": "2026-08-10",
+    "source": "退货",
+    "items": [
+      { "name": "青岛啤酒", "qty": -6, "unit": "瓶", "total": -24, "section": "吧台", "category": "酒类", "unitPrice": 4 }
+    ],
+    "total": -24
+  }
+]

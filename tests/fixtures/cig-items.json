@@ -1,0 +1,54 @@
+[
+  {
+    "id": "cig-001",
+    "name": "中华软",
+    "pricePerUnit": 75,
+    "openingStock": {
+      "2026-08": 8
+    },
+    "purchases": [
+      { "date": "2026-08-03", "qty": 5, "total": 340 }
+    ],
+    "sales": [
+      { "date": "2026-08-01", "qty": 3, "amount": 225 },
+      { "date": "2026-08-02", "qty": 2, "amount": 150 },
+      { "date": "2026-08-03", "qty": 4, "amount": 300 },
+      { "date": "2026-08-04", "qty": 3, "amount": 225 },
+      { "date": "2026-08-05", "qty": 2, "amount": 150 }
+    ]
+  },
+  {
+    "id": "cig-002",
+    "name": "利群",
+    "pricePerUnit": 45,
+    "openingStock": {
+      "2026-08": 5
+    },
+    "purchases": [
+      { "date": "2026-08-08", "qty": 3, "total": 120 }
+    ],
+    "sales": [
+      { "date": "2026-08-01", "qty": 2, "amount": 90 },
+      { "date": "2026-08-02", "qty": 1, "amount": 45 },
+      { "date": "2026-08-03", "qty": 3, "amount": 135 },
+      { "date": "2026-08-04", "qty": 2, "amount": 90 },
+      { "date": "2026-08-05", "qty": 1, "amount": 45 }
+    ]
+  },
+  {
+    "id": "cig-003",
+    "name": "红双喜",
+    "pricePerUnit": 25,
+    "openingStock": {
+      "2026-08": 10
+    },
+    "purchases": [],
+    "sales": [
+      { "date": "2026-08-01", "qty": 2, "amount": 50 },
+      { "date": "2026-08-02", "qty": 1, "amount": 25 },
+      { "date": "2026-08-03", "qty": 3, "amount": 75 },
+      { "date": "2026-08-04", "qty": 1, "amount": 25 },
+      { "date": "2026-08-05", "qty": 2, "amount": 50 }
+    ]
+  }
+]

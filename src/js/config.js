@@ -30,7 +30,7 @@ var NAV = [
 
 // 数据库初始化模板
 function initDB() {
-    return { dailyReports:[],purchases:[],expenses:[],teaItems:[],cigItems:[],alcItems:[],otherItems:[],areaCats:{},aiHistory:[],whItems:[],damageRecords:[],exchangeRecords:[],settings:{} };
+    return { dailyReports:[],purchases:[],expenses:[],salaryRecords:[],salaryTrash:[],teaItems:[],cigItems:[],alcItems:[],otherItems:[],areaCats:{},aiHistory:[],whItems:[],damageRecords:[],exchangeRecords:[],settings:{} };
 }
 
 // 默认配置
@@ -49,12 +49,26 @@ function initConfig() {
 }
 
 // 数据迁移：区域分类
+// 优先从配置管理模块读取，否则从历史数据提取，新用户不添加默认分类
 function migrateAreaCats() {
     if(DB.areaCats && Object.keys(DB.areaCats).length>0) return;
+
+    // 尝试从新配置读取
+    try {
+        var key = typeof getConfigKey === 'function' ? getConfigKey() : 'ax_app_config';
+        var config = JSON.parse(localStorage.getItem(key) || '{}');
+        if (config.purchaseSections && config.purchaseSections.length > 0) {
+            DB.areaCats = config.purchaseCategories || {};
+            saveDB(DB);
+            return;
+        }
+    } catch(e) {}
+
+    // 从历史采购记录提取
     DB.areaCats={};
     DB.purchases.forEach(function(p){(p.items||[]).forEach(function(item){var area=item.section||'';var cat=item.category||'';if(area&&cat){if(!DB.areaCats[area])DB.areaCats[area]=[];if(DB.areaCats[area].indexOf(cat)<0)DB.areaCats[area].push(cat)}})});
-    var defaults={"厨房":["调料/粮油","食材","茶叶/干货"],"吧台":["饮品","耗材"],"外场":["清洁","包装","设备"]};
-    Object.keys(defaults).forEach(function(a){if(!DB.areaCats[a]||!DB.areaCats[a].length)DB.areaCats[a]=defaults[a]});
+
+    // 新用户不添加默认分类，让用户通过引导或设置页自行添加
     saveDB(DB);
 }
 

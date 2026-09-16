@@ -1,0 +1,187 @@
+[
+  {
+    "date": "2026-08-01",
+    "revenue": {
+      "netSales": 4520,
+      "grossSales": 4800,
+      "kitchenSales": 2100,
+      "barSales": 2400,
+      "cigarette": { "total": 320 },
+      "other": 80,
+      "discount": 280
+    },
+    "guest": {
+      "count": 45,
+      "vip": 8,
+      "room": 3
+    },
+    "payment": {
+      "pos": 2800,
+      "ccbLife": 620,
+      "cash": 450,
+      "memberCard": 380,
+      "treat": 270,
+      "ar": {
+        "meituan": 520,
+        "douyin": 480,
+        "total": 1000
+      }
+    },
+    "delivery": {
+      "meituan": 380,
+      "taobao": 150,
+      "jd": 0,
+      "total": 530
+    },
+    "reporter": "张三",
+    "note": "周末客流较大"
+  },
+  {
+    "date": "2026-08-02",
+    "revenue": {
+      "netSales": 3850,
+      "grossSales": 4100,
+      "kitchenSales": 1800,
+      "barSales": 2050,
+      "cigarette": { "total": 280 },
+      "other": 60,
+      "discount": 250
+    },
+    "guest": {
+      "count": 38,
+      "vip": 5,
+      "room": 2
+    },
+    "payment": {
+      "pos": 2400,
+      "ccbLife": 480,
+      "cash": 380,
+      "memberCard": 320,
+      "treat": 270,
+      "ar": {
+        "meituan": 450,
+        "douyin": 350,
+        "total": 800
+      }
+    },
+    "delivery": {
+      "meituan": 320,
+      "taobao": 120,
+      "jd": 0,
+      "total": 440
+    },
+    "reporter": "张三",
+    "note": ""
+  },
+  {
+    "date": "2026-08-03",
+    "revenue": {
+      "netSales": 5200,
+      "grossSales": 5500,
+      "kitchenSales": 2500,
+      "barSales": 2700,
+      "cigarette": { "total": 420 },
+      "other": 120,
+      "discount": 300
+    },
+    "guest": {
+      "count": 52,
+      "vip": 10,
+      "room": 4
+    },
+    "payment": {
+      "pos": 3200,
+      "ccbLife": 720,
+      "cash": 520,
+      "memberCard": 450,
+      "treat": 310,
+      "ar": {
+        "meituan": 680,
+        "douyin": 520,
+        "total": 1200
+      }
+    },
+    "delivery": {
+      "meituan": 450,
+      "taobao": 180,
+      "jd": 50,
+      "total": 680
+    },
+    "reporter": "李四",
+    "note": "周末，包厢全满"
+  },
+  {
+    "date": "2026-08-04",
+    "revenue": {
+      "netSales": 4100,
+      "grossSales": 4350,
+      "kitchenSales": 1950,
+      "barSales": 2150,
+      "cigarette": { "total": 350 },
+      "other": 90,
+      "discount": 250
+    },
+    "guest": {
+      "count": 42,
+      "vip": 7,
+      "room": 3
+    },
+    "payment": {
+      "pos": 2600,
+      "ccbLife": 520,
+      "cash": 400,
+      "memberCard": 350,
+      "treat": 230,
+      "ar": {
+        "meituan": 580,
+        "douyin": 420,
+        "total": 1000
+      }
+    },
+    "delivery": {
+      "meituan": 380,
+      "taobao": 140,
+      "jd": 30,
+      "total": 550
+    },
+    "reporter": "张三",
+    "note": ""
+  },
+  {
+    "date": "2026-08-05",
+    "revenue": {
+      "netSales": 3650,
+      "grossSales": 3880,
+      "kitchenSales": 1700,
+      "barSales": 1880,
+      "cigarette": { "total": 300 },
+      "other": 70,
+      "discount": 230
+    },
+    "guest": {
+      "count": 35,
+      "vip": 4,
+      "room": 2
+    },
+    "payment": {
+      "pos": 2300,
+      "ccbLife": 450,
+      "cash": 350,
+      "memberCard": 280,
+      "treat": 270,
+      "ar": {
+        "meituan": 420,
+        "douyin": 380,
+        "total": 800
+      }
+    },
+    "delivery": {
+      "meituan": 300,
+      "taobao": 100,
+      "jd": 0,
+      "total": 400
+    },
+    "reporter": "李四",
+    "note": "工作日，客流一般"
+  }
+]

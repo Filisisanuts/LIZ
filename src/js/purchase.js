@@ -61,11 +61,14 @@ function findPrevPrice(name, currentDate) {
 // 自动检测区域标题（厨房/吧台/外场）
 function parsePurchase(text) {
     var dm = text.match(/(\d{4})[-\/.年]\s*(\d{1,2})[-\/.月]\s*(\d{1,2})/);
-    var isAx = /岸香.*贸易|贸易.*岸香/.test(text);
 
-    var r = { date: td(), items: [], source: '岸香贸易' };
+    // 获取默认来源（优先从配置读取）
+    var defaultSource = '';
+    var sources = getPurchaseSources();
+    if (sources.length > 0) defaultSource = sources[0];
+
+    var r = { date: td(), items: [], source: defaultSource };
     if (dm) r.date = dm[1] + '-' + String(dm[2]).padStart(2, '0') + '-' + String(dm[3]).padStart(2, '0');
-    if (isAx) r.source = '岸香贸易';
 
     var skipRe = /合计|本页|当日|区域汇总|以下是|好的|已删除|不录入/;
     var curSection = '';
@@ -228,7 +231,7 @@ function doParsePur() {
             unit: item.unit || '',
             unitPrice: unitPrice,
             total: total,
-            source: result.source || '岸香贸易'
+            source: result.source || ''
         };
     });
 
@@ -236,7 +239,7 @@ function doParsePur() {
     switchPT('manual');
     setTimeout(function() {
         if ($id('pmDate')) $id('pmDate').value = result.date;
-        if ($id('pmSrc')) $id('pmSrc').value = '岸香贸易';
+        if ($id('pmSrc')) $id('pmSrc').value = result.source || '';
         renderPML();
         toast('已识别 ' + _pmItems.length + ' 项物品');
     }, 100);
@@ -273,7 +276,14 @@ function rPurchase() {
     h += '<div class="hrow">';
     h += '<label>日期</label><input class="inp" id="pmDate" type="text" readonly placeholder="选择日期" value="' + td() + '" onclick="_dpOpen(\'pmDate\')" style="max-width:150px;cursor:pointer">';
     h += '<label>来源</label><select class="inp" id="pmSrc" style="max-width:120px" onchange="pmSrcChanged()">';
-    h += '<option>岸香贸易</option><option>外购</option><option value="退货">退货</option></select>';
+    var sources = getPurchaseSources();
+    if (sources.length > 0) {
+        sources.forEach(function(s) { h += '<option>' + s + '</option>'; });
+    } else {
+        // 兼容旧用户（没有配置的情况）
+        h += '<option>外购</option>';
+    }
+    h += '<option value="退货">退货</option></select>';
     h += '</div>';
 
     // 关联原采购（仅退货时显示）
@@ -701,8 +711,9 @@ function renderPML() {
     var el = $id('pmList');
     if (!el) return;
 
-    var secs = ['厨房', '吧台', '外场'];
-    var srcs = ['岸香贸易', '外购'];
+    var secs = DB.areaCats ? Object.keys(DB.areaCats) : ['厨房', '吧台', '外场'];
+    var srcs = getPurchaseSources();
+    if (srcs.length === 0) srcs = ['岸香贸易', '外购']; // 兼容旧用户
     var h = '';
 
     // 批量填充区域
@@ -992,7 +1003,7 @@ function parseResFieldChange(idx, field, val) {
 function doMimoConfirm() {
     var r = window._mimoResult;
     if (!r) return;
-    var src = $id('pResSrc').value || '岸香贸易';
+    var src = $id('pResSrc').value || '';
     r.items.forEach(function(item) { item.source = src; });
     _pmItems = JSON.parse(JSON.stringify(r.items));
     _editPurId = null;
@@ -1232,10 +1243,12 @@ function editPurByDate(date, name) {
     }
     if (!found) return;
 
-    var secs = ['厨房', '吧台', '外场'];
+    var secs = DB.areaCats ? Object.keys(DB.areaCats) : ['厨房', '吧台', '外场'];
     var cats = getPurCats(found.section);
-    var sources = ['岸香贸易', '外购', '退货', '其他'];
-    var curSource = found.source || foundP.source || '外购';
+    var sources = getPurchaseSources();
+    if (sources.length === 0) sources = ['外购']; // 兼容旧用户
+    sources.push('退货'); // 退货始终可选
+    var curSource = found.source || foundP.source || '';
 
     var h = '<h3>编辑物品</h3>';
     h += '<div class="hrow"><label>日期</label><input class="inp" id="epi_date" type="text" readonly placeholder="选择日期" value="' + foundP.date + '" onclick="_dpOpen(\'epi_date\')" style="max-width:160px;cursor:pointer"></div>';
@@ -1727,7 +1740,7 @@ function toggleSec(id) {
 }
 
 // 计算物品单价涨幅
-function calcPriceChange(itemName, currentPrice, currentDate) {
+function getPreviousPurchasePriceChange(itemName, currentPrice, currentDate) {
     // 查找上一次采购记录
     var prevPurchase = null;
     var prevDate = '';

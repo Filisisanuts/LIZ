@@ -1,0 +1,42 @@
+[
+  {
+    "id": "exp-001",
+    "date": "2026-08-01",
+    "amount": 150,
+    "category": "水电费",
+    "note": "7月水电费",
+    "photo": null
+  },
+  {
+    "id": "exp-002",
+    "date": "2026-08-03",
+    "amount": 2800,
+    "category": "房租",
+    "note": "8月房租",
+    "photo": null
+  },
+  {
+    "id": "exp-003",
+    "date": "2026-08-05",
+    "amount": 350,
+    "category": "员工餐",
+    "note": "本周员工餐费",
+    "photo": null
+  },
+  {
+    "id": "exp-004",
+    "date": "2026-08-08",
+    "amount": 120,
+    "category": "清洁用品",
+    "note": "补充清洁用品",
+    "photo": null
+  },
+  {
+    "id": "exp-005",
+    "date": "2026-08-10",
+    "amount": 85,
+    "category": "办公用品",
+    "note": "打印纸、笔",
+    "photo": null
+  }
+]

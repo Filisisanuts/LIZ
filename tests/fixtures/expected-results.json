@@ -1,0 +1,153 @@
+{
+  "_meta": {
+    "description": "基于 fixtures 数据的旧版计算结果基线",
+    "period": "2026-08",
+    "createdAt": "2026-09-14"
+  },
+  "daily": {
+    "2026-08": {
+      "totalNetSales": 21320,
+      "totalGuests": 212,
+      "avgDailySales": 4264,
+      "reportCount": 5
+    }
+  },
+  "purchase": {
+    "2026-08": {
+      "totalPurchase": 2022,
+      "totalReturn": -24,
+      "netPurchase": 1998,
+      "bySection": {
+        "厨房": 762,
+        "吧台": 1532,
+        "外场": 106
+      }
+    }
+  },
+  "expense": {
+    "2026-08": {
+      "totalExpense": 3505,
+      "byCategory": {
+        "水电费": 150,
+        "房租": 2800,
+        "员工餐": 350,
+        "清洁用品": 120,
+        "办公用品": 85
+      }
+    }
+  },
+  "inventory": {
+    "tea": {
+      "碧螺春": {
+        "opening": 800,
+        "purchased": 700,
+        "sold": 270,
+        "closing": 1230,
+        "revenue": 1582,
+        "cost": 625.8
+      },
+      "龙井": {
+        "opening": 500,
+        "purchased": 300,
+        "sold": 190,
+        "closing": 610,
+        "revenue": 1200,
+        "cost": 427
+      },
+      "铁观音": {
+        "opening": 600,
+        "purchased": 400,
+        "sold": 150,
+        "closing": 850,
+        "revenue": 589,
+        "cost": 198
+      }
+    },
+    "cig": {
+      "中华软": {
+        "opening": 8,
+        "purchased": 5,
+        "sold": 14,
+        "closing": -1,
+        "revenue": 1050,
+        "cost": 476
+      },
+      "利群": {
+        "opening": 5,
+        "purchased": 3,
+        "sold": 9,
+        "closing": -1,
+        "revenue": 405,
+        "cost": 144
+      },
+      "红双喜": {
+        "opening": 10,
+        "purchased": 0,
+        "sold": 9,
+        "closing": 1,
+        "revenue": 225,
+        "cost": 90
+      }
+    },
+    "alc": {
+      "茅台": {
+        "opening": 3,
+        "purchased": 2,
+        "sold": 3,
+        "closing": 2,
+        "revenue": 1140,
+        "cost": 580
+      },
+      "青岛啤酒": {
+        "opening": 30,
+        "purchased": 24,
+        "sold": 26,
+        "closing": 28,
+        "revenue": 208,
+        "cost": 104
+      }
+    },
+    "other": {
+      "五粮液": {
+        "opening": 5,
+        "purchased": 0,
+        "sold": 2,
+        "closing": 3,
+        "revenue": 560,
+        "cost": 0
+      },
+      "中华硬": {
+        "opening": 20,
+        "purchased": 0,
+        "sold": 14,
+        "closing": 6,
+        "revenue": 700,
+        "cost": 0
+      },
+      "散装茶叶": {
+        "opening": 2000,
+        "purchased": 0,
+        "sold": 650,
+        "closing": 1350,
+        "revenue": 195,
+        "cost": 0
+      }
+    }
+  },
+  "damage": {
+    "2026-08": {
+      "totalDamage": 44,
+      "count": 2
+    }
+  },
+  "profit": {
+    "2026-08": {
+      "revenue": 21320,
+      "cogs": 1998,
+      "grossProfit": 19322,
+      "grossMargin": 90.63,
+      "expenses": 3505,
+      "netProfit": 15817
+    }
+  }
+}

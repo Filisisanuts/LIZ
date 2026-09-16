@@ -1,0 +1,63 @@
+[
+  {
+    "id": "tea-001",
+    "name": "碧螺春",
+    "calcMode": "gram",
+    "pricePerCup": 18,
+    "pricePerPot": 58,
+    "openingStock": {
+      "2026-08": 800
+    },
+    "purchases": [
+      { "date": "2026-08-01", "qty": 500, "total": 280 },
+      { "date": "2026-08-08", "qty": 200, "total": 112 }
+    ],
+    "sales": [
+      { "date": "2026-08-01", "cups": 12, "pots": 2, "qty": 0, "amount": 332 },
+      { "date": "2026-08-02", "cups": 8, "pots": 1, "qty": 0, "amount": 202 },
+      { "date": "2026-08-03", "cups": 15, "pots": 3, "qty": 0, "amount": 444 },
+      { "date": "2026-08-04", "cups": 10, "pots": 2, "qty": 0, "amount": 296 },
+      { "date": "2026-08-05", "cups": 7, "pots": 1, "qty": 0, "amount": 184 }
+    ]
+  },
+  {
+    "id": "tea-002",
+    "name": "龙井",
+    "calcMode": "gram",
+    "pricePerCup": 22,
+    "pricePerPot": 68,
+    "openingStock": {
+      "2026-08": 500
+    },
+    "purchases": [
+      { "date": "2026-08-01", "qty": 300, "total": 210 }
+    ],
+    "sales": [
+      { "date": "2026-08-01", "cups": 8, "pots": 1, "qty": 0, "amount": 244 },
+      { "date": "2026-08-02", "cups": 6, "pots": 1, "qty": 0, "amount": 200 },
+      { "date": "2026-08-03", "cups": 10, "pots": 2, "qty": 0, "amount": 356 },
+      { "date": "2026-08-04", "cups": 7, "pots": 1, "qty": 0, "amount": 222 },
+      { "date": "2026-08-05", "cups": 5, "pots": 1, "qty": 0, "amount": 178 }
+    ]
+  },
+  {
+    "id": "tea-003",
+    "name": "铁观音",
+    "calcMode": "gram",
+    "pricePerCup": 15,
+    "pricePerPot": 48,
+    "openingStock": {
+      "2026-08": 600
+    },
+    "purchases": [
+      { "date": "2026-08-08", "qty": 400, "total": 160 }
+    ],
+    "sales": [
+      { "date": "2026-08-01", "cups": 5, "pots": 1, "qty": 0, "amount": 123 },
+      { "date": "2026-08-02", "cups": 4, "pots": 0, "qty": 0, "amount": 60 },
+      { "date": "2026-08-03", "cups": 6, "pots": 1, "qty": 0, "amount": 138 },
+      { "date": "2026-08-04", "cups": 5, "pots": 1, "qty": 0, "amount": 123 },
+      { "date": "2026-08-05", "cups": 3, "pots": 0, "qty": 0, "amount": 45 }
+    ]
+  }
+]

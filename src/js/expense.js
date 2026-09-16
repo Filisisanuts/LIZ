@@ -257,7 +257,8 @@ function renderExpCalendar(){
 
 // 月份导航
 function expCalNav(dir) {
-    _expCalYM = calendarNav(dir, _expCalYM, 'expCalPicker', function(ym) {
+    calendarNav(dir, _expCalYM, 'expCalPicker', function(ym) {
+        _expCalYM = ym;
         document.getElementById('expDetail').innerHTML = renderExpCalendar();
     });
 }

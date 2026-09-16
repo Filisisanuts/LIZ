@@ -1,0 +1,56 @@
+[
+  {
+    "id": "other-001",
+    "name": "五粮液",
+    "category": "白酒",
+    "calcMode": "simple",
+    "unit": "瓶",
+    "pricePerUnit": 280,
+    "openingStock": {
+      "2026-08": 5
+    },
+    "purchases": [],
+    "sales": [
+      { "date": "2026-08-02", "qty": 1, "amount": 280 },
+      { "date": "2026-08-04", "qty": 1, "amount": 280 }
+    ]
+  },
+  {
+    "id": "other-002",
+    "name": "中华硬",
+    "category": "香烟",
+    "calcMode": "pack",
+    "unit": "包",
+    "pricePerUnit": 50,
+    "openingStock": {
+      "2026-08": 20
+    },
+    "purchases": [],
+    "sales": [
+      { "date": "2026-08-01", "qty": 3, "amount": 150 },
+      { "date": "2026-08-02", "qty": 2, "amount": 100 },
+      { "date": "2026-08-03", "qty": 4, "amount": 200 },
+      { "date": "2026-08-04", "qty": 2, "amount": 100 },
+      { "date": "2026-08-05", "qty": 3, "amount": 150 }
+    ]
+  },
+  {
+    "id": "other-003",
+    "name": "散装茶叶",
+    "category": "茶叶",
+    "calcMode": "gram",
+    "unit": "克",
+    "pricePerUnit": 0.3,
+    "openingStock": {
+      "2026-08": 2000
+    },
+    "purchases": [],
+    "sales": [
+      { "date": "2026-08-01", "qty": 150, "amount": 45 },
+      { "date": "2026-08-02", "qty": 100, "amount": 30 },
+      { "date": "2026-08-03", "qty": 200, "amount": 60 },
+      { "date": "2026-08-04", "qty": 120, "amount": 36 },
+      { "date": "2026-08-05", "qty": 80, "amount": 24 }
+    ]
+  }
+]

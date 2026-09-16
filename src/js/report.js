@@ -1,5 +1,14 @@
 
 // 月度财务报告主页：核心指标 + 子标签导航 + 多维度报表
+// 退货在旧数据中可能是正金额，在新数据中则作为“退货”来源保存为负金额。
+// 报表统一转换为带符号的采购金额，避免月份汇总把退货重复加回成本。
+function reportPurchaseAmount(item, parent) {
+    var amount = Number(item && item.total) || 0;
+    var source = (item && item.source) || (parent && parent.source) || '外购';
+    return source === '退货' && amount > 0 ? -amount : amount;
+}
+
+// 月度财务报告主页：核心指标 + 子标签导航 + 多维度报表
 function rReport() {
     // 先检查是否已有月份选择器，如果没有则从URL参数或默认当月
     var existingPicker = document.getElementById('repM');
@@ -80,16 +89,15 @@ function rReport() {
         p.items.forEach(function(item) {
             var src = item.source || p.source || '外购';
             var sec = item.section || '其他';
-            if (src === '退货') {
-                retTotal += item.total;
-            } else {
-                purTotal += item.total;
-                if (!purBySec[sec]) purBySec[sec] = 0;
-                purBySec[sec] += item.total;
-            }
+            var amount = reportPurchaseAmount(item, p);
+            if (src === '退货') retTotal += amount;
+            else purTotal += amount;
+            // 区域成本必须包含退货的负数调整，才会与净采购总额严格对齐。
+            if (!purBySec[sec]) purBySec[sec] = 0;
+            purBySec[sec] += amount;
         });
     });
-    var netPur = purTotal - retTotal;
+    var netPur = purTotal + retTotal;
 
     // ===== 费用汇总 =====
     var mExp = DB.expenses.filter(function(e) { return e.date.startsWith(m); });
@@ -99,6 +107,12 @@ function rReport() {
         if (!expByCat[e.category]) expByCat[e.category] = 0;
         expByCat[e.category] += e.amount;
     });
+
+    // ===== 工资汇总 =====
+    var mSalary = (DB.salaryRecords || []).filter(function(r) { return r.period === m; });
+    var salaryTotal = mSalary.reduce(function(s, r) {
+        return s + (typeof r.actualSalary === 'number' ? r.actualSalary : calcSalaryActual(r));
+    }, 0);
 
     // ===== 库存销售成本 =====
     var saleCostByType = {};
@@ -126,7 +140,7 @@ function rReport() {
     // ===== 利润计算 =====
     var grossProfit = mNet - netPur;
     var grossMargin = mNet > 0 ? grossProfit / mNet * 100 : 0;
-    var operProfit = grossProfit - expTotal;
+    var operProfit = grossProfit - expTotal - salaryTotal;
     var operMargin = mNet > 0 ? operProfit / mNet * 100 : 0;
 
     // 分类毛利
@@ -136,9 +150,7 @@ function rReport() {
     var alcGP = alcProfit;
     var delGP = mDel;
     var kitGP = mKit - kitCost;
-    if (kitGP < 0) kitGP = mKit * 0.5;
     var otherGP = mOther - otherCost;
-    if (otherGP < 0) otherGP = mOther * 0.5;
 
     var avgSpend = mGuests > 0 ? mNet / mGuests : 0;
     var daysReported = mr.length || 1;
@@ -214,11 +226,12 @@ function rReport() {
         // 缓存数据给图表使用
         window._repData = {
             net: mNet, netPur: netPur, gp: grossProfit,
-            expTotal: expTotal, op: operProfit,
+            expTotal: expTotal, salaryTotal: salaryTotal, operExpense: expTotal + salaryTotal, op: operProfit,
             kit: mKit, bar: mBar, del: mDel,
-            cig: cigRev, alc: alcRev, other: mOther,
+            // 营收总表与收入分类图均使用日报口径；贵重物品销售另在独立分析页呈现。
+            cig: mCigRev, alc: alcRev, other: mOther,
             pos: mPos, ccb: mCcb, cash: mCash,
-            member: mMember, ar: mAr,
+            member: mMember, treat: mTreat, ar: mAr,
             purBySec: purBySec, expByCat: expByCat,
             kitGP: kitGP, barGP: barGP, teaGP: teaGP,
             delGP: delGP, cigGP: cigGP, alcGP: alcGP,
@@ -229,13 +242,13 @@ function rReport() {
 
         var sh = '';
         if (id === 'profit') {
-            sh += renderProfitTable(mNet, mGross, mDiscount, kitCost, barCost, outCost, teaCost, cigCost, alcCost, otherCost, netPur, expTotal, expByCat, grossProfit, grossMargin, operProfit, operMargin);
+            sh += renderProfitTable(mNet, mGross, mDiscount, kitCost, barCost, outCost, otherCost, netPur, expTotal, expByCat, grossProfit, grossMargin, operProfit, operMargin, salaryTotal, saleCostByType);
         } else if (id === 'revenue') {
             sh += renderRevenueSection(mNet, mGross, mDiscount, mKit, mBar, mDel, mCigRev, alcRev, mOther, mPos, mCcb, mCash, mMember, mTreat, mAr, mDelMeituan, mDelTaobao, mDelJd);
         } else if (id === 'cost') {
-            sh += renderCostSection(purBySec, netPur, kitCost, barCost, outCost, teaCost, cigCost, alcCost, expByCat, expTotal, saleCostByType, m);
+            sh += renderCostSection(purBySec, netPur, kitCost, barCost, outCost, teaCost, cigCost, alcCost, expByCat, expTotal, salaryTotal, saleCostByType, m);
         } else if (id === 'catgp') {
-            sh += renderCatGPSection(mKit, mBar, barNoTea, teaRev, mDel, mCigRev, alcRev, kitCost, barCost, teaCost, cigCost, alcCost, kitGP, barGP, teaGP, delGP, cigGP, alcGP);
+            sh += renderCatGPSection(mKit, mBar, barNoTea, teaRev, mDel, cigRev, alcRev, kitCost, barCost, teaCost, cigCost, alcCost, kitGP, barGP, teaGP, delGP, cigGP, alcGP);
         } else if (id === 'cig') {
             sh += renderCigSection(cigS, cigRev, cigCost, cigProfit, m);
         } else if (id === 'tea') {
@@ -262,7 +275,7 @@ function rReport() {
 }
 
 // ==================== 利润表 ====================
-function renderProfitTable(net, gross, discount, kitC, barC, outC, teaC, cigC, alcC, otherC, netPur, expTotal, expByCat, gp, gm, op, om) {
+function renderProfitTable(net, gross, discount, kitC, barC, outC, otherC, netPur, expTotal, expByCat, gp, gm, op, om, salTotal, saleCostByType) {
     var ym = $id('repM') ? $id('repM').value : curYM();
     var yy = ym.split('-')[0];
     var mm = parseInt(ym.split('-')[1]);
@@ -270,18 +283,23 @@ function renderProfitTable(net, gross, discount, kitC, barC, outC, teaC, cigC, a
     // 利润表数据行
     var rows = [
         { l: '营业收入（实收）', v: net, n: '流水' + fmtC(gross) + ' 减折扣' + fmtC(discount) },
-        { l: '减：营业成本', v: netPur, n: '净采购' },
+        { l: '减：营业成本', v: netPur, n: '净采购（含退货调整）' },
         { l: '  厨房采购', v: kitC, n: '' },
         { l: '  吧台采购', v: barC, n: '' },
-        { l: '  外场采购', v: outC, n: '' },
-        { l: '  茗茶库存价值', v: teaC, n: '' },
-        { l: '  香烟销售成本', v: cigC, n: '' },
-        { l: '  酒类库存价值', v: alcC, n: '' }
+        { l: '  外场采购', v: outC, n: '' }
     ];
     if (otherC > 0) rows.push({ l: '  其他采购', v: otherC, n: '' });
+    var specialCostTotal = saleCostByType ? Object.values(saleCostByType).reduce(function(sum, value) { return sum + value; }, 0) : 0;
+    if (specialCostTotal > 0) {
+        rows.push({ l: '其中：贵重物品本月已售对应成本', v: specialCostTotal, n: '经营观察项，不重复计入营业成本' });
+        Object.keys(saleCostByType).sort(function(a, b) { return saleCostByType[b] - saleCostByType[a]; }).forEach(function(type) {
+            rows.push({ l: '  ' + type + '已售成本', v: saleCostByType[type], n: '不重复计入' });
+        });
+    }
     rows.push({ l: '毛利', v: gp, n: '毛利率 ' + gm.toFixed(1) + '%' });
-    rows.push({ l: '减：营业费用', v: expTotal, n: '' });
+    rows.push({ l: '减：营业费用', v: expTotal + (salTotal || 0), n: '' });
     Object.keys(expByCat).forEach(function(cat) { rows.push({ l: '  ' + cat, v: expByCat[cat], n: '' }); });
+    if (salTotal > 0) rows.push({ l: '  工资', v: salTotal, n: '' });
     rows.push({ l: '营业利润', v: op, n: '利润率 ' + om.toFixed(1) + '%' });
 
     // 标题摘要
@@ -290,7 +308,7 @@ function renderProfitTable(net, gross, discount, kitC, barC, outC, teaC, cigC, a
     h += '<div style="font-size:.72rem;color:var(--tx-m);margin-bottom:14px">';
     h += mm + '月实现营收' + fmtC(net) + '元，营业成本' + fmtC(netPur) + '元，';
     h += '毛利' + fmtC(gp) + '元（' + gm.toFixed(1) + '%）。';
-    h += '扣除费用' + fmtC(expTotal) + '元后，营业利润' + fmtC(op) + '元，利润率' + om.toFixed(1) + '%。';
+    h += '扣除费用' + fmtC(expTotal) + '元' + (salTotal > 0 ? '、工资' + fmtC(salTotal) + '元' : '') + '后，营业利润' + fmtC(op) + '元，利润率' + om.toFixed(1) + '%。';
     h += '</div></div>';
 
     // 图表 + 表格左右布局
@@ -299,7 +317,8 @@ function renderProfitTable(net, gross, discount, kitC, barC, outC, teaC, cigC, a
     h += '<tr><th>项目</th><th class="nr">金额（元）</th><th>备注</th></tr>';
     rows.forEach(function(r) {
         var isTotal = (r.l === '毛利' || r.l === '营业利润');
-        h += '<tr' + (isTotal ? ' style="background:var(--card-h)"' : '') + '>';
+        var isMemo = r.l === '其中：贵重物品本月已售对应成本';
+        h += '<tr' + (isTotal ? ' style="background:var(--card-h)"' : isMemo ? ' class="rep-memo-row"' : '') + '>';
         h += '<td' + (isTotal ? ' style="font-weight:600"' : '') + '>' + r.l + '</td>';
         h += '<td class="nr" style="' + (isTotal ? 'font-weight:600;color:' + (r.v >= 0 ? 'var(--gn)' : 'var(--rd)') : '') + '">' + fmtC(r.v) + '</td>';
         h += '<td style="font-size:.72rem;color:var(--tx-m)">' + r.n + '</td></tr>';
@@ -314,6 +333,9 @@ function renderProfitTable(net, gross, discount, kitC, barC, outC, teaC, cigC, a
 // ==================== 营收总表 ====================
 function renderRevenueSection(net, gross, discount, kit, bar, del, cig, alc, other, pos, ccb, cash, member, treat, ar, delMt, delTb, delJd) {
     var total = net || 1;
+    // 收入分类只采用日报字段。酒类等贵重物品库存销售在专属分析页展示，避免混入日报实收。
+    var classifiedRevenue = kit + bar + del + cig + other;
+    var revenueGap = net - classifiedRevenue;
 
     var h = '<div class="sec-head">';
     h += '<h4 style="font-size:.88rem;color:var(--ac);margin-bottom:6px">二、营收总表</h4>';
@@ -328,10 +350,10 @@ function renderRevenueSection(net, gross, discount, kit, bar, del, cig, alc, oth
     h += '<div class="rep-grid">';
     h += '<div>';
     // 收入分类表格
-    h += '<div class="tw" style="margin-bottom:0"><table><tr><th>收入分类</th><th class="nr">金额（元）</th><th class="nr">占比</th></tr>';
+    h += '<div class="tw" style="margin-bottom:0"><table><tr><th>日报收入分类</th><th class="nr">金额（元）</th><th class="nr">占比</th></tr>';
     var items = [['厨房', kit], ['吧台（含茗茶）', bar], ['外卖', del], ['香烟', cig]];
-    if (alc > 0) items.push(['酒类', alc]);
     items.push(['其他', other]);
+    if (Math.abs(revenueGap) > 0.01) items.push(['待核对差额', revenueGap]);
     items.push(['合计', total]);
     items.forEach(function(it) {
         var pct = net > 0 ? (it[1] / total * 100).toFixed(1) : '0';
@@ -342,6 +364,9 @@ function renderRevenueSection(net, gross, discount, kit, bar, del, cig, alc, oth
         h += '<td class="nr">' + pct + '%</td></tr>';
     });
     h += '</table></div>';
+    if (Math.abs(revenueGap) > 0.01) {
+        h += '<div class="rep-reconcile-note">收入分类与实收相差 ' + fmtC(revenueGap) + ' 元；请核对日报中厨房、吧台、外卖、香烟及其他的归属后再解读分类占比。</div>';
+    }
     // 支付渠道表格
     h += '<div style="font-size:.82rem;font-weight:600;color:var(--ac);margin:14px 0 6px">支付渠道</div>';
     var payTotal = pos + ccb + cash + member + treat + del + ar;
@@ -365,14 +390,14 @@ function renderRevenueSection(net, gross, discount, kit, bar, del, cig, alc, oth
 }
 
 // ==================== 成本费用明细 ====================
-function renderCostSection(purBySec, netPur, kitC, barC, outC, teaC, cigC, alcC, expByCat, expTotal, saleCostByType, m) {
-    var total = netPur + expTotal;
+function renderCostSection(purBySec, netPur, kitC, barC, outC, teaC, cigC, alcC, expByCat, expTotal, salaryTotal, saleCostByType, m) {
     var saleCostTotal = saleCostByType ? Object.values(saleCostByType).reduce(function(s, v) { return s + v; }, 0) : 0;
+    var periodCostTotal = expTotal + (salaryTotal || 0);
 
     var h = '<div class="sec-head">';
     h += '<h4 style="font-size:.88rem;color:var(--ac);margin-bottom:6px">成本费用</h4>';
     h += '<div style="font-size:.72rem;color:var(--tx-m);margin-bottom:14px">';
-    h += '净采购' + fmtC(netPur) + '元，销售成本' + fmtC(saleCostTotal) + '元，营业费用' + fmtC(expTotal) + '元。';
+    h += '净采购' + fmtC(netPur) + '元，贵重物品已售成本观察' + fmtC(saleCostTotal) + '元（不重复计入），期间费用（含工资）' + fmtC(periodCostTotal) + '元。';
     h += '</div></div>';
 
     // 三栏布局：采购成本、销售成本、经营费用
@@ -380,7 +405,7 @@ function renderCostSection(purBySec, netPur, kitC, barC, outC, teaC, cigC, alcC,
 
     // 1. 采购成本（按来源-区域-分类）
     h += '<div class="tw" style="margin-bottom:0">';
-    h += '<table><tr><th colspan="3">📦 采购成本 <span style="font-weight:normal;color:var(--tx-m)">¥' + fmtC(netPur) + '</span></th></tr>';
+    h += '<table><tr><th colspan="3">📦 采购成本（净采购） <span style="font-weight:normal;color:var(--tx-m)">¥' + fmtC(netPur) + '</span></th></tr>';
     h += '<tr><th>来源/区域</th><th>分类</th><th class="nr">金额</th></tr>';
 
     // 按来源分组
@@ -393,7 +418,7 @@ function renderCostSection(purBySec, netPur, kitC, barC, outC, teaC, cigC, alcC,
             if (!purBySrc[src]) purBySrc[src] = {};
             if (!purBySrc[src][sec]) purBySrc[src][sec] = {};
             if (!purBySrc[src][sec][cat]) purBySrc[src][sec][cat] = 0;
-            purBySrc[src][sec][cat] += item.total;
+            purBySrc[src][sec][cat] += reportPurchaseAmount(item, p);
         });
     });
 
@@ -422,10 +447,10 @@ function renderCostSection(purBySec, netPur, kitC, barC, outC, teaC, cigC, alcC,
     h += '<tr class="total-row"><td colspan="2">小计</td><td class="nr">' + fmtC(netPur) + '</td></tr>';
     h += '</table></div>';
 
-    // 2. 销售成本
+    // 2. 贵重物品已售成本：经营观察，不参与本页或利润表的再次加总。
     h += '<div class="tw" style="margin-bottom:0">';
-    h += '<table><tr><th colspan="2">🏷️ 销售成本 <span style="font-weight:normal;color:var(--tx-m)">¥' + fmtC(saleCostTotal) + '</span></th></tr>';
-    h += '<tr><th>类别</th><th class="nr">金额</th></tr>';
+    h += '<table><tr><th colspan="2">🏷️ 贵重物品本月已售对应成本 <span style="font-weight:normal;color:var(--tx-m)">¥' + fmtC(saleCostTotal) + '</span></th></tr>';
+    h += '<tr><th>类别（经营观察，不重复计入）</th><th class="nr">金额</th></tr>';
     if (saleCostByType) {
         Object.keys(saleCostByType).sort(function(a, b) { return saleCostByType[b] - saleCostByType[a]; }).forEach(function(type) {
             h += '<tr><td>' + type + '</td><td class="nr">' + fmtC(saleCostByType[type]) + '</td></tr>';
@@ -437,17 +462,18 @@ function renderCostSection(purBySec, netPur, kitC, barC, outC, teaC, cigC, alcC,
     h += '<tr class="total-row"><td>小计</td><td class="nr">' + fmtC(saleCostTotal) + '</td></tr>';
     h += '</table></div>';
 
-    // 3. 经营费用
+    // 3. 期间费用（与利润表的营业费用口径一致，含工资）
     h += '<div class="tw" style="margin-bottom:0">';
-    h += '<table><tr><th colspan="2">📋 经营费用 <span style="font-weight:normal;color:var(--tx-m)">¥' + fmtC(expTotal) + '</span></th></tr>';
+    h += '<table><tr><th colspan="2">📋 期间费用（含工资） <span style="font-weight:normal;color:var(--tx-m)">¥' + fmtC(periodCostTotal) + '</span></th></tr>';
     h += '<tr><th>费用分类</th><th class="nr">金额</th></tr>';
     Object.keys(expByCat).sort(function(a, b) { return expByCat[b] - expByCat[a]; }).forEach(function(cat) {
         h += '<tr><td>' + cat + '</td><td class="nr">' + fmtC(expByCat[cat]) + '</td></tr>';
     });
-    if (expTotal <= 0) {
+    if (salaryTotal > 0) h += '<tr><td>工资</td><td class="nr">' + fmtC(salaryTotal) + '</td></tr>';
+    if (periodCostTotal <= 0) {
         h += '<tr><td colspan="2" style="color:var(--tx-m);text-align:center">暂无费用记录</td></tr>';
     }
-    h += '<tr class="total-row"><td>小计</td><td class="nr">' + fmtC(expTotal) + '</td></tr>';
+    h += '<tr class="total-row"><td>小计</td><td class="nr">' + fmtC(periodCostTotal) + '</td></tr>';
     h += '</table></div>';
 
     h += '</div>';
@@ -456,26 +482,22 @@ function renderCostSection(purBySec, netPur, kitC, barC, outC, teaC, cigC, alcC,
 
 // ==================== 分类毛利分析 ====================
 function renderCatGPSection(kit, bar, barNoTea, tea, del, cig, alc, kitC, barC, teaC, cigC, alcC, kitGP, barGP, teaGP, delGP, cigGP, alcGP) {
-    var totalRev = kit + bar + del + cig + alc;
-    var totalGP = kitGP + barGP + teaGP + delGP + cigGP + alcGP;
-
     var h = '<div class="sec-head">';
     h += '<h4 style="font-size:.88rem;color:var(--ac);margin-bottom:6px">四、分类毛利分析</h4>';
     h += '<div style="font-size:.72rem;color:var(--tx-m);margin-bottom:14px">';
-    h += '厨房毛利' + fmtC(kitGP) + '元，吧台' + fmtC(barGP) + '元，茗茶' + fmtC(teaGP) + '元（最高），';
-    h += '外卖' + fmtC(delGP) + '元，香烟' + fmtC(cigGP) + '元。总毛利' + fmtC(totalGP) + '元。';
+    h += '用于观察各业务项目的收入与成本；厨房、吧台、外卖来自日报，贵重物品来自进销存。因口径不同，本表不与利润表毛利做加总比较。';
     h += '</div></div>';
 
     h += '<div class="rep-grid">';
-    h += '<div class="tw" style="margin-bottom:0"><table><tr><th>类别</th><th class="nr">收入</th><th class="nr">成本</th><th class="nr">毛利</th><th class="nr">毛利率</th></tr>';
+    h += '<div class="tw" style="margin-bottom:0"><table><tr><th>类别</th><th>数据口径</th><th class="nr">收入</th><th class="nr">成本</th><th class="nr">毛利</th><th class="nr">毛利率</th></tr>';
     var items = [['厨房', kit, kitC, kitGP], ['吧台（不含茗茶）', barNoTea, barC, barGP], ['茗茶', tea, teaC, teaGP], ['外卖', del, 0, delGP], ['香烟', cig, cigC, cigGP]];
     if (alc > 0) items.push(['酒类', alc, alcC, alcGP]);
-    items.push(['合计', totalRev, totalRev - totalGP, totalGP]);
     items.forEach(function(it) {
         var margin = it[1] > 0 ? (it[3] / it[1] * 100).toFixed(1) : '0';
-        var isTotal = it[0] === '合计';
-        h += '<tr' + (isTotal ? ' style="background:var(--card-h)"' : '') + '>';
-        h += '<td' + (isTotal ? ' style="font-weight:600"' : '') + '>' + it[0] + '</td>';
+        var invBased = ['茗茶', '香烟', '酒类'].indexOf(it[0]) >= 0;
+        h += '<tr>';
+        h += '<td>' + it[0] + '</td>';
+        h += '<td style="font-size:.72rem;color:var(--tx-m)">' + (invBased ? '进销存' : '日报') + '</td>';
         h += '<td class="nr">' + fmtC(it[1]) + '</td>';
         h += '<td class="nr">' + fmtC(it[2]) + '</td>';
         h += '<td class="nr" style="color:' + (it[3] >= 0 ? 'var(--gn)' : 'var(--rd)') + ';font-weight:600">' + fmtC(it[3]) + '</td>';
@@ -726,8 +748,8 @@ function initRepCharts(id) {
     // 利润表柱状图
     if (id === 'profit') {
         AC('repChart', 'bar', {
-            labels: ['营业收入', '营业成本', '毛利', '营业费用', '营业利润'],
-            datasets: [{ data: [D.net || 0, D.netPur || 0, D.gp || 0, D.expTotal || 0, D.op || 0], backgroundColor: ['#34d399', '#f87171', '#c9a84c', '#f87171', '#34d399'], borderRadius: 4 }]
+            labels: ['营业收入', '营业成本', '毛利', '期间费用（含工资）', '营业利润'],
+            datasets: [{ data: [D.net || 0, D.netPur || 0, D.gp || 0, D.operExpense || 0, D.op || 0], backgroundColor: ['#34d399', '#f87171', '#c9a84c', '#f87171', '#34d399'], borderRadius: 4 }]
         }, { responsive: true, maintainAspectRatio: true, aspectRatio: 2, plugins: { legend: { display: false } }, scales: { y: { grid: { color: 'rgba(45,48,65,.3)' }, ticks: { callback: function(v) { return (v / 10000).toFixed(1) + '万'; } } }, x: { grid: { display: false } } } });
     }
 
@@ -738,8 +760,8 @@ function initRepCharts(id) {
             datasets: [{ data: [D.kit || 0, D.bar || 0, D.del || 0, D.cig || 0, D.other || 0], backgroundColor: bgc, borderWidth: 0, hoverOffset: 6 }]
         }, { responsive: true, maintainAspectRatio: true, aspectRatio: 1.2, cutout: '58%', plugins: { title: { display: true, text: '收入分类', font: { size: 12 } }, legend: { position: 'bottom', labels: { font: { size: 9 }, padding: 8 } } } });
         AC('repChart2', 'doughnut', {
-            labels: ['POS机', '建行', '现金', '会员', '外卖', '应收'],
-            datasets: [{ data: [D.pos || 0, D.ccb || 0, D.cash || 0, D.member || 0, D.del || 0, D.ar || 0], backgroundColor: bgc, borderWidth: 0, hoverOffset: 6 }]
+            labels: ['POS机', '建行', '现金', '会员', '招待', '外卖', '应收'],
+            datasets: [{ data: [D.pos || 0, D.ccb || 0, D.cash || 0, D.member || 0, D.treat || 0, D.del || 0, D.ar || 0], backgroundColor: bgc, borderWidth: 0, hoverOffset: 6 }]
         }, { responsive: true, maintainAspectRatio: true, aspectRatio: 1.2, cutout: '58%', plugins: { title: { display: true, text: '支付渠道', font: { size: 12 } }, legend: { position: 'bottom', labels: { font: { size: 9 }, padding: 8 } } } });
     }
 
@@ -863,16 +885,17 @@ function renderPurchaseSection(ym) {
     DB.purchases.filter(function(p) { return p.date.startsWith(ym); }).forEach(function(p) {
         (p.items || []).forEach(function(item) {
             var day = parseInt(p.date.substring(8, 10));
+            var amount = reportPurchaseAmount(item, p);
             if (!dayTotals[day]) dayTotals[day] = 0;
-            dayTotals[day] += item.total;
-            grandTotal += item.total;
+            dayTotals[day] += amount;
+            grandTotal += amount;
             var src = item.source || p.source || '外购';
             var sec = item.section || '未分区';
             if (!srcTotals[src]) srcTotals[src] = 0;
-            srcTotals[src] += item.total;
+            srcTotals[src] += amount;
             if (!srcSecTotals[src]) srcSecTotals[src] = {};
             if (!srcSecTotals[src][sec]) srcSecTotals[src][sec] = 0;
-            srcSecTotals[src][sec] += item.total;
+            srcSecTotals[src][sec] += amount;
         });
     });
 
@@ -947,7 +970,7 @@ function showPurSourceDetail(source, ym) {
                     qty: item.qty || 0,
                     unit: item.unit || '',
                     unitPrice: item.unitPrice || 0,
-                    total: item.total || 0,
+                    total: reportPurchaseAmount(item, p),
                     date: p.date
                 });
             }
@@ -1085,7 +1108,7 @@ if (document.getElementById('mainContent')) {
                 allItems.push({
                     name: item.name, section: item.section || '未分区', category: item.category || '未分类',
                     source: item.source || p.source || '外购', qty: item.qty || 0, unit: item.unit || '',
-                    unitPrice: item.unitPrice || 0, total: item.total || 0
+                    unitPrice: item.unitPrice || 0, total: reportPurchaseAmount(item, p)
                 });
             });
         });
