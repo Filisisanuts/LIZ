@@ -32,10 +32,18 @@
     try {
         // 游客模式应直接进入只读主页面，不应被新手引导拦截。
         if (new URLSearchParams(window.location.search).get('guest') === '1') return;
+        // 已登录用户（有 Supabase auth token）直接跳过引导，登录后会从云端同步数据
+        var hasAuth = false;
+        for (var i = 0; i < localStorage.length; i++) {
+            var k = localStorage.key(i);
+            if (k && k.indexOf('sb-') === 0 && k.indexOf('auth-token') > 0) { hasAuth = true; break; }
+        }
+        if (hasAuth) return;
+
         // 如果有配置且已完成引导，跳过
         var config = JSON.parse(localStorage.getItem('ax_app_config') || '{}');
         if (config.onboardingCompleted) return;
-        
+
         // 如果有业务数据（日报、采购等），说明是现有用户，跳过引导
         var db = JSON.parse(localStorage.getItem('ax_cafe_v8') || '{}');
         if (db.dailyReports && db.dailyReports.length > 0) return;
