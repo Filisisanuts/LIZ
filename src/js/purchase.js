@@ -1609,6 +1609,7 @@ function showPurDayModal(date) {
         h += '<span style="font-size:.88rem;font-weight:700;color:var(--ac)">▾ ' + src + '</span>';
         h += '<div style="display:flex;align-items:center;gap:6px">';
         h += '<span style="font-family:var(--fm);font-size:.88rem;font-weight:600">¥' + fmtC(srcTotals[src]) + '</span>';
+        h += '<button class="btn s" style="font-size:.65rem;padding:2px 6px" onclick="event.stopPropagation();editPurSrc(\'' + date + '\',\'' + src.replace(/'/g, "\\'") + '\')">编</button>';
         h += '</div></div>';
 
         h += '<div id="' + srcId + '">';
@@ -2101,6 +2102,93 @@ function delPurDaySrc(date, src) {
     });
     toast('已删除');
     showPurDay(date);
+}
+
+// 编辑某天某来源的日期和来源（从日详情弹窗调用）
+function editPurSrc(date, src) {
+    // 收集该来源下所有物品
+    var items = [];
+    DB.purchases.forEach(function(p) {
+        if (p.date !== date) return;
+        (p.items || []).forEach(function(item, idx) {
+            if ((item.source || p.source) === src) {
+                items.push({ pid: p.id, idx: idx });
+            }
+        });
+    });
+    if (!items.length) { toast('该来源下无物品'); return; }
+
+    var sources = getPurchaseSources();
+    if (sources.length === 0) sources = ['外购'];
+    sources.push('退货');
+    // 去重
+    var uniq = [];
+    sources.forEach(function(s) { if (uniq.indexOf(s) < 0) uniq.push(s); });
+    sources = uniq;
+    if (sources.indexOf(src) < 0) sources.unshift(src);
+
+    var h = '<h3>批量修改来源</h3>';
+    h += '<p style="font-size:.74rem;color:var(--tx-s);margin-bottom:12px">修改 <strong>' + src + '</strong> 下 ' + items.length + ' 项物品的日期和来源</p>';
+    h += '<div class="hrow"><label>日期</label><input class="inp" id="editSrcDate" type="text" readonly placeholder="选择日期" style="max-width:160px;cursor:pointer" value="' + date + '" onclick="_dpOpen(\'editSrcDate\')"></div>';
+    h += '<div class="hrow"><label>来源</label><select class="inp" id="editSrcName" style="max-width:140px">';
+    sources.forEach(function(s) { h += '<option' + (src === s ? ' selected' : '') + '>' + s + '</option>'; });
+    h += '</select></div>';
+    h += '<div class="brow" style="margin-top:14px;justify-content:flex-end">';
+    h += '<button class="btn" onclick="backToPurDetail(\'' + date + '\')">取消</button>';
+    h += '<button class="btn p" onclick="doEditPurSrc(\'' + date + '\',\'' + src.replace(/'/g, "\\'") + '\')">保存</button></div>';
+    showModal(h, 400);
+}
+
+function doEditPurSrc(oldDate, oldSrc) {
+    var newDate = $id('editSrcDate').value;
+    var newSrc = $id('editSrcName').value;
+    if (!newDate) { toast('请选择日期'); return; }
+    if (!newSrc) { toast('请选择来源'); return; }
+    if (newDate === oldDate && newSrc === oldSrc) { toast('未变更'); return; }
+
+    var changed = 0;
+    upd(function(db) {
+        db.purchases.forEach(function(p) {
+            if (p.date !== oldDate) return;
+            (p.items || []).forEach(function(item) {
+                if ((item.source || p.source) === oldSrc) {
+                    item.source = newSrc;
+                    changed++;
+                }
+            });
+        });
+        // 如果日期变更，把该来源的所有物品移到新日期
+        if (newDate !== oldDate) {
+            // 收集需要移动的物品
+            var movingItems = [];
+            db.purchases.forEach(function(p) {
+                if (p.date !== oldDate) return;
+                var keep = [];
+                (p.items || []).forEach(function(item) {
+                    if (item.source === newSrc) {
+                        movingItems.push(item);
+                    } else {
+                        keep.push(item);
+                    }
+                });
+                p.items = keep;
+            });
+            // 清理空采购单
+            db.purchases = db.purchases.filter(function(p) { return p.items.length > 0; });
+            // 找到或创建目标日期的采购单
+            var target = db.purchases.find(function(p) { return p.date === newDate && p.source === newSrc; });
+            if (!target) {
+                target = { id: 'p_' + Date.now(), date: newDate, source: newSrc, items: [] };
+                db.purchases.push(target);
+            }
+            movingItems.forEach(function(item) { target.items.push(item); });
+            changed = movingItems.length;
+        }
+    });
+    closeModal();
+    toast('已修改 ' + changed + ' 项物品');
+    setTimeout(function() { showPurDayModal(newDate); }, 250);
+    renderPHist();
 }
 
 // 通过采购单ID和物品索引编辑物品

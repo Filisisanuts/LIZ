@@ -803,7 +803,7 @@ function showPurchaseSourceConfig() {
     // 快速添加
     h += '<div style="margin:12px 0"><label style="font-size:.72rem;color:var(--tx-m);display:block;margin-bottom:6px">快速添加</label>';
     h += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
-    ['岸香贸易', '外购', '网购', '退货'].forEach(function(s) {
+    ['供应商', '外购', '网购', '退货'].forEach(function(s) {
         h += '<button class="btn s" onclick="addPurchaseSourceFromConfig(\'' + s + '\')" ' + (sources.indexOf(s) >= 0 ? 'disabled' : '') + '>' + s + '</button>';
     });
     h += '</div></div>';
