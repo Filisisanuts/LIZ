@@ -127,6 +127,7 @@ function rData() {
     h += '<p style="font-size:.74rem;color:var(--tx-s);margin-bottom:10px">管理各模块的分类和标签，修改后立即生效</p>';
     h += '<div class="brow">';
     h += '<button class="btn" onclick="showDailyLabelsConfig()">日报标签</button>';
+    h += '<button class="btn" onclick="showPurchaseSourceConfig()">采购来源</button>';
     h += '<button class="btn" onclick="showPurchaseSectionConfig()">采购区域</button>';
     h += '<button class="btn" onclick="showExpenseCatConfig()">费用分类</button>';
     h += '<button class="btn" onclick="showWarehouseCatConfig()">仓库分类</button>';
@@ -785,6 +786,62 @@ function removeDailyLabelFromConfig(label) {
     config.dailyLabels = (config.dailyLabels || []).filter(function(l) { return l !== label; });
     saveAppConfig(config);
     showDailyLabelsConfig(); // 刷新弹窗
+}
+
+// 采购来源配置
+function showPurchaseSourceConfig() {
+    var config = getAppConfig();
+    var sources = config.purchaseSources || [];
+
+    var h = '<h3>采购来源配置</h3>';
+    h += '<p style="font-size:.74rem;color:var(--tx-s);margin-bottom:12px">设置采购单中的来源供应商，修改后立即生效</p>';
+
+    // 添加来源
+    h += '<div class="hrow"><input class="inp" id="newPurchaseSource" placeholder="输入来源名称" style="flex:1" onkeydown="if(event.key===\'Enter\')addPurchaseSourceFromConfig()">';
+    h += '<button class="btn p" onclick="addPurchaseSourceFromConfig()">添加</button></div>';
+
+    // 快速添加
+    h += '<div style="margin:12px 0"><label style="font-size:.72rem;color:var(--tx-m);display:block;margin-bottom:6px">快速添加</label>';
+    h += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+    ['岸香贸易', '外购', '网购', '退货'].forEach(function(s) {
+        h += '<button class="btn s" onclick="addPurchaseSourceFromConfig(\'' + s + '\')" ' + (sources.indexOf(s) >= 0 ? 'disabled' : '') + '>' + s + '</button>';
+    });
+    h += '</div></div>';
+
+    // 已选来源
+    h += '<div><label style="font-size:.72rem;color:var(--tx-m);display:block;margin-bottom:6px">已选来源</label>';
+    h += '<div id="purchaseSourcesList" style="display:flex;flex-wrap:wrap;gap:6px">';
+    sources.forEach(function(s) {
+        h += '<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--card-h);border-radius:6px;font-size:.76rem">' + s;
+        h += '<button onclick="removePurchaseSourceFromConfig(\'' + s + '\')" style="background:none;border:none;color:var(--tx-m);cursor:pointer">×</button></span>';
+    });
+    h += '</div></div>';
+
+    h += '<div class="brow" style="margin-top:16px;justify-content:flex-end"><button class="btn" onclick="closeModal()">完成</button></div>';
+    showModal(h);
+}
+
+function addPurchaseSourceFromConfig(source) {
+    if (!source) {
+        var inp = document.getElementById('newPurchaseSource');
+        source = inp ? inp.value.trim() : '';
+    }
+    if (!source) return;
+
+    var config = getAppConfig();
+    if (!config.purchaseSources) config.purchaseSources = [];
+    if (config.purchaseSources.indexOf(source) < 0) {
+        config.purchaseSources.push(source);
+        saveAppConfig(config);
+    }
+    showPurchaseSourceConfig();
+}
+
+function removePurchaseSourceFromConfig(source) {
+    var config = getAppConfig();
+    config.purchaseSources = (config.purchaseSources || []).filter(function(s) { return s !== source; });
+    saveAppConfig(config);
+    showPurchaseSourceConfig();
 }
 
 // 采购区域配置

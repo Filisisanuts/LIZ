@@ -18,6 +18,7 @@ export interface AppConfig {
   roomTypes: string[];
 
   // 采购配置
+  purchaseSources: string[];
   purchaseSections: string[];
   purchaseCategories: Record<string, string[]>; // 区域 -> 分类
 
@@ -41,6 +42,7 @@ const DEFAULT_CONFIG: AppConfig = {
   enabledModules: [],
   dailyLabels: [],
   roomTypes: [],
+  purchaseSources: [],
   purchaseSections: [],
   purchaseCategories: {},
   expenseCategories: [],
@@ -217,6 +219,24 @@ export function removeRoomType(type: string): void {
 
 // ===== 采购配置 =====
 
+export function getPurchaseSources(): string[] {
+  return getConfig().purchaseSources;
+}
+
+export function addPurchaseSource(source: string): void {
+  const config = getConfig();
+  if (!config.purchaseSources.includes(source)) {
+    config.purchaseSources.push(source);
+    saveConfig(config);
+  }
+}
+
+export function removePurchaseSource(source: string): void {
+  const config = getConfig();
+  config.purchaseSources = config.purchaseSources.filter((s) => s !== source);
+  saveConfig(config);
+}
+
 export function getPurchaseSections(): string[] {
   return getConfig().purchaseSections;
 }
@@ -326,6 +346,9 @@ export default {
   getRoomTypes,
   addRoomType,
   removeRoomType,
+  getPurchaseSources,
+  addPurchaseSource,
+  removePurchaseSource,
   getPurchaseSections,
   addPurchaseSection,
   removePurchaseSection,
