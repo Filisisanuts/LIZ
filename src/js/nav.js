@@ -826,25 +826,6 @@ function parseSalaryExcelData(jsonData) {
 // 根据配置动态生成侧边栏，兼容旧用户（无配置时显示所有）
 // 配置跟随用户，每个用户有自己的配置
 
-function getConfigKey() {
-    // 如果已登录，配置键包含用户ID
-    if (typeof _auth !== 'undefined' && _auth && _auth.loggedIn && _auth.user && _auth.user.id) {
-        return 'ax_app_config_' + _auth.user.id;
-    }
-    // 未登录时使用默认键
-    return 'ax_app_config';
-}
-
-function getAppConfig() {
-    try {
-        // 只读取用户特定的配置键
-        var userKey = getConfigKey();
-        var saved = localStorage.getItem(userKey);
-        if (saved) return JSON.parse(saved);
-    } catch(e) {}
-    return null;
-}
-
 function isModuleEnabled(moduleId) {
     var config = getAppConfig();
     // 无配置或配置为空 → 显示所有（兼容旧用户）

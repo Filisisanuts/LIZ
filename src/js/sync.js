@@ -91,7 +91,12 @@ async function sbSyncOnStart() {
     _sbSyncing = true;
     try {
         var remote = await sbLoad();
-        if (remote) { DB = remote; saveDB(DB); toast('云端已加载'); }
+        if (remote) {
+            DB = remote;
+            saveDB(DB);
+            migrateAreaCats();
+            toast('云端已加载');
+        }
         // 同步到共享行供报表页读取
         if (_sbDataId()) {
             try { await _sb.client.from('cafe_data').upsert({ id: 'shop_data', data: DB, updated_at: new Date().toISOString() }); } catch(e) {}

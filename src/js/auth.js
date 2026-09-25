@@ -43,7 +43,9 @@ function _authLoadData() {
     sbSyncOnStart().then(function() {
         DB = loadDB();
         restoreSettings();
+        migrateAreaCats();
         updateAuthUI();
+        initToolbar();
         // 不在这里调用goPage()，因为appInit()已经处理了
     });
 }
@@ -58,6 +60,12 @@ function _authClearLocal() {
         'ax_baidu_ak', 'ax_baidu_sk'
     ];
     keys.forEach(function(k) { localStorage.removeItem(k); });
+    for (var i = localStorage.length - 1; i >= 0; i--) {
+        var key = localStorage.key(i);
+        if (key === 'ax_app_config' || key.indexOf('ax_app_config_') === 0) {
+            localStorage.removeItem(key);
+        }
+    }
 }
 
 // ---------- 检查是否已登录 ----------

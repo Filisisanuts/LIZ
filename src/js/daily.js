@@ -473,8 +473,7 @@ function initRoomBlock() {
     // 获取包厢类型配置
     var roomTypes = [];
     try {
-        var key = typeof getConfigKey === 'function' ? getConfigKey() : 'ax_app_config';
-        var config = JSON.parse(localStorage.getItem(key) || '{}');
+        var config = getAppConfig();
         if (config.roomTypes && config.roomTypes.length > 0) {
             roomTypes = config.roomTypes;
         }

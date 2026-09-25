@@ -5,6 +5,7 @@
  */
 
 import legacyBridge from '@/legacy/legacy-bridge';
+import { getConfig } from '@/shared/config/config-manager';
 
 // ===== 类型定义 =====
 
@@ -47,13 +48,8 @@ export function getMonthlyExpenses(yearMonth: string): Expense[] {
  * 从配置管理模块读取
  */
 export function getExpenseCategories(): string[] {
-  // 从配置管理模块读取
-  try {
-    const config = JSON.parse(localStorage.getItem('ax_app_config') || '{}');
-    if (config.expenseCategories && config.expenseCategories.length > 0) {
-      return config.expenseCategories;
-    }
-  } catch (e) {}
+  const configured = getConfig().expenseCategories;
+  if (configured.length > 0) return configured;
 
   // 从已有记录提取
   const categories: Record<string, boolean> = {};

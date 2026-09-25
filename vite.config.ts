@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite';
+import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -23,6 +24,18 @@ const legacyRuntimeAssets = {
       fileName: 'src/css/style.css',
       source: readFileSync(resolve(__dirname, 'src/css/style.css')),
     });
+  },
+  transformIndexHtml(html: string) {
+    return html.replace(
+      /\b(src|href)=("|')(\/?)(src\/(?:js\/[^"']+\.js|css\/style\.css))(?:\?[^"']*)?\2/g,
+      (_match, attribute: string, quote: string, leadingSlash: string, assetPath: string) => {
+        const version = createHash('sha256')
+          .update(readFileSync(resolve(__dirname, assetPath)))
+          .digest('hex')
+          .slice(0, 12);
+        return attribute + '=' + quote + leadingSlash + assetPath + '?v=' + version + quote;
+      },
+    );
   },
 };
 

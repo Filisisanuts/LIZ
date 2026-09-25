@@ -5,17 +5,22 @@
  * 新用户默认为空，通过引导或设置页添加。
  */
 
-import legacyBridge from '@/legacy/legacy-bridge';
-
 // ===== 类型定义 =====
 
 export interface AppConfig {
+  schemaVersion: number;
+  updatedAt: number;
+
   // 功能模块启用状态
   enabledModules: string[];
 
   // 日报配置
   dailyLabels: string[];
   roomTypes: string[];
+  dailyFeatures: {
+    roomEnabled: boolean;
+    reporterEnabled: boolean;
+  };
 
   // 采购配置
   purchaseSources: string[];
@@ -36,50 +41,29 @@ export interface AppConfig {
   onboardingCompleted: boolean;
 }
 
-// ===== 默认配置（新用户为空） =====
+interface AppConfigStore {
+  getConfigKey(): string;
+  getAppConfig(): AppConfig;
+  saveAppConfig(config: Partial<AppConfig>): AppConfig;
+  migrateAppConfig(): AppConfig;
+  hasExistingBusinessData(database: unknown): boolean;
+  shouldShowLegacyOnboarding(): boolean;
+}
 
-const DEFAULT_CONFIG: AppConfig = {
-  enabledModules: [],
-  dailyLabels: [],
-  roomTypes: [],
-  purchaseSources: [],
-  purchaseSections: [],
-  purchaseCategories: {},
-  expenseCategories: [],
-  warehouseCategories: [],
-  inventoryTypes: [],
-  customInventoryTypes: [],
-  onboardingCompleted: false,
-};
-
-// ===== 存储键名 =====
-
-const CONFIG_KEY = 'ax_app_config';
-
-const BUSINESS_COLLECTION_KEYS = [
-  'dailyReports', 'purchases', 'expenses', 'salaryRecords', 'salaryTrash',
-  'teaItems', 'cigItems', 'alcItems', 'otherItems', 'whItems',
-  'damageRecords', 'exchangeRecords',
-] as const;
-
-function getConfigStorageKey(): string {
-  try {
-    for (let i = 0; i < localStorage.length; i += 1) {
-      const key = localStorage.key(i);
-      if (!key || !key.startsWith('sb-') || !key.includes('auth-token')) continue;
-      const tokenData = JSON.parse(localStorage.getItem(key) || '{}');
-      if (tokenData?.user?.id) return `${CONFIG_KEY}_${tokenData.user.id}`;
-    }
-  } catch (e) {
-    console.error('Failed to resolve user config key:', e);
+declare global {
+  interface Window {
+    axConfigStore?: AppConfigStore;
   }
-  return CONFIG_KEY;
+}
+
+function getConfigStore(): AppConfigStore {
+  const store = window.axConfigStore;
+  if (!store) throw new Error('Unified app config store is not loaded');
+  return store;
 }
 
 export function hasExistingBusinessData(database: unknown): boolean {
-  if (!database || typeof database !== 'object') return false;
-  const record = database as Record<string, unknown>;
-  return BUSINESS_COLLECTION_KEYS.some((key) => Array.isArray(record[key]) && record[key].length > 0);
+  return getConfigStore().hasExistingBusinessData(database);
 }
 
 // ===== 服务函数 =====
@@ -88,95 +72,21 @@ export function hasExistingBusinessData(database: unknown): boolean {
  * 获取完整配置
  */
 export function getConfig(): AppConfig {
-  try {
-    const storageKey = getConfigStorageKey();
-    // 兼容升级前写入的公共配置键。
-    const saved = localStorage.getItem(storageKey)
-      || (storageKey !== CONFIG_KEY ? localStorage.getItem(CONFIG_KEY) : null);
-    if (saved) {
-      return { ...DEFAULT_CONFIG, ...JSON.parse(saved) };
-    }
-  } catch (e) {
-    console.error('Failed to load config:', e);
-  }
-  return { ...DEFAULT_CONFIG };
+  return getConfigStore().getAppConfig();
 }
 
 /**
  * 保存配置
  */
 export function saveConfig(config: Partial<AppConfig>): void {
-  const current = getConfig();
-  const updated = { ...current, ...config };
-  const storageKey = getConfigStorageKey();
-  localStorage.setItem(storageKey, JSON.stringify(updated));
-
-  // 同步到 DB.settings
-  legacyBridge.update((db) => {
-    if (!db.settings) db.settings = {};
-    db.settings[storageKey] = updated;
-  });
+  getConfigStore().saveAppConfig(config);
 }
 
 /**
  * 从旧数据迁移配置（首次使用时）
  */
 export function migrateFromLegacy(): void {
-  const config = getConfig();
-
-  // 如果已有配置，跳过迁移
-  if (config.onboardingCompleted) return;
-
-  // 迁移日报标签
-  if (config.dailyLabels.length === 0) {
-    try {
-      const oldLabels = JSON.parse(localStorage.getItem('ax_fl') || '[]');
-      if (oldLabels.length > 0) {
-        config.dailyLabels = oldLabels;
-      }
-    } catch (e) {}
-  }
-
-  // 迁移采购区域/分类
-  if (config.purchaseSections.length === 0) {
-    const db = legacyBridge.getDatabase();
-    if (db?.areaCats && Object.keys(db.areaCats).length > 0) {
-      config.purchaseSections = Object.keys(db.areaCats);
-      config.purchaseCategories = db.areaCats;
-    }
-  }
-
-  // 迁移仓库分类
-  if (config.warehouseCategories.length === 0) {
-    const db = legacyBridge.getDatabase();
-    if (db?.whCats && db.whCats.length > 0) {
-      config.warehouseCategories = db.whCats;
-    }
-  }
-
-  // 迁移费用分类（从已有记录提取）
-  if (config.expenseCategories.length === 0) {
-    const db = legacyBridge.getDatabase();
-    if (db?.expenses) {
-      const cats = new Set<string>();
-      db.expenses.forEach((e: any) => {
-        if (e.category) cats.add(e.category);
-      });
-      if (cats.size > 0) {
-        config.expenseCategories = Array.from(cats);
-      }
-    }
-  }
-
-  // 迁移包厢类型
-  if (config.roomTypes.length === 0) {
-    config.roomTypes = ['普通包厢', '500+包厢'];
-  }
-
-  if (hasExistingBusinessData(legacyBridge.getDatabase())) {
-    config.onboardingCompleted = true;
-  }
-  saveConfig(config);
+  getConfigStore().migrateAppConfig();
 }
 
 // ===== 日报配置 =====

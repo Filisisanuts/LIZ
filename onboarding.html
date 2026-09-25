@@ -226,58 +226,15 @@ body {
 <body>
 <div class="onboarding-container" id="onboardingApp"></div>
 
+<script src="src/js/config-store.js"></script>
+<script src="src/js/config.js"></script>
 <script>
-// 配置管理
-// 尝试获取用户特定的配置键
-function getConfigKey() {
-  try {
-    // 从 Supabase auth token 中提取用户ID
-    for (var i = 0; i < localStorage.length; i++) {
-      var k = localStorage.key(i);
-      if (k && k.indexOf('sb-') === 0 && k.indexOf('auth-token') > 0) {
-        var tokenData = JSON.parse(localStorage.getItem(k));
-        if (tokenData && tokenData.user && tokenData.user.id) {
-          return 'ax_app_config_' + tokenData.user.id;
-        }
-      }
-    }
-  } catch(e) {}
-  return 'ax_app_config';
-}
-
-var CONFIG_KEY = getConfigKey();
-
 function getConfig() {
-  var defaults = {
-    enabledModules: [],
-    dailyLabels: [],
-    roomTypes: [],
-    purchaseSections: [],
-    purchaseSources: [],
-    purchaseCategories: {},
-    expenseCategories: [],
-    warehouseCategories: [],
-    inventoryTypes: [],
-    customInventoryTypes: [],
-    dailyFeatures: {
-      roomEnabled: false,
-      reporterEnabled: false
-    },
-    onboardingCompleted: false
-  };
-  try {
-    var saved = localStorage.getItem(CONFIG_KEY);
-    if (saved) {
-      var parsed = JSON.parse(saved);
-      // 合并默认值，确保所有字段都存在
-      return Object.assign({}, defaults, parsed);
-    }
-  } catch(e) {}
-  return defaults;
+  return getAppConfig();
 }
 
 function saveConfig(config) {
-  localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+  return storeAppConfig(config);
 }
 
 // 步骤定义（动态生成）

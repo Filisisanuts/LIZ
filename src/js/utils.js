@@ -85,8 +85,7 @@ function getMR(ym){return DB.dailyReports.filter(function(r){return r.date.start
 // 优先从配置读取，否则返回空数组（新用户通过引导配置）
 function getPurchaseSources() {
     try {
-        var key = typeof getConfigKey === 'function' ? getConfigKey() : 'ax_app_config';
-        var config = JSON.parse(localStorage.getItem(key) || '{}');
+        var config = getAppConfig();
         if (config.purchaseSources && config.purchaseSources.length > 0) {
             return config.purchaseSources;
         }
@@ -97,10 +96,8 @@ function getPurchaseSources() {
 // 获取自定义标签列表
 // 优先从配置管理模块读取，否则使用旧逻辑
 function getFreeLabels(){
-    // 尝试从新配置读取
     try {
-        var key = typeof getConfigKey === 'function' ? getConfigKey() : 'ax_app_config';
-        var config = JSON.parse(localStorage.getItem(key) || '{}');
+        var config = getAppConfig();
         if (config.dailyLabels && config.dailyLabels.length > 0) {
             return config.dailyLabels;
         }

@@ -693,45 +693,6 @@ function doDownloadFromCloud() {
 
 // ===== 分类配置函数 =====
 
-// 使用 nav.js 中的 getConfigKey 获取用户特定的配置键
-function getAppConfig() {
-    try {
-        var key = typeof getConfigKey === 'function' ? getConfigKey() : 'ax_app_config';
-        var saved = localStorage.getItem(key);
-        if (saved) {
-            var parsed = JSON.parse(saved);
-            return {
-                enabledModules: parsed.enabledModules || [],
-                dailyLabels: parsed.dailyLabels || [],
-                roomTypes: parsed.roomTypes || [],
-                purchaseSections: parsed.purchaseSections || [],
-                purchaseSources: parsed.purchaseSources || [],
-                purchaseCategories: parsed.purchaseCategories || {},
-                expenseCategories: parsed.expenseCategories || [],
-                warehouseCategories: parsed.warehouseCategories || [],
-                inventoryTypes: parsed.inventoryTypes || [],
-                customInventoryTypes: parsed.customInventoryTypes || [],
-                dailyFeatures: parsed.dailyFeatures || { roomEnabled: false, reporterEnabled: false },
-                onboardingCompleted: parsed.onboardingCompleted || false
-            };
-        }
-    } catch(e) {}
-    return {
-        enabledModules: [], dailyLabels: [], roomTypes: [],
-        purchaseSections: [], purchaseSources: [], purchaseCategories: {},
-        expenseCategories: [], warehouseCategories: [],
-        inventoryTypes: [], customInventoryTypes: [],
-        dailyFeatures: { roomEnabled: false, reporterEnabled: false },
-        onboardingCompleted: false
-    };
-}
-
-function saveAppConfig(config) {
-    var key = typeof getConfigKey === 'function' ? getConfigKey() : 'ax_app_config';
-    localStorage.setItem(key, JSON.stringify(config));
-    toast('配置已保存');
-}
-
 // 日报标签配置
 function showDailyLabelsConfig() {
     var config = getAppConfig();

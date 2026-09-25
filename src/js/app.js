@@ -35,7 +35,9 @@ function appInit() {
         sbSyncOnStart().then(function() {
             DB = loadDB();
             restoreSettings();
+            migrateAreaCats();
             updateAuthUI();
+            initToolbar();
             goPage(localStorage.getItem('ax_lastPage') || 'dash');
             hideLoadingOverlay();
         }).catch(function() {

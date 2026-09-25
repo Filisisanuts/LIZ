@@ -5,6 +5,7 @@
  */
 
 import legacyBridge from '@/legacy/legacy-bridge';
+import { getConfig } from '@/shared/config/config-manager';
 
 // ===== 类型定义 =====
 
@@ -55,13 +56,8 @@ export function getWarehouseItems(): WarehouseItem[] {
  * 从配置管理模块读取
  */
 export function getWarehouseCategories(): string[] {
-  // 从配置管理模块读取
-  try {
-    const config = JSON.parse(localStorage.getItem('ax_app_config') || '{}');
-    if (config.warehouseCategories && config.warehouseCategories.length > 0) {
-      return config.warehouseCategories;
-    }
-  } catch (e) {}
+  const configured = getConfig().warehouseCategories;
+  if (configured.length > 0) return configured;
 
   // 从数据库读取
   const db = legacyBridge.getDatabase();
