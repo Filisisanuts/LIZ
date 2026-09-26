@@ -52,6 +52,12 @@ function showModal(content, width) {
         if (dp && dp.style.display !== 'none' && dp.style.display !== '') {
             _dpClose();
         }
+        // 弹窗内点击非下拉区域时关闭已打开的下拉（stopPropagation 会拦掉 document 的冒泡关闭）
+        if (typeof axCloseSelects === 'function'
+            && e.target.closest && !e.target.closest('.ax-select')
+            && document.querySelector('.ax-select.open')) {
+            axCloseSelects();
+        }
         e.stopPropagation();
     };
     m.onkeydown = function(e) {

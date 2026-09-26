@@ -12,14 +12,65 @@ function axDispatchChange(element) {
     element.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+function axSheetBackdrop(show) {
+    var existing = document.querySelector('.ax-select-backdrop');
+    if (!show) {
+        if (existing) existing.remove();
+        return;
+    }
+    if (existing) return;
+    var backdrop = document.createElement('div');
+    backdrop.className = 'ax-select-backdrop';
+    backdrop.setAttribute('aria-hidden', 'true');
+    backdrop.addEventListener('click', function() { axCloseSelects(); });
+    document.body.appendChild(backdrop);
+}
+
 function axCloseSelects(except) {
     document.querySelectorAll('.ax-select.open').forEach(function(select) {
         if (select === except) return;
         select.classList.remove('open');
         var menu = select.querySelector('.ax-select-menu');
-        if (menu) menu.hidden = true;
+        if (menu) {
+            menu.hidden = true;
+            menu.style.transform = '';
+            menu.style.transition = '';
+        }
         var trigger = select.querySelector('.ax-select-trigger');
         if (trigger) trigger.setAttribute('aria-expanded', 'false');
+    });
+    axSheetBackdrop(false);
+}
+
+// 底部面板下滑关闭：仅响应面板顶部把手区域的下滑手势。
+function axBindSheetDrag(wrapper, menu) {
+    if (!wrapper.classList.contains('ax-select-sheet')) return;
+    var startY = null;
+    var dy = 0;
+    menu.addEventListener('touchstart', function(event) {
+        if (menu.hidden) return;
+        var touch = event.touches[0];
+        var rect = menu.getBoundingClientRect();
+        if (touch.clientY - rect.top > 56) return;
+        startY = touch.clientY;
+        dy = 0;
+        menu.style.transition = 'none';
+    }, { passive: false });
+    menu.addEventListener('touchmove', function(event) {
+        if (startY === null) return;
+        dy = event.touches[0].clientY - startY;
+        if (dy > 0) {
+            if (event.cancelable) event.preventDefault();
+            menu.style.transform = 'translateY(' + dy + 'px)';
+        }
+    }, { passive: false });
+    menu.addEventListener('touchend', function() {
+        if (startY === null) return;
+        menu.style.transition = '';
+        menu.style.transform = '';
+        if (dy > 60) axCloseSelects();
+        startY = null;
+        dy = 0;
     });
 }
 
@@ -112,6 +163,7 @@ function axCreateEnhancedSelect(native) {
         wrapper.classList.toggle('open', opening);
         trigger.setAttribute('aria-expanded', String(opening));
         if (opening) {
+            if (window.matchMedia('(max-width: 768px)').matches) axSheetBackdrop(true);
             renderOptions(search ? search.value : '');
             if (search) {
                 search.focus();
@@ -187,6 +239,7 @@ function axCreateEnhancedSelect(native) {
     });
     refreshTrigger();
     renderOptions('');
+    axBindSheetDrag(wrapper, menu);
 }
 
 function initAxSelects(root) {

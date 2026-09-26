@@ -51,6 +51,30 @@ export interface AppConfig {
 
   // 工资模板与部门
   salaryDepartments: string[];
+  salaryFieldSchemaVersion: number;
+  salaryFieldGroups: Array<{
+    id: string;
+    label: string;
+    span: boolean;
+    order: number;
+  }>;
+  salaryFieldDefinitions: Array<{
+    id: string;
+    label: string;
+    category: 'info' | 'earning' | 'deduction' | 'computed';
+    group?: string;
+    formula?: string;
+    calculation?: string;
+    calculationGroup?: 'base' | 'direct' | 'attendance' | 'preTaxDeduction' | 'postTaxDeduction' | '';
+    type: 'text' | 'number';
+    visible: boolean;
+    builtin: boolean;
+    required?: boolean;
+    readonly?: boolean;
+    width: string;
+    order: number;
+    aliases?: string[];
+  }>;
   salaryTemplates: Array<{
     id: string;
     name: string;

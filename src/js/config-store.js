@@ -23,6 +23,9 @@ function appConfigDefaults() {
         inventoryTypes: [],
         customInventoryTypes: [],
         salaryDepartments: [],
+        salaryFieldSchemaVersion: 2,
+        salaryFieldGroups: defaultSalaryFieldGroups(),
+        salaryFieldDefinitions: defaultSalaryFieldDefinitions(),
         salaryTemplates: [],
         defaultSalaryTemplateId: '',
         dailyFeatures: { roomEnabled: false, reporterEnabled: false },
@@ -30,6 +33,146 @@ function appConfigDefaults() {
         schemaVersion: APP_CONFIG_SCHEMA_VERSION,
         updatedAt: 0
     };
+}
+
+// 工资表头分组。span: true 表示该组字段各自跨两行显示（无分组标题行），
+// span: false 表示第一行显示分组标题、第二行显示字段名，结构对齐原版 Excel 工资表。
+function defaultSalaryFieldGroups() {
+    return [
+        { id: 'info', label: '信息项', order: 0, span: true },
+        { id: 'basePay', label: '应付基本工资项目', order: 1, span: false },
+        { id: 'direct', label: '提成绩效', order: 2, span: true },
+        { id: 'subtotal', label: '应付小计', order: 3, span: true },
+        { id: 'preTax', label: '单位代扣个人缴费部分', order: 4, span: false },
+        { id: 'total', label: '应付总计', order: 5, span: true },
+        { id: 'postTax', label: '代扣代缴项目', order: 6, span: false },
+        { id: 'actual', label: '实发工资', order: 7, span: true }
+    ];
+}
+
+function defaultSalaryFieldDefinitions() {
+    return [
+        { id: 'department', label: '部门', category: 'info', group: 'info', type: 'text', visible: false, builtin: true, width: '70px', order: 0 },
+        { id: 'employee', label: '姓名', category: 'info', group: 'info', type: 'text', visible: true, builtin: true, required: true, width: '88px', order: 1 },
+        { id: 'position', label: '职务', category: 'info', group: 'info', type: 'text', visible: true, builtin: true, width: '90px', order: 2 },
+        { id: 'bankCard', label: '卡号', category: 'info', group: 'info', type: 'text', visible: true, builtin: true, width: '110px', order: 3 },
+        { id: 'baseSalary', label: '基本工资', category: 'earning', group: 'basePay', calculationGroup: 'base', type: 'number', visible: true, builtin: true, width: '70px', order: 4 },
+        { id: 'positionSubsidy', label: '职务补贴', category: 'earning', group: 'basePay', calculationGroup: 'base', type: 'number', visible: true, builtin: true, width: '65px', order: 5 },
+        { id: 'overtimeSubsidy', label: '加班补贴', category: 'earning', group: 'basePay', calculationGroup: 'base', type: 'number', visible: true, builtin: true, width: '65px', order: 6 },
+        { id: 'allowance', label: '津贴', category: 'earning', group: 'basePay', calculationGroup: 'base', type: 'number', visible: true, builtin: true, width: '55px', order: 7 },
+        { id: 'fullAttendance', label: '满勤奖', category: 'earning', group: 'basePay', calculationGroup: 'base', type: 'number', visible: true, builtin: true, width: '55px', order: 8 },
+        { id: 'seniority', label: '司龄工龄', category: 'earning', group: 'basePay', calculationGroup: 'base', type: 'number', visible: true, builtin: true, width: '65px', order: 9, aliases: ['司龄'] },
+        { id: 'basePayTotal', label: '应付合计', category: 'computed', group: 'basePay', calculation: 'basePayTotal',
+            formula: 'BASE()', type: 'number', visible: true, builtin: true, required: true, readonly: true, width: '78px', order: 10 },
+        { id: 'attendanceDays', label: '出勤天数', category: 'info', group: 'basePay', calculationGroup: 'attendance', type: 'number', visible: true, builtin: true, width: '65px', order: 11 },
+        { id: 'basePayProrated', label: '工资基本项目应付', category: 'computed', group: 'basePay', calculation: 'basePayProrated',
+            formula: '{basePayTotal}/31*{attendanceDays}', type: 'number', visible: true, builtin: true, required: true, readonly: true, width: '112px', order: 12 },
+        { id: 'commission', label: '提成', category: 'earning', group: 'direct', calculationGroup: 'direct', type: 'number', visible: true, builtin: true, width: '65px', order: 13 },
+        { id: 'otherSubsidy', label: '其他补助', category: 'earning', group: 'direct', calculationGroup: 'direct', type: 'number', visible: true, builtin: true, width: '65px', order: 14 },
+        { id: 'performance', label: '绩效工资', category: 'earning', group: 'direct', calculationGroup: 'direct', type: 'number', visible: true, builtin: true, width: '72px', order: 15, aliases: ['绩效'] },
+        { id: 'payableSubtotal', label: '应付小计', category: 'computed', group: 'subtotal', calculation: 'payableSubtotal',
+            formula: '{basePayProrated}+DIRECT()', type: 'number', visible: true, builtin: true, required: true, readonly: true, width: '82px', order: 16 },
+        { id: 'socialInsurance', label: '社保', category: 'deduction', group: 'preTax', calculationGroup: 'preTaxDeduction', type: 'number', visible: true, builtin: true, width: '65px', order: 17, aliases: ['单位代扣个人缴费部分'] },
+        { id: 'payableTotal', label: '应付总计', category: 'computed', group: 'total', calculation: 'payableTotal',
+            formula: '{payableSubtotal}-{socialInsurance}', type: 'number', visible: true, builtin: true, required: true, readonly: true, width: '82px', order: 18 },
+        { id: 'tax', label: '个税', category: 'deduction', group: 'postTax', calculationGroup: 'postTaxDeduction', type: 'number', visible: true, builtin: true, width: '65px', order: 19, aliases: ['代扣代缴项目'] },
+        { id: 'totalDeduction', label: '应扣合计', category: 'computed', group: 'postTax', calculation: 'totalDeduction',
+            formula: 'POST_TAX()', type: 'number', visible: true, builtin: true, required: true, readonly: true, width: '82px', order: 20 },
+        { id: 'actualSalary', label: '实发工资', category: 'computed', group: 'actual', calculation: 'actualSalary',
+            formula: '{payableTotal}-{totalDeduction}', type: 'number', visible: true, builtin: true, required: true, readonly: true, width: '82px', order: 21 }
+    ];
+}
+
+function normalizeSalaryFieldGroups(value, referencedIds) {
+    var defaults = defaultSalaryFieldGroups();
+    var source = Array.isArray(value) ? value : [];
+    var result = [];
+    var used = {};
+
+    source.forEach(function(group, index) {
+        if (!group || !group.id) return;
+        var id = String(group.id).trim();
+        if (!id || used[id]) return;
+        var base = defaults.find(function(item) { return item.id === id; }) || {};
+        result.push({
+            id: id,
+            label: String(group.label || base.label || id).trim() || id,
+            span: typeof group.span === 'boolean' ? group.span : base.span === true,
+            order: Number.isFinite(Number(group.order)) ? Number(group.order) : index
+        });
+        used[id] = true;
+    });
+
+    if (!result.length) {
+        defaults.forEach(function(group) {
+            result.push(copyAppConfigValue(group));
+            used[group.id] = true;
+        });
+    }
+
+    // 字段引用了但配置里缺失的分组按默认值补回，避免表头丢列；
+    // 用户主动删除且没有字段引用的分组不会被复活。
+    (Array.isArray(referencedIds) ? referencedIds : []).forEach(function(id) {
+        if (!id || used[id]) return;
+        var base = defaults.find(function(item) { return item.id === id; });
+        result.push(base ? copyAppConfigValue(base) : { id: id, label: id, span: false, order: result.length });
+        used[id] = true;
+    });
+
+    return result.sort(function(a, b) { return a.order - b.order; }).map(function(group, index) {
+        group.order = index;
+        return group;
+    });
+}
+
+function normalizeSalaryFieldDefinitions(value, needsStructureMigration) {
+    var defaults = defaultSalaryFieldDefinitions();
+    var source = Array.isArray(value) ? value : [];
+    var result = [];
+    var used = {};
+
+    source.forEach(function(field, index) {
+        if (!field || !field.id) return;
+        var id = String(field.id).trim();
+        if (!id || used[id]) return;
+        var base = defaults.find(function(item) { return item.id === id; }) || {};
+        var category = ['info', 'earning', 'deduction', 'computed'].indexOf(field.category) >= 0
+            ? field.category
+            : (base.category || 'earning');
+        var useBaseStructure = needsStructureMigration && base.id;
+        var definition = {
+            id: id,
+            label: String(useBaseStructure ? base.label : (field.label || base.label || id)).trim(),
+            category: category,
+            group: String(useBaseStructure ? (base.group || '') : (field.group !== undefined && field.group !== null ? field.group : (base.group !== undefined && base.group !== null ? base.group : ''))),
+            calculation: String(field.calculation || base.calculation || ''),
+            formula: String(useBaseStructure ? (base.formula || '') : (field.formula !== undefined && field.formula !== null ? field.formula : (base.formula || ''))),
+            calculationGroup: String(useBaseStructure ? (base.calculationGroup || '') : (field.calculationGroup || base.calculationGroup || (category === 'earning' ? 'direct' : category === 'deduction' ? 'postTaxDeduction' : ''))),
+            type: ['text', 'number'].indexOf(useBaseStructure ? base.type : field.type) >= 0 ? (useBaseStructure ? base.type : field.type) : (base.type || (category === 'info' ? 'text' : 'number')),
+            visible: field.visible !== false,
+            builtin: field.builtin === true || base.builtin === true,
+            required: field.required === true || base.required === true,
+            readonly: field.readonly === true || base.readonly === true,
+            width: String(field.width || base.width || (category === 'info' ? '90px' : '70px')),
+            order: useBaseStructure && Number.isFinite(Number(base.order)) ? Number(base.order) : (Number.isFinite(Number(field.order)) ? Number(field.order) : index),
+            aliases: uniqueStrings((field.aliases || []).concat(base.label ? [base.label] : []).concat(base.aliases || []), [])
+        };
+        if (definition.required) definition.visible = true;
+        used[id] = true;
+        result.push(definition);
+    });
+
+    // 仅在结构迁移或结果为空（新账号/损坏恢复）时补全默认字段；
+    // 用户主动删除的默认字段不再复活，可用「添加工资项」重建。
+    if (needsStructureMigration || !result.length) {
+        defaults.forEach(function(field) {
+            if (!used[field.id]) result.push(copyAppConfigValue(field));
+        });
+    }
+    return result.sort(function(a, b) { return a.order - b.order; }).map(function(field, index) {
+        field.order = index;
+        return field;
+    });
 }
 
 function defaultDailyFieldDefinitions() {
@@ -362,6 +505,13 @@ function normalizeAppConfig(raw, legacy) {
     config.inventoryTypes = uniqueStrings(source.inventoryTypes, []);
     config.customInventoryTypes = uniqueStrings(source.customInventoryTypes, []);
     config.salaryDepartments = stringsWithLegacy(source.salaryDepartments, legacy.salaryDepartments, true);
+    var salaryFieldsNeedMigration = Number(source.salaryFieldSchemaVersion || 0) < 2;
+    config.salaryFieldDefinitions = normalizeSalaryFieldDefinitions(source.salaryFieldDefinitions, salaryFieldsNeedMigration);
+    config.salaryFieldSchemaVersion = 2;
+    config.salaryFieldGroups = normalizeSalaryFieldGroups(
+        source.salaryFieldGroups,
+        uniqueStrings(config.salaryFieldDefinitions.map(function(field) { return field.group; }), [])
+    );
     config.salaryTemplates = normalizeSalaryTemplates(source.salaryTemplates, legacy.legacySalaryTemplate);
     config.defaultSalaryTemplateId = String(source.defaultSalaryTemplateId || '') ||
         (config.salaryTemplates.length && config.salaryTemplates[0].id) || '';

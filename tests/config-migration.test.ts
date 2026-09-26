@@ -243,6 +243,70 @@ describe('unified app config migration', () => {
     expect(harness.syncCount).toBeGreaterThan(0);
   });
 
+  it('normalizes salary fields with earning and deduction categories', () => {
+    const harness = createConfigHarness({
+      userId: 'salary-fields-user',
+      database: { settings: {} },
+    });
+
+    const defaults = harness.api.getAppConfig().salaryFieldDefinitions;
+    expect(defaults.find((field: any) => field.id === 'baseSalary')).toMatchObject({
+      category: 'earning',
+      visible: true,
+    });
+    expect(defaults.find((field: any) => field.id === 'socialInsurance')).toMatchObject({
+      category: 'deduction',
+      visible: true,
+    });
+
+    harness.api.saveAppConfig({
+      salaryFieldDefinitions: [
+        ...defaults,
+        {
+          id: 'salary_custom_meal',
+          label: '餐补',
+          category: 'earning',
+          type: 'number',
+          visible: true,
+          builtin: false,
+          width: '70px',
+          order: defaults.length,
+        },
+      ],
+    });
+
+    expect(harness.api.getAppConfig().salaryFieldDefinitions)
+      .toContainEqual(expect.objectContaining({ id: 'salary_custom_meal', label: '餐补' }));
+  });
+
+  it('migrates legacy salary field order and preserves numeric attendance', () => {
+    const harness = createConfigHarness({
+      userId: 'salary-legacy-order',
+      database: { settings: {} },
+      storage: {
+        'ax_app_config_salary-legacy-order': JSON.stringify({
+          schemaVersion: 2,
+          updatedAt: 100,
+          onboardingCompleted: true,
+          salaryFieldDefinitions: [
+            { id: 'employee', label: '姓名', category: 'info', type: 'text', visible: true, order: 0 },
+            { id: 'position', label: '职务', category: 'info', type: 'text', visible: true, order: 1 },
+            { id: 'baseSalary', label: '基本工资', category: 'earning', type: 'number', visible: true, order: 2 },
+            { id: 'overtimeSubsidy', label: '加班补贴', category: 'earning', type: 'number', visible: true, order: 3 },
+          ],
+        }),
+      },
+    });
+
+    const config = harness.api.migrateAppConfig();
+    const ids = config.salaryFieldDefinitions.map((field: any) => field.id);
+    expect(ids.indexOf('bankCard')).toBeLessThan(ids.indexOf('baseSalary'));
+    expect(ids.indexOf('baseSalary')).toBeLessThan(ids.indexOf('overtimeSubsidy'));
+    expect(config.salaryFieldDefinitions.find((field: any) => field.id === 'attendanceDays'))
+      .toMatchObject({ type: 'number', group: 'basePay' });
+    expect(config.salaryFieldSchemaVersion).toBe(2);
+  });
+
   it('uses business data only to decide onboarding, not config visibility', () => {
     const existing = createConfigHarness({
       database: { dailyReports: [{ date: '2026-09-24' }] },
@@ -252,5 +316,47 @@ describe('unified app config migration', () => {
     expect(existing.api.shouldShowLegacyOnboarding()).toBe(false);
     expect(blank.api.shouldShowLegacyOnboarding()).toBe(true);
     expect(existing.api.getAppConfig().onboardingCompleted).toBe(true);
+  });
+
+  it('provides default salary field groups and restores groups referenced by fields', () => {
+    const harness = createConfigHarness({
+      userId: 'salary-groups-user',
+      database: { settings: {} },
+    });
+
+    const config = harness.api.getAppConfig();
+    expect(config.salaryFieldGroups.map((group: any) => group.id)).toEqual(
+      expect.arrayContaining(['info', 'basePay', 'direct', 'postTax', 'actual']),
+    );
+
+    harness.api.saveAppConfig({
+      salaryFieldGroups: [{ id: 'custom_bonus', label: '奖金区', span: true, order: 0 }],
+      salaryFieldDefinitions: config.salaryFieldDefinitions.map((field: any) => ({
+        ...field,
+        group: field.group === 'direct' ? 'custom_bonus' : field.group,
+      })),
+    });
+
+    const ids = harness.api.getAppConfig().salaryFieldGroups.map((group: any) => group.id);
+    expect(ids).toContain('custom_bonus');
+    expect(ids).toContain('basePay');
+  });
+
+  it('does not resurrect salary field groups deleted without field references', () => {
+    const harness = createConfigHarness({
+      userId: 'salary-groups-del',
+      database: { settings: {} },
+    });
+    const config = harness.api.getAppConfig();
+
+    harness.api.saveAppConfig({
+      salaryFieldGroups: config.salaryFieldGroups.filter((group: any) => group.id !== 'direct'),
+      salaryFieldDefinitions: config.salaryFieldDefinitions.map((field: any) =>
+        field.group === 'direct' ? { ...field, group: 'basePay' } : field,
+      ),
+    });
+
+    const ids = harness.api.getAppConfig().salaryFieldGroups.map((group: any) => group.id);
+    expect(ids).not.toContain('direct');
   });
 });
