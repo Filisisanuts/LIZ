@@ -126,6 +126,7 @@ function rData() {
     h += '<div style="background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:14px;margin-bottom:12px">';
     h += '<p style="font-size:.74rem;color:var(--tx-s);margin-bottom:10px">管理各模块的分类和标签，修改后立即生效</p>';
     h += '<div class="brow">';
+    h += '<button class="btn p" onclick="showDailyFieldsConfig()">日报字段</button>';
     h += '<button class="btn" onclick="showDailyLabelsConfig()">日报标签</button>';
     h += '<button class="btn" onclick="showPurchaseSourceConfig()">采购来源</button>';
     h += '<button class="btn" onclick="showPurchaseSectionConfig()">采购区域</button>';
@@ -693,6 +694,122 @@ function doDownloadFromCloud() {
 
 // ===== 分类配置函数 =====
 
+function dailyFieldStatisticLabel(value) {
+    return {
+        revenue: '营收', cost: '成本', payment: '支付', receivable: '应收',
+        delivery: '外卖', guest: '客情', none: '仅记录'
+    }[value] || '仅记录';
+}
+
+function dailyFieldStatisticOptions(selected) {
+    return [
+        ['revenue', '营收'], ['cost', '成本'], ['payment', '支付'],
+        ['receivable', '应收'], ['delivery', '外卖'], ['guest', '客情'], ['none', '仅记录']
+    ].map(function(item) {
+        return '<option value="' + item[0] + '"' + (item[0] === selected ? ' selected' : '') + '>' + item[1] + '</option>';
+    }).join('');
+}
+
+function showDailyFieldsConfig() {
+    var config = getAppConfig();
+    var fields = (config.dailyFieldDefinitions || []).slice().sort(function(a, b) { return a.order - b.order; });
+    var h = '<h3>日报字段配置</h3>';
+    h += '<p class="salary-move-hint">字段名称、分组、顺序、显示状态和统计归属都可修改。删除字段只隐藏录入项，历史日报仍保留。</p>';
+    h += '<div class="hrow"><input class="inp" id="newDailyFieldLabel" placeholder="新字段名称" style="flex:1"><select class="inp" id="newDailyFieldType" style="max-width:110px"><option value="currency">金额</option><option value="number">数量</option></select>';
+    h += '<select class="inp" id="newDailyFieldStatistic" style="max-width:110px">' + dailyFieldStatisticOptions('none') + '</select><button class="btn p" onclick="addDailyFieldFromConfig()">新增字段</button></div>';
+
+    fields.forEach(function(field, index) {
+        h += '<div class="salary-template-row" data-daily-field="' + field.id + '">';
+        h += '<div style="display:grid;grid-template-columns:minmax(110px,1fr) minmax(90px,.8fr) minmax(100px,.8fr) auto;gap:6px;align-items:center;flex:1">';
+        h += '<input class="inp" value="' + field.label.replace(/"/g, '&quot;') + '" aria-label="字段名称" onchange="updateDailyFieldConfig(\'' + field.id + '\',\'label\',this.value)">';
+        h += '<input class="inp" value="' + field.group.replace(/"/g, '&quot;') + '" aria-label="字段分组" onchange="updateDailyFieldConfig(\'' + field.id + '\',\'group\',this.value)">';
+        h += '<select class="inp" aria-label="统计归属" onchange="updateDailyFieldConfig(\'' + field.id + '\',\'statistic\',this.value)">' + dailyFieldStatisticOptions(field.statistic) + '</select>';
+        h += '<label class="check-row" style="min-height:0;margin:0"><input type="checkbox"' + (field.visible ? ' checked' : '') + ' onchange="updateDailyFieldConfig(\'' + field.id + '\',\'visible\',this.checked)">显示</label>';
+        h += '</div><div style="display:flex;gap:4px;flex-wrap:wrap">';
+        h += '<button class="btn s" onclick="moveDailyFieldConfig(\'' + field.id + '\',-1)"' + (index === 0 ? ' disabled' : '') + '>上移</button>';
+        h += '<button class="btn s" onclick="moveDailyFieldConfig(\'' + field.id + '\',1)"' + (index === fields.length - 1 ? ' disabled' : '') + '>下移</button>';
+        h += '<button class="btn s d" onclick="deleteDailyFieldConfig(\'' + field.id + '\')">' + (field.visible ? '删除' : '恢复') + '</button>';
+        h += '</div></div>';
+    });
+
+    h += '<div class="section-label">日报功能</div>';
+    h += '<label class="check-row"><input type="checkbox" id="dailyFeatureRoom"' + (config.dailyFeatures && config.dailyFeatures.roomEnabled ? ' checked' : '') + '> 启用包厢预定</label>';
+    h += '<label class="check-row"><input type="checkbox" id="dailyFeatureReporter"' + (config.dailyFeatures && config.dailyFeatures.reporterEnabled ? ' checked' : '') + '> 启用汇报人</label>';
+    h += '<label class="salary-move-field">包厢类型（每行一个）<textarea class="inp" id="dailyRoomTypesInput" style="min-height:90px">' + (config.roomTypes || []).join('\n') + '</textarea></label>';
+    h += '<div class="brow"><button class="btn" onclick="closeModal()">关闭</button><button class="btn p" onclick="saveDailyFieldOptions()">保存功能设置</button></div>';
+    showModal(h, 820);
+}
+
+function saveDailyFieldOptions() {
+    var config = getAppConfig();
+    config.dailyFeatures = {
+        roomEnabled: $id('dailyFeatureRoom').checked,
+        reporterEnabled: $id('dailyFeatureReporter').checked
+    };
+    config.roomTypes = ($id('dailyRoomTypesInput').value || '').split('\n').map(function(value) { return value.trim(); }).filter(Boolean);
+    saveAppConfig(config);
+    showDailyFieldsConfig();
+}
+
+function addDailyFieldFromConfig() {
+    var label = ($id('newDailyFieldLabel').value || '').trim();
+    if (!label) { toast('请填写字段名称'); return; }
+    var config = getAppConfig();
+    var id = 'custom_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+    config.dailyFieldDefinitions.push({
+        id: id,
+        label: label,
+        group: '其他',
+        path: '',
+        type: $id('newDailyFieldType').value,
+        statistic: $id('newDailyFieldStatistic').value,
+        visible: true,
+        builtin: false,
+        order: config.dailyFieldDefinitions.length
+    });
+    saveAppConfig(config);
+    showDailyFieldsConfig();
+}
+
+function updateDailyFieldConfig(id, prop, value) {
+    var config = getAppConfig();
+    var field = config.dailyFieldDefinitions.find(function(item) { return item.id === id; });
+    if (!field) return;
+    field[prop] = prop === 'visible' ? value === true : String(value);
+    if (prop === 'visible' && value) field.deleted = false;
+    saveAppConfig(config);
+    if (prop !== 'label' && prop !== 'group') showDailyFieldsConfig();
+}
+
+function moveDailyFieldConfig(id, delta) {
+    var config = getAppConfig();
+    var fields = config.dailyFieldDefinitions.sort(function(a, b) { return a.order - b.order; });
+    var index = fields.findIndex(function(item) { return item.id === id; });
+    var target = index + delta;
+    if (index < 0 || target < 0 || target >= fields.length) return;
+    var moved = fields.splice(index, 1)[0];
+    fields.splice(target, 0, moved);
+    fields.forEach(function(field, order) { field.order = order; });
+    config.dailyFieldDefinitions = fields;
+    saveAppConfig(config);
+    showDailyFieldsConfig();
+}
+
+function deleteDailyFieldConfig(id) {
+    var config = getAppConfig();
+    var field = config.dailyFieldDefinitions.find(function(item) { return item.id === id; });
+    if (!field) return;
+    if (field.visible) {
+        field.visible = false;
+        field.deleted = true;
+    } else {
+        field.visible = true;
+        field.deleted = false;
+    }
+    saveAppConfig(config);
+    showDailyFieldsConfig();
+}
+
 // 日报标签配置
 function showDailyLabelsConfig() {
     var config = getAppConfig();
@@ -764,7 +881,7 @@ function showPurchaseSourceConfig() {
     // 快速添加
     h += '<div style="margin:12px 0"><label style="font-size:.72rem;color:var(--tx-m);display:block;margin-bottom:6px">快速添加</label>';
     h += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
-    ['供应商', '外购', '网购', '退货'].forEach(function(s) {
+    ['供应商', '外购', '网购'].forEach(function(s) {
         h += '<button class="btn s" onclick="addPurchaseSourceFromConfig(\'' + s + '\')" ' + (sources.indexOf(s) >= 0 ? 'disabled' : '') + '>' + s + '</button>';
     });
     h += '</div></div>';

@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>经营管理</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -64,14 +64,14 @@
 </div>
 <!-- 悬浮毛玻璃导航栏 -->
 <div class="floating-nav" id="fnav">
-  <button class="hamburger" id="hamburger" onclick="toggleToolbar()">☰</button>
+  <button class="hamburger" id="hamburger" onclick="toggleToolbar()" aria-label="打开导航菜单">☰</button>
   <div class="fnav-title" id="fnavTitle">
     <span class="page-icon">☕</span>
     <span id="fnavLabel">经营管理</span>
   </div>
-  <div class="fnav-tabs" id="fnavTabs"></div>
+  <div class="view-tabs fnav-tabs" id="fnavTabs" role="tablist" aria-label="页面子视图"></div>
   <div class="fnav-right">
-    <div class="search-wrap"><input type="text" class="fnav-search" placeholder="搜索..."></div>
+    <div class="search-wrap"><input type="text" class="fnav-search" placeholder="搜索..." aria-label="搜索功能"></div>
     <span id="syncInd" onclick="goPage('settings')" style="display:flex;align-items:center;gap:5px;cursor:pointer;padding:4px 10px;border-radius:8px;transition:background .15s" onmouseenter="this.style.background='var(--bg-tertiary)'" onmouseleave="this.style.background='transparent'" title="数据同步">
       <span class="sync-dot" id="syncDot" style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#9AA0A6;transition:background .3s"></span>
       <span id="syncLabel" class="sync-label">本地</span>
@@ -89,11 +89,12 @@
 <main class="main" id="main"></main>
 <div class="overlay" id="overlay" onclick="closeModal()"></div>
 <div class="modal" id="modal"></div>
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <!-- ========== JavaScript 模块（按依赖顺序加载） ========== -->
 
 <!-- 基础模块 -->
+<script src="src/js/ui-components.js"></script>
 <script src="src/js/config-store.js"></script>
 <script src="src/js/config.js"></script>
 <script>

@@ -17,6 +17,18 @@ export interface AppConfig {
   // 日报配置
   dailyLabels: string[];
   roomTypes: string[];
+  dailyFieldDefinitions: Array<{
+    id: string;
+    label: string;
+    group: string;
+    path: string;
+    type: 'currency' | 'number' | 'rooms';
+    statistic: 'revenue' | 'cost' | 'payment' | 'receivable' | 'delivery' | 'guest' | 'none';
+    visible: boolean;
+    builtin: boolean;
+    readonly?: boolean;
+    order: number;
+  }>;
   dailyFeatures: {
     roomEnabled: boolean;
     reporterEnabled: boolean;
@@ -36,6 +48,21 @@ export interface AppConfig {
   // 贵重物品配置
   inventoryTypes: string[];
   customInventoryTypes: string[];
+
+  // 工资模板与部门
+  salaryDepartments: string[];
+  salaryTemplates: Array<{
+    id: string;
+    name: string;
+    isDefault: boolean;
+    rows: Array<{
+      department: string;
+      employee: string;
+      position: string;
+      baseSalary: number;
+    }>;
+  }>;
+  defaultSalaryTemplateId: string;
 
   // 引导状态
   onboardingCompleted: boolean;

@@ -86,9 +86,9 @@ export function renderInventory(container: HTMLElement, type: InventoryType): vo
 
   // 标签栏
   html += `
-    <div class="tabs" id="invT">
-      <button class="tab-item active" onclick="switchInvT('hist', '${type}')">明细</button>
-      <button class="tab-item" onclick="switchInvT('stock', '${type}')">库存</button>
+    <div class="view-tabs" id="invT" role="tablist" aria-label="库存视图">
+      <button type="button" class="view-tab active" role="tab" aria-selected="true" onclick="switchInvT('hist', '${type}')">明细</button>
+      <button type="button" class="view-tab" role="tab" aria-selected="false" onclick="switchInvT('stock', '${type}')">库存</button>
     </div>
   `;
 
@@ -245,7 +245,7 @@ function initInventoryGlobals(type: InventoryType): void {
   (window as any).switchInvT = (tab: string, invType: InventoryType) => {
     const stockEl = document.getElementById('invStock');
     const histArea = document.getElementById('invHistArea');
-    const tabs = document.querySelectorAll('#invT .tab-item');
+    const tabs = document.querySelectorAll('#invT .view-tab');
 
     tabs.forEach((t) => t.classList.remove('active'));
 

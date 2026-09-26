@@ -66,9 +66,9 @@ export function renderReport(container: HTMLElement, yearMonth?: string): void {
   // 子标签导航栏
   const tabs = getTabs(data);
   html += `
-    <div class="tabs" id="reportTabs">
+    <div class="view-tabs wrap" id="reportTabs" role="tablist" aria-label="报表视图">
       ${tabs.map((t, i) => `
-        <button class="tab-item ${i === 0 ? 'active' : ''}" data-tab="${t.id}">
+        <button type="button" class="view-tab ${i === 0 ? 'active' : ''}" role="tab" aria-selected="${i === 0}" data-tab="${t.id}">
           ${t.label}
         </button>
       `).join('')}
@@ -122,11 +122,11 @@ function initTabSwitching(container: HTMLElement, data: ReportData, tabs: Tab[])
   // 绑定点击事件
   tabsContainer.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
-    if (target.classList.contains('tab-item')) {
+    if (target.classList.contains('view-tab')) {
       const tabId = target.getAttribute('data-tab') as TabId;
 
       // 更新激活状态
-      tabsContainer.querySelectorAll('.tab-item').forEach((t) => {
+      tabsContainer.querySelectorAll('.view-tab').forEach((t) => {
         t.classList.toggle('active', t === target);
       });
 

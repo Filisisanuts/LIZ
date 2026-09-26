@@ -150,6 +150,55 @@ describe('unified app config migration', () => {
     });
   });
 
+  it('prefers a meaningful newer cloud configuration over a blank local startup configuration', () => {
+    const database = {
+      settings: {
+        'ax_app_config_user-5': {
+          schemaVersion: 2,
+          updatedAt: 100,
+          onboardingCompleted: true,
+          purchaseSources: ['云端供应商'],
+          purchaseSections: ['厨房'],
+          purchaseCategories: { 厨房: ['食材'] },
+        },
+      },
+    };
+    const harness = createConfigHarness({
+      userId: 'user-5',
+      database,
+      storage: {
+        'ax_app_config_user-5': JSON.stringify({
+          schemaVersion: 2,
+          updatedAt: 200,
+          onboardingCompleted: false,
+          purchaseSources: [],
+          purchaseSections: [],
+          purchaseCategories: {},
+        }),
+      },
+    });
+
+    expect(harness.api.migrateAppConfig()).toMatchObject({
+      purchaseSources: ['云端供应商'],
+      purchaseSections: ['厨房'],
+      purchaseCategories: { 厨房: ['食材'] },
+    });
+    expect(JSON.parse(harness.storage.getItem('ax_app_config_user-5')!))
+      .toMatchObject({ purchaseSources: ['云端供应商'] });
+  });
+
+  it('does not create a cloud-bound empty config before a new browser loads remote data', () => {
+    const database = { areaCats: { 厨房: ['旧分类'] }, whCats: ['包装'] };
+    const harness = createConfigHarness({ userId: 'user-6', database });
+
+    harness.api.migrateAppConfig();
+
+    expect(harness.storage.getItem('ax_app_config_user-6')).toBeNull();
+    expect((database as any).settings).toBeUndefined();
+    expect(database.areaCats).toEqual({ 厨房: ['旧分类'] });
+    expect(harness.syncCount).toBe(0);
+  });
+
   it('keeps intentionally empty schema-v2 lists empty', () => {
     const database = {
       areaCats: { 厨房: ['旧分类'] },

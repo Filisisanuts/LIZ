@@ -229,7 +229,7 @@ function doGen(period) {
 
     // 打印按钮
     html += '.print-bar{position:fixed;bottom:20px;right:20px;display:flex;gap:8px;z-index:100}';
-    html += '.print-btn{padding:10px 20px;border:none;border-radius:8px;font-size:.82rem;cursor:pointer;font-family:"Noto Sans SC",sans-serif;transition:all .2s}';
+    html += '.print-btn{padding:10px 20px;border:none;border-radius:8px;font-size:.82rem;cursor:pointer;font-family:"Noto Sans SC",sans-serif;transition:color .2s ease,background-color .2s ease,border-color .2s ease,transform .2s ease}';
     html += '.print-btn.primary{background:#b08d57;color:#fff}';
     html += '.print-btn.secondary{background:#f0ece4;color:#333;border:1px solid #ddd}';
     html += '.print-btn.pdf{background:#c75450;color:#fff}';

@@ -20,13 +20,17 @@ function sq(s){return"'"+s+"'"}
 function extN(s){var m=s.match(/([\d,]+\.?\d*)/);return m?parseFloat(m[0].replace(/,/g,'')):0}
 
 // 提示消息
-function toast(m){var t=$id('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show')},2200)}
+function toast(m){var t=$id('toast');if(!t)return;t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show')},2200)}
 
 // 弹窗
 function showModal(content, width) {
     var m = $id('modal'), o = $id('overlay');
+    window._axModalReturnFocus = document.activeElement;
     m.innerHTML = content;
     m.style.maxWidth = (width || 560) + 'px';
+    m.setAttribute('role', 'dialog');
+    m.setAttribute('aria-modal', 'true');
+    m.setAttribute('tabindex', '-1');
     m.classList.add('show', 'modal-enter');
     o.classList.add('show');
     m.style.position = 'fixed';
@@ -50,6 +54,27 @@ function showModal(content, width) {
         }
         e.stopPropagation();
     };
+    m.onkeydown = function(e) {
+        if (e.key !== 'Tab') return;
+        var focusable = Array.prototype.slice.call(m.querySelectorAll('button,input,select,textarea,[href],[tabindex]:not([tabindex="-1"])')).filter(function(el) {
+            return !el.disabled && el.offsetParent !== null;
+        });
+        if (!focusable.length) return;
+        var first = focusable[0], last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    };
+    if (window.axUI && window.axUI.initSelects) window.axUI.initSelects(m);
+    if (window.axUI && window.axUI.initA11y) window.axUI.initA11y(m);
+    setTimeout(function() {
+        var focusable = m.querySelector('input:not([type="hidden"]),select,textarea,button');
+        if (focusable) focusable.focus();
+    }, 0);
 }
 
 function closeModal() {
@@ -57,6 +82,9 @@ function closeModal() {
     if(window._pendingMimoDialog&&typeof clearPendingMimo==='function')clearPendingMimo();
     var m = $id('modal'), o = $id('overlay');
     if (m) {
+        m.onkeydown = null;
+        m.removeAttribute('role');
+        m.removeAttribute('aria-modal');
         m.classList.remove('show', 'modal-enter', 'modal-exit');
         m.innerHTML = '';
         // 清除所有内联样式，让CSS类的display:none生效
@@ -66,6 +94,10 @@ function closeModal() {
         o.classList.remove('show');
         o.onclick = null;
     }
+    if (window._axModalReturnFocus && typeof window._axModalReturnFocus.focus === 'function') {
+        try { window._axModalReturnFocus.focus(); } catch (e) {}
+    }
+    window._axModalReturnFocus = null;
 }
 
 // 通用的平滑返回函数
@@ -87,7 +119,7 @@ function getPurchaseSources() {
     try {
         var config = getAppConfig();
         if (config.purchaseSources && config.purchaseSources.length > 0) {
-            return config.purchaseSources;
+            return config.purchaseSources.filter(function(source) { return source !== '退货'; });
         }
     } catch(e) {}
     return [];
@@ -113,7 +145,41 @@ function getFreeLabels(){
     try{var s=JSON.parse(localStorage.getItem('ax_fl')||'[]');s.forEach(function(l){if(d.indexOf(l)<0)d.push(l)})}catch(e){}
     return d;
 }
-function saveFL(l){try{var s=JSON.parse(localStorage.getItem('ax_fl')||'[]');if(s.indexOf(l)<0){s.push(l);localStorage.setItem('ax_fl',JSON.stringify(s))}}catch(e){}}
+function saveFL(l){
+    try{
+        var s=JSON.parse(localStorage.getItem('ax_fl')||'[]');
+        if(s.indexOf(l)<0){
+            s.push(l);
+            localStorage.setItem('ax_fl',JSON.stringify(s));
+        }
+        var config=getAppConfig();
+        config.dailyLabels=config.dailyLabels||[];
+        if(config.dailyLabels.indexOf(l)<0) config.dailyLabels.push(l);
+        storeAppConfig({dailyLabels:config.dailyLabels});
+    }catch(e){}
+}
+
+// 一次性迁移旧标签到账号配置；只在明确调用时执行，不扫描其他账号。
+function syncLegacyDailyLabels(){
+    try{
+        var legacy=[];
+        var saved=JSON.parse(localStorage.getItem('ax_fl')||'[]');
+        if(Array.isArray(saved)) saved.forEach(function(label){if(label&&legacy.indexOf(label)<0)legacy.push(String(label))});
+        (DB.dailyReports||[]).forEach(function(report){
+            var items=report&&report.revenue&&report.revenue.otherItems;
+            if(items&&typeof items==='object') Object.keys(items).forEach(function(label){if(label&&legacy.indexOf(label)<0)legacy.push(label)});
+        });
+        var config=getAppConfig();
+        var labels=(config.dailyLabels||[]).slice();
+        legacy.forEach(function(label){if(labels.indexOf(label)<0)labels.push(label)});
+        if(labels.length===(config.dailyLabels||[]).length) return labels;
+        storeAppConfig({dailyLabels:labels});
+        return labels;
+    }catch(e){
+        console.error('同步旧日报标签失败:',e);
+        return [];
+    }
+}
 
 // 图片压缩
 function processImage(file,mw,cb){var reader=new FileReader();reader.onload=function(e){var img=new Image();img.onload=function(){var c=document.createElement('canvas');var w=img.width,h=img.height;if(w>mw){h=h*mw/w;w=mw}c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);cb(c.toDataURL('image/jpeg',.85))};img.src=e.target.result};reader.readAsDataURL(file)}

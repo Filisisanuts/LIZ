@@ -22,11 +22,11 @@ export function renderPurchase(container: HTMLElement): void {
 
   // 标签栏
   html += `
-    <div class="tabs" id="purTabs">
-      <button class="tab-item active" onclick="switchPurTab('text')">粘贴</button>
-      <button class="tab-item" onclick="switchPurTab('manual')">手动</button>
-      <button class="tab-item" onclick="switchPurTab('ai')">拍照</button>
-      <button class="tab-item" onclick="switchPurTab('hist')">明细</button>
+    <div class="view-tabs" id="purTabs" role="tablist" aria-label="采购视图">
+      <button type="button" class="view-tab active" role="tab" aria-selected="true" onclick="switchPurTab('text')">粘贴</button>
+      <button type="button" class="view-tab" role="tab" aria-selected="false" onclick="switchPurTab('manual')">手动</button>
+      <button type="button" class="view-tab" role="tab" aria-selected="false" onclick="switchPurTab('ai')">拍照</button>
+      <button type="button" class="view-tab" role="tab" aria-selected="false" onclick="switchPurTab('hist')">明细</button>
     </div>
   `;
 
@@ -175,7 +175,7 @@ function initPurchaseGlobals(): void {
     const manualEl = document.getElementById('purManual');
     const aiEl = document.getElementById('purAI');
     const histEl = document.getElementById('purHist');
-    const tabs = document.querySelectorAll('#purTabs .tab-item');
+    const tabs = document.querySelectorAll('#purTabs .view-tab');
 
     tabs.forEach((t) => t.classList.remove('active'));
 

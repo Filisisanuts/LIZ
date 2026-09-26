@@ -42,6 +42,13 @@ function rReport() {
     var mOther = mr.reduce(function(s, r) { return s + (r.revenue.other || 0); }, 0);
     var mDiscount = mr.reduce(function(s, r) { return s + (r.revenue.discount || 0); }, 0);
     var mGuests = mr.reduce(function(s, r) { return s + (r.guest.count || 0); }, 0);
+    var dailyCustomStats = typeof calculateDailyFieldStats === 'function'
+        ? calculateDailyFieldStats(mr, getAppConfig().dailyFieldDefinitions || [])
+        : { revenue: 0, cost: 0, payment: 0, receivable: 0, delivery: 0, guest: 0, none: 0 };
+    mNet += dailyCustomStats.revenue || 0;
+    mGross += dailyCustomStats.revenue || 0;
+    mOther += dailyCustomStats.revenue || 0;
+    mGuests += dailyCustomStats.guest || 0;
 
     // ===== 支付方式汇总 =====
     var mPos = mr.reduce(function(s, r) { return s + (r.payment.pos || 0); }, 0);
@@ -50,11 +57,13 @@ function rReport() {
     var mMember = mr.reduce(function(s, r) { return s + (r.payment.memberCard || 0); }, 0);
     var mTreat = mr.reduce(function(s, r) { return s + (r.payment.treat || 0); }, 0);
     var mAr = mr.reduce(function(s, r) { return s + (r.payment.ar.total || 0); }, 0);
+    mAr += dailyCustomStats.receivable || 0;
 
     // ===== 外卖渠道汇总 =====
     var mDelMeituan = mr.reduce(function(s, r) { return s + (r.delivery.meituan || 0); }, 0);
     var mDelTaobao = mr.reduce(function(s, r) { return s + (r.delivery.taobao || 0); }, 0);
     var mDelJd = mr.reduce(function(s, r) { return s + (r.delivery.jd || 0); }, 0);
+    mDel += dailyCustomStats.delivery || 0;
 
     // ===== 库存销售统计 =====
     var teaS = DB.teaItems.map(function(item) {
@@ -98,6 +107,7 @@ function rReport() {
         });
     });
     var netPur = purTotal + retTotal;
+    netPur += dailyCustomStats.cost || 0;
 
     // ===== 费用汇总 =====
     var mExp = DB.expenses.filter(function(e) { return e.date.startsWith(m); });
@@ -171,10 +181,13 @@ function rReport() {
     h += '<div class="card"><div class="card-l">毛利率</div><div class="card-v gn">' + grossMargin.toFixed(1) + '%</div></div>';
     h += '<div class="card"><div class="card-l">营业利润</div><div class="card-v ' + (operProfit >= 0 ? 'gn' : 'rd') + '">' + fmtC(operProfit) + '</div></div>';
     h += '<div class="card"><div class="card-l">到店人数</div><div class="card-v">' + mGuests + '</div></div>';
+    if (dailyCustomStats.payment || dailyCustomStats.none) {
+        h += '<div class="card"><div class="card-l">自定义支付 / 未汇总</div><div class="card-v">' + fmtC((dailyCustomStats.payment || 0) + (dailyCustomStats.none || 0)) + '</div></div>';
+    }
     h += '</div>';
 
     // 子标签导航栏
-    h += '<div class="rep-nav" id="repNav" style="display:flex;gap:0;overflow-x:auto;margin-bottom:20px;background:var(--card);border:1px solid var(--bd);border-radius:var(--r);scrollbar-width:none"></div>';
+    h += '<div class="view-tabs wrap" id="repNav" role="tablist" aria-label="报表视图"></div>';
     h += '<div id="repBody"></div>';
 
     setMain('财务报告', h);
@@ -196,25 +209,21 @@ function rReport() {
     // 渲染子标签按钮
     var navH = '';
     tabs.forEach(function(t, i) {
-        navH += '<button class="rep-tab' + (i === 0 ? ' active' : '') + '" data-tab="' + t.id + '" ';
-        navH += 'style="flex-shrink:0;padding:10px 16px;font-size:.76rem;color:var(--tx-m);';
-        navH += 'background:none;border:none;border-bottom:2px solid transparent;';
-        navH += 'cursor:pointer;transition:all .2s;white-space:nowrap">';
+        navH += '<button type="button" class="view-tab' + (i === 0 ? ' active' : '') + '" role="tab" aria-selected="' + (i === 0) + '" data-tab="' + t.id + '">';
         navH += t.label + '</button>';
     });
     $id('repNav').innerHTML = navH;
 
     // 子标签切换逻辑
     function switchRepTab(id) {
-        document.querySelectorAll('.rep-tab').forEach(function(b) {
+        document.querySelectorAll('#repNav .view-tab').forEach(function(b) {
             b.classList.toggle('active', b.dataset.tab === id);
-            b.style.color = b.classList.contains('active') ? 'var(--ac)' : 'var(--tx-m)';
-            b.style.borderBottomColor = b.classList.contains('active') ? 'var(--ac)' : 'transparent';
+            b.setAttribute('aria-selected', String(b.dataset.tab === id));
         });
         renderRepSection(id);
     }
 
-    document.querySelectorAll('.rep-tab').forEach(function(b) {
+    document.querySelectorAll('#repNav .view-tab').forEach(function(b) {
         b.onclick = function() { switchRepTab(b.dataset.tab); };
     });
 
@@ -226,6 +235,7 @@ function rReport() {
         // 缓存数据给图表使用
         window._repData = {
             net: mNet, netPur: netPur, gp: grossProfit,
+            customDailyStats: dailyCustomStats,
             expTotal: expTotal, salaryTotal: salaryTotal, operExpense: expTotal + salaryTotal, op: operProfit,
             kit: mKit, bar: mBar, del: mDel,
             // 营收总表与收入分类图均使用日报口径；贵重物品销售另在独立分析页呈现。
@@ -269,7 +279,7 @@ function rReport() {
 
     // 记住当前 tab，切换月份后保持在原 tab
     var lastRepTab = 'profit';
-    var activeRepTab = document.querySelector('.rep-tab.active');
+    var activeRepTab = document.querySelector('#repNav .view-tab.active');
     if (activeRepTab) lastRepTab = activeRepTab.dataset.tab || 'profit';
     setTimeout(function() { switchRepTab(lastRepTab); }, 100);
 }

@@ -9,6 +9,40 @@ var _baiduAK = localStorage.getItem('ax_baidu_ak') || '';
 var _baiduSK = localStorage.getItem('ax_baidu_sk') || '';
 // 采购明细页折叠状态缓存
 var _pfFolds = {};
+var _purchaseSelectTarget = '';
+var _repairReturnId = '';
+
+function isPurchaseReturnItem(item) {
+    return !!(item && (item.recordType === 'return' || item.return === true || item.source === '退货'));
+}
+
+function isPurchaseReturnRecord(record) {
+    return !!(record && (record.recordType === 'return' || record.type === 'return' || record.source === '退货'));
+}
+
+function purchaseItemSource(purchase, item) {
+    return (item && (item.originalSource || item.source)) || (purchase && (purchase.originalSource || purchase.source)) || '外购';
+}
+
+function remainingReturnQty(purchaseId, itemId) {
+    var original = null;
+    DB.purchases.forEach(function(purchase) {
+        if (purchase.id !== purchaseId) return;
+        (purchase.items || []).forEach(function(item, itemIdx) {
+            if ((item.id || (purchase.id + '_' + itemIdx)) === itemId) original = item;
+        });
+    });
+    if (!original) return 0;
+    var returned = 0;
+    DB.purchases.filter(isPurchaseReturnRecord).forEach(function(record) {
+        (record.items || []).forEach(function(item) {
+            if (item.relatedTo && item.relatedTo.purchaseId === purchaseId && item.relatedTo.itemId === itemId) {
+                returned += Math.abs(parseFloat(item.qty) || 0);
+            }
+        });
+    });
+    return Math.max(0, (parseFloat(original.qty) || 0) - returned);
+}
 
 // ==================== 工具函数 ====================
 
@@ -236,7 +270,7 @@ function doParsePur() {
     });
 
     // 切换到手动标签页，填入日期和来源
-    switchPT('manual');
+    switchPT('entry');
     setTimeout(function() {
         if ($id('pmDate')) $id('pmDate').value = result.date;
         if ($id('pmSrc')) $id('pmSrc').value = result.source || '';
@@ -249,33 +283,34 @@ function doParsePur() {
 
 // 采购主页：三个标签页（粘贴/手动/明细）
 function rPurchase() {
+    migratePurchaseReturns();
     var secs = ['厨房', '吧台', '外场'];
     var cats = getPurCats();
     var h = '';
 
-    // 标签栏
-    h += '<div class="tab-bar" id="pT">';
-    h += '<button class="tab-btn active" onclick="switchPT(\'text\')">粘贴</button>';
-    h += '<button class="tab-btn" onclick="switchPT(\'manual\')">手动</button>';
-    h += '<button class="tab-btn" onclick="switchPT(\'hist\')">明细</button>';
+    // 主视图标签固定排在最上方
+    h += '<div class="view-tabs" id="pT" role="tablist" aria-label="采购视图">';
+    h += '<button type="button" class="view-tab active" role="tab" aria-selected="true" onclick="switchPT(\'entry\')">录入</button>';
+    h += '<button type="button" class="view-tab" role="tab" aria-selected="false" onclick="switchPT(\'return\')">退货</button>';
+    h += '<button type="button" class="view-tab" role="tab" aria-selected="false" onclick="switchPT(\'hist\')">明细</button>';
     h += '</div>';
 
-    // 粘贴页
+    // 粘贴分析入口
     h += '<div id="pText">';
     h += '<textarea id="ptInput" class="inp" placeholder="粘贴采购单文字...&#10;支持出库单、送货单等格式"></textarea>';
-    h += '<div class="brow" style="display:flex;gap:8px;flex-wrap:wrap">';
+    h += '<div class="brow" style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 20px">';
     h += '<button class="btn p" onclick="doParsePur()">本地解析</button>';
     h += '<button class="btn p" onclick="doAIParse()">AI图片识别</button>';
     h += '<button class="btn" onclick="showMimoDiagnostics()">识别诊断</button>';
     h += '</div></div>';
 
     // 手动录入页
-    h += '<div id="pMan" style="display:none">';
+    h += '<div id="pMan">';
 
     // 日期和来源
     h += '<div class="hrow">';
     h += '<label>日期</label><input class="inp" id="pmDate" type="text" readonly placeholder="选择日期" value="' + td() + '" onclick="_dpOpen(\'pmDate\')" style="max-width:150px;cursor:pointer">';
-    h += '<label>来源</label><select class="inp" id="pmSrc" style="max-width:120px" onchange="pmSrcChanged()">';
+    h += '<label>来源</label><select class="inp" id="pmSrc" data-ax-enhanced="true" style="max-width:120px" onchange="pmSrcChanged()">';
     var sources = getPurchaseSources();
     if (sources.length > 0) {
         sources.forEach(function(s) { h += '<option>' + s + '</option>'; });
@@ -283,26 +318,19 @@ function rPurchase() {
         // 兼容旧用户（没有配置的情况）
         h += '<option>外购</option>';
     }
-    h += '<option value="退货">退货</option></select>';
-    h += '</div>';
-
-    // 关联原采购（仅退货时显示）
-    h += '<div class="hrow" id="pmRelDiv" style="display:none">';
-    h += '<label>关联原采购</label>';
-    h += '<button class="btn" id="pmRelBtn" onclick="openRelPurModal()" style="max-width:200px;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">选择关联采购物品</button>';
-    h += '</div>';
+    h += '</select></div>';
 
     // 区域和分类
     h += '<div class="hrow">';
     h += '<label>区域</label>';
-    h += '<select class="inp" id="pmSec" style="max-width:110px" onchange="pmSecChanged(this)">';
+    h += '<select class="inp" id="pmSec" data-ax-enhanced="true" data-allow-custom="true" data-custom-target="pmSecC" style="max-width:110px" onchange="pmSecChanged(this)">';
     h += '<option value="">请选择</option>';
     secs.forEach(function(s) { h += '<option>' + s + '</option>'; });
     h += '<option value="__custom">自定义</option>';
     h += '</select>';
     h += '<input class="inp" id="pmSecC" style="display:none;max-width:110px" placeholder="输入区域">';
     h += '<label>分类</label>';
-    h += '<select class="inp" id="pmCat" style="max-width:130px" onchange="toggleCustomInput(this,\'pmCatC\')">';
+    h += '<select class="inp" id="pmCat" data-ax-enhanced="true" data-allow-custom="true" data-custom-target="pmCatC" style="max-width:130px" onchange="toggleCustomInput(this,\'pmCatC\')">';
     h += '<option value="">请先选区域</option>';
     h += '</select>';
     h += '<input class="inp" id="pmCatC" style="display:none;max-width:130px" placeholder="输入分类">';
@@ -311,9 +339,9 @@ function rPurchase() {
 
     // 品名、数量、单位、单价、总价、添加按钮
     h += '<div class="hrow">';
-    h += '<label>品名</label><input class="inp" id="pmName" style="flex:1.5">';
+    h += '<label>品名</label><input class="inp ax-autosize-input" id="pmName" data-ax-autosize="true" data-autosize-min="120" data-autosize-max="320" placeholder="输入品名" oninput="axAutoSizeInput(this)">';
     h += '<label>数量</label><input class="inp" id="pmQty" type="number" step="0.01" style="max-width:55px" oninput="calcUnitPrice()">';
-    h += '<input class="inp" id="pmUnit" placeholder="单位" style="max-width:52px">';
+    h += '<input class="inp ax-autosize-input" id="pmUnit" data-ax-autosize="true" data-autosize-min="48" data-autosize-max="120" placeholder="单位" oninput="axAutoSizeInput(this)">';
     h += '<label>单价</label><input class="inp" id="pmUnitPrice" type="number" step="0.01" style="max-width:80px" oninput="calcTotal()">';
     h += '<label>总价</label><input class="inp" id="pmTotal" type="number" step="0.01" style="max-width:90px">';
     h += '<button class="btn" onclick="addPurItem()">+添加</button>';
@@ -328,12 +356,26 @@ function rPurchase() {
     h += '</div>';
     h += '</div>';
 
+    // 退货录入
+    h += '<div id="pReturn" style="display:none">';
+    h += '<div class="alert-bar"><strong>归属锁定</strong>退货不是来源。选择原采购后，来源、区域和分类自动继承原记录。</div>';
+    h += '<div class="hrow"><label>原采购物品</label><button class="btn" id="prRelBtn" onclick="openRelPurModal()">选择原采购物品</button></div>';
+    h += '<div class="hrow"><label>退货日期</label><input class="inp" id="prDate" type="text" readonly value="' + td() + '" onclick="_dpOpen(\'prDate\')" style="max-width:150px;cursor:pointer">';
+    h += '<label>退货数量</label><input class="inp" id="prQty" type="number" step="0.01" style="max-width:100px" oninput="calcPurchaseReturnTotal()">';
+    h += '<label>退货金额</label><input class="inp" id="prTotal" type="number" step="0.01" style="max-width:120px"></div>';
+    h += '<div class="hrow"><label>退货原因</label><input class="inp" id="prReason" placeholder="可选"></div>';
+    h += '<div id="prSummary"></div>';
+    h += '<div class="brow"><button class="btn d" onclick="savePurchaseReturn()">确认退货</button></div>';
+    h += '<div id="prPending"></div>';
+    h += '</div>';
+
     // 明细页
     h += '<div id="pHist" style="display:none">';
     h += '<div class="hrow"><label>月份</label>';
     h += '<button class="btn s" onclick="purchaseCalNav(-1)">◀</button>';
     h += '<input class="inp" id="pHistM" type="text" readonly placeholder="选择月份" value="' + curYM() + '" onclick="_mpOpen(\'pHistM\')" onchange="purchaseCalPickYM(this.value)" style="max-width:180px;cursor:pointer">';
     h += '<button class="btn s" onclick="purchaseCalNav(1)">▶</button>';
+    h += '<button class="btn" onclick="openPurchaseTrash()">回收站</button>';
     h += '</div>';
     h += '<div id="pHistArea"></div>';
     h += '</div>';
@@ -341,22 +383,28 @@ function rPurchase() {
     setMain('采购', h);
     setTimeout(function() {
         renderPHist();
-        pmSrcChanged();
+        renderPurchaseReturn();
+        if (window.axUI && window.axUI.initAutoSizing) window.axUI.initAutoSizing(document);
     }, 100);
 }
 
-// 切换采购标签页（粘贴/手动/明细）
+// 切换采购主视图
 function switchPT(t) {
-    var tabs = ['text', 'manual', 'hist'];
-    document.querySelectorAll('#pT .tab-btn').forEach(function(b, i) {
-        b.classList.toggle('active', tabs[i] === t);
+    var tabs = ['entry', 'return', 'hist'];
+    if (t === 'manual' || t === 'text') t = 'entry';
+    $id('pText').style.display = t === 'hist' ? 'none' : '';
+    document.querySelectorAll('#pT .view-tab').forEach(function(b, i) {
+        var active = tabs[i] === t;
+        b.classList.toggle('active', active);
+        b.setAttribute('aria-selected', String(active));
     });
-    ['pText', 'pMan', 'pHist'].forEach(function(id, i) {
+    ['pMan', 'pReturn', 'pHist'].forEach(function(id, i) {
         var el = $id(id);
         if (el) el.style.display = tabs[i] === t ? '' : 'none';
     });
-    if (t === 'manual' && _pmItems.length === 0 && !_editPurId) _pmItems = [];
+    if (t === 'entry' && _pmItems.length === 0 && !_editPurId) _pmItems = [];
     renderPML();
+    if (t === 'return') renderPurchaseReturn();
     if (t === 'hist') setTimeout(renderPHist, 50);
 }
 
@@ -541,12 +589,14 @@ function showRelPurDayItems(date) {
     // 收集可关联的物品
     var items = [];
     dayPurchases.forEach(function(p) {
-        p.items.forEach(function(item) {
+        p.items.forEach(function(item, itemIdx) {
             var qty = parseFloat(item.qty) || 0;
-            var src = item.source || p.source || '外购';
-            if (qty > 0 && src !== '退货') {
+            var src = purchaseItemSource(p, item);
+            if (qty > 0 && !isPurchaseReturnItem(item) && !isPurchaseReturnRecord(p)) {
                 if (keyword && item.name.indexOf(keyword) < 0) return;
                 items.push({
+                    purchaseId: p.id || '',
+                    itemId: item.id || (p.id + '_' + itemIdx),
                     name: item.name,
                     qty: qty,
                     unit: item.unit || '',
@@ -603,12 +653,14 @@ function selectRelPurItem(date, itemIdx) {
     // 收集可关联的物品
     var items = [];
     dayPurchases.forEach(function(p) {
-        p.items.forEach(function(item) {
+        p.items.forEach(function(item, itemIdx) {
             var qty = parseFloat(item.qty) || 0;
-            var src = item.source || p.source || '外购';
-            if (qty > 0 && src !== '退货') {
+            var src = purchaseItemSource(p, item);
+            if (qty > 0 && !isPurchaseReturnItem(item) && !isPurchaseReturnRecord(p)) {
                 if (keyword && item.name.indexOf(keyword) < 0) return;
                 items.push({
+                    purchaseId: p.id || '',
+                    itemId: item.id || (p.id + '_' + itemIdx),
                     date: date,
                     name: item.name,
                     qty: qty,
@@ -629,6 +681,26 @@ function selectRelPurItem(date, itemIdx) {
     // 保存选择结果
     window._selectedRelPur = selectedItem;
 
+    if (_repairReturnId) {
+        applyReturnRepair(_repairReturnId, selectedItem);
+        return;
+    }
+
+    if (_purchaseSelectTarget === 'return' || $id('prRelBtn')) {
+        var returnButton = $id('prRelBtn');
+        if (returnButton) returnButton.textContent = '已关联：' + selectedItem.name + ' · ' + date;
+        var qtyInput = $id('prQty');
+        var totalInput = $id('prTotal');
+        if (qtyInput) {
+            qtyInput.value = Math.min(selectedItem.qty, remainingReturnQty(selectedItem.purchaseId, selectedItem.itemId));
+            qtyInput.max = qtyInput.value;
+        }
+        if (totalInput) totalInput.value = Math.round((qtyInput ? parseFloat(qtyInput.value) : 0) * selectedItem.unitPrice * 100) / 100;
+        renderPurchaseReturn();
+        closeModal();
+        return;
+    }
+
     // 更新按钮文本
     var relBtn = $id('pmRelBtn');
     if (relBtn) {
@@ -645,6 +717,276 @@ function selectRelPurItem(date, itemIdx) {
     // 关闭弹窗
     closeModal();
     toast('已选择关联物品: ' + selectedItem.name);
+}
+
+function renderPurchaseReturn() {
+    var summary = $id('prSummary');
+    if (!summary) return;
+    var selected = window._selectedRelPur;
+    if (selected) {
+        var remaining = remainingReturnQty(selected.purchaseId, selected.itemId);
+        summary.innerHTML = '<div class="pv-card"><h4>' + selected.name + '</h4>' +
+            '<div class="pv-row"><span class="k">原来源</span><strong>' + selected.source + '</strong></div>' +
+            '<div class="pv-row"><span class="k">区域 / 分类</span><strong>' + (selected.section || '-') + ' / ' + (selected.category || '-') + '</strong></div>' +
+            '<div class="pv-row"><span class="k">可退数量</span><strong>' + remaining + (selected.unit || '') + '</strong></div></div>';
+    } else {
+        summary.innerHTML = '<div class="alert-bar">请先选择原采购物品。</div>';
+    }
+
+    var pending = (DB.purchases || []).filter(function(record) {
+        return isPurchaseReturnRecord(record) && record.returnMigrationStatus === 'pending';
+    });
+    var pendingEl = $id('prPending');
+    if (!pendingEl) return;
+    pendingEl.innerHTML = pending.length
+        ? '<div class="section-label">待修正历史退货</div>' + pending.map(function(record) {
+            var item = (record.items || [])[0] || {};
+            return '<div class="item-card"><span class="name">' + item.name + '</span><span class="nums">' + record.date + '</span><button class="btn s" onclick="repairPurchaseReturn(\'' + record.id + '\')">关联原采购</button></div>';
+        }).join('')
+        : '';
+}
+
+function calcPurchaseReturnTotal() {
+    var selected = window._selectedRelPur;
+    var qty = parseFloat($id('prQty').value) || 0;
+    if (selected && selected.unitPrice) $id('prTotal').value = Math.round(qty * selected.unitPrice * 100) / 100;
+}
+
+function savePurchaseReturn() {
+    if (!salaryRequireAuth()) return;
+    var selected = window._selectedRelPur;
+    if (!selected) { toast('请选择原采购物品'); return; }
+    var qty = parseFloat($id('prQty').value) || 0;
+    var total = parseFloat($id('prTotal').value) || 0;
+    var remaining = remainingReturnQty(selected.purchaseId, selected.itemId);
+    if (qty <= 0) { toast('请填写退货数量'); return; }
+    if (qty > remaining) { toast('累计退货数量不能超过原采购数量'); return; }
+    if (!total && !selected.unitPrice) { toast('原采购没有单价，请填写退货金额'); return; }
+    if (!total) total = Math.round(qty * selected.unitPrice * 100) / 100;
+
+    var target = {
+        id: 'p_ret_' + Date.now(),
+        date: $id('prDate').value || td(),
+        source: selected.source,
+        recordType: 'return',
+        type: 'return',
+        originalSource: selected.source,
+        originalPurchaseId: selected.purchaseId,
+        originalItemId: selected.itemId,
+        items: [{
+            id: 'ret_item_' + Date.now(),
+            name: selected.name,
+            section: selected.section,
+            category: selected.category,
+            qty: -Math.abs(qty),
+            unit: selected.unit || '',
+            unitPrice: selected.unitPrice || 0,
+            total: -Math.abs(total),
+            source: selected.source,
+            recordType: 'return',
+            return: true,
+            originalSource: selected.source,
+            note: $id('prReason').value.trim(),
+            relatedTo: {
+                purchaseId: selected.purchaseId,
+                itemId: selected.itemId,
+                date: selected.date,
+                name: selected.name
+            }
+        }]
+    };
+    upd(function(db) { db.purchases.push(target); });
+    window._selectedRelPur = null;
+    $id('prQty').value = '';
+    $id('prTotal').value = '';
+    $id('prReason').value = '';
+    renderPurchaseReturn();
+    toast('已退货 ' + selected.name + ' ¥' + fmtC(total));
+}
+
+function repairPurchaseReturn(recordId) {
+    _repairReturnId = recordId;
+    _purchaseSelectTarget = 'return';
+    openRelPurModal();
+}
+
+function applyReturnRepair(recordId, selected) {
+    upd(function(db) {
+        var record = db.purchases.find(function(item) { return item.id === recordId; });
+        if (!record) return;
+        record.source = selected.source;
+        record.originalSource = selected.source;
+        record.originalPurchaseId = selected.purchaseId;
+        record.originalItemId = selected.itemId;
+        record.recordType = 'return';
+        record.type = 'return';
+        record.returnMigrationStatus = 'migrated';
+        (record.items || []).forEach(function(item) {
+            item.source = selected.source;
+            item.originalSource = selected.source;
+            item.recordType = 'return';
+            item.return = true;
+            item.relatedTo = {
+                purchaseId: selected.purchaseId,
+                itemId: selected.itemId,
+                date: selected.date,
+                name: selected.name
+            };
+        });
+    });
+    _repairReturnId = '';
+    _purchaseSelectTarget = '';
+    closeModal();
+    renderPurchaseReturn();
+    toast('历史退货已修正');
+}
+
+function migratePurchaseReturns() {
+    var before = JSON.stringify(DB.purchases || []);
+    (DB.purchases || []).forEach(function(record) {
+        if (!isPurchaseReturnRecord(record)) return;
+        record.recordType = 'return';
+        record.type = 'return';
+        (record.items || []).forEach(function(item) {
+            item.recordType = 'return';
+            item.return = true;
+            if (!item.relatedTo) {
+                record.returnMigrationStatus = 'pending';
+                return;
+            }
+            var matches = [];
+            DB.purchases.forEach(function(purchase) {
+                if (isPurchaseReturnRecord(purchase)) return;
+                (purchase.items || []).forEach(function(original, itemIdx) {
+                    if (original.name === item.relatedTo.name && purchase.date === item.relatedTo.date) {
+                        matches.push({
+                            purchase: purchase,
+                            item: original,
+                            itemId: original.id || (purchase.id + '_' + itemIdx)
+                        });
+                    }
+                });
+            });
+            if (matches.length === 1) {
+                var match = matches[0];
+                record.source = purchaseItemSource(match.purchase, match.item);
+                record.originalSource = record.source;
+                record.originalPurchaseId = match.purchase.id;
+                record.originalItemId = match.itemId;
+                record.returnMigrationStatus = 'migrated';
+                item.source = record.source;
+                item.originalSource = record.source;
+                item.relatedTo.purchaseId = match.purchase.id;
+                item.relatedTo.itemId = match.itemId;
+            } else {
+                record.returnMigrationStatus = 'pending';
+            }
+        });
+    });
+    if (JSON.stringify(DB.purchases || []) !== before) {
+        saveDB(DB);
+        if (typeof sbScheduleSave === 'function') sbScheduleSave();
+    }
+}
+
+function activePurchaseTrash() {
+    var now = Date.now();
+    return ((DB.purchaseTrash || []).filter(function(item) { return item && item.expiresAt > now; }));
+}
+
+function prunePurchaseTrash(db) {
+    var now = Date.now();
+    db.purchaseTrash = (db.purchaseTrash || []).filter(function(item) { return item && item.expiresAt > now; });
+}
+
+function syncPurchaseReturnAttribution(db, purchaseId, itemId) {
+    var purchase = db.purchases.find(function(item) { return item.id === purchaseId; });
+    if (!purchase) return;
+    var original = (purchase.items || []).find(function(item, itemIdx) {
+        return (item.id || (purchase.id + '_' + itemIdx)) === itemId;
+    });
+    if (!original) return;
+    var source = purchaseItemSource(purchase, original);
+    db.purchases.filter(isPurchaseReturnRecord).forEach(function(record) {
+        (record.items || []).forEach(function(item) {
+            if (!item.relatedTo || item.relatedTo.purchaseId !== purchaseId || item.relatedTo.itemId !== itemId) return;
+            record.source = source;
+            record.originalSource = source;
+            item.source = source;
+            item.originalSource = source;
+            item.section = original.section || '';
+            item.category = original.category || '';
+            item.relatedTo.date = purchase.date;
+            item.relatedTo.name = original.name;
+        });
+    });
+}
+
+function deletePurchaseItemWithReturns(db, purchaseId, itemId) {
+    prunePurchaseTrash(db);
+    var purchase = db.purchases.find(function(item) { return item.id === purchaseId; });
+    if (!purchase) return false;
+    var index = (purchase.items || []).findIndex(function(item, itemIdx) {
+        return (item.id || (purchase.id + '_' + itemIdx)) === itemId;
+    });
+    if (index < 0) return false;
+    var original = purchase.items[index];
+    var returns = db.purchases.filter(function(record) {
+        return isPurchaseReturnRecord(record) && (record.items || []).some(function(item) {
+            return item.relatedTo && item.relatedTo.purchaseId === purchaseId && item.relatedTo.itemId === itemId;
+        });
+    });
+    db.purchaseTrash.push({
+        id: 'pur_trash_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+        kind: 'purchase-item',
+        purchaseId: purchaseId,
+        itemId: itemId,
+        original: copyAppConfigValue({ purchase: purchase, item: original, itemIndex: index }),
+        returns: copyAppConfigValue(returns),
+        deletedAt: Date.now(),
+        expiresAt: Date.now() + 30 * 86400000
+    });
+    purchase.items.splice(index, 1);
+    db.purchases = db.purchases.filter(function(record) { return record.items && record.items.length; });
+    var returnIds = returns.map(function(record) { return record.id; });
+    db.purchases = db.purchases.filter(function(record) { return returnIds.indexOf(record.id) < 0; });
+    return true;
+}
+
+function openPurchaseTrash() {
+    var items = activePurchaseTrash();
+    var h = '<h3>采购回收站</h3><p class="salary-move-hint">原采购及其关联退货保留 30 天，可恢复。</p>';
+    if (!items.length) h += '<div class="salary-trash-empty">回收站为空</div>';
+    items.forEach(function(item) {
+        var original = item.original && item.original.item ? item.original.item : {};
+        h += '<div class="salary-trash-item"><div><strong>' + salaryEscape(original.name || '采购物品') + '</strong><small>关联退货 ' + (item.returns || []).length + ' 条 · 30 天内可恢复</small></div>';
+        h += '<button class="btn s" onclick="restorePurchaseTrash(\'' + item.id + '\')">恢复</button></div>';
+    });
+    h += '<div class="brow"><button class="btn" onclick="closeModal()">关闭</button></div>';
+    showModal(h, 620);
+}
+
+function restorePurchaseTrash(itemId) {
+    var entry = (DB.purchaseTrash || []).find(function(item) { return item.id === itemId; });
+    if (!entry) { toast('回收站项目不存在'); return; }
+    upd(function(db) {
+        prunePurchaseTrash(db);
+        var snapshot = entry.original;
+        var purchase = db.purchases.find(function(item) { return item.id === snapshot.purchase.id; });
+        if (!purchase) {
+            purchase = copyAppConfigValue(snapshot.purchase);
+            purchase.items = [];
+            db.purchases.push(purchase);
+        }
+        purchase.items.splice(Math.min(snapshot.itemIndex, purchase.items.length), 0, copyAppConfigValue(snapshot.item));
+        (entry.returns || []).forEach(function(record) {
+            if (!db.purchases.some(function(item) { return item.id === record.id; })) db.purchases.push(copyAppConfigValue(record));
+        });
+        db.purchaseTrash = db.purchaseTrash.filter(function(item) { return item.id !== itemId; });
+    });
+    closeModal();
+    renderPHist();
+    toast('原采购及关联退货已恢复');
 }
 
 // 自动计算单价：总价 ÷ 数量
@@ -896,7 +1238,7 @@ function addAreaCat() {
     if (DB.areaCats[area].indexOf(name) >= 0) { toast('该区域已有此分类'); return; }
     DB.areaCats[area].push(name);
     saveDB(DB);
-    sbScheduleSave;
+    if (typeof sbScheduleSave === 'function') sbScheduleSave();
     $id('newAreaCat').value = '';
     toast('已添加 ' + name);
     renderAreaCatsList();
@@ -913,7 +1255,7 @@ function delAreaCat(name) {
         });
     });
     saveDB(DB);
-    sbScheduleSave;
+    if (typeof sbScheduleSave === 'function') sbScheduleSave();
     toast('已删除');
     renderAreaCatsList();
 }
@@ -1010,7 +1352,7 @@ function doMimoConfirm() {
     closeModal();
     $id('pmDate').value = r.date;
     $id('pmSrc').value = src;
-    switchPT('manual');
+    switchPT('entry');
     renderPML();
     toast('已导入 ' + _pmItems.length + ' 项，请检查后保存');
 }
@@ -1047,6 +1389,7 @@ function saveMPur() {
             unitPrice: it.unitPrice,
             total: total,
             source: savedSrc,
+            recordType: savedSrc === '退货' ? 'return' : 'purchase',
             relatedTo: relatedTo
         };
     });
@@ -1064,7 +1407,7 @@ function saveMPur() {
         _editPurId = null;
     } else {
         upd(function(db) {
-            db.purchases.push({ id: 'p_' + Date.now(), date: savedDate, source: savedSrc, items: savedItems });
+            db.purchases.push({ id: 'p_' + Date.now(), date: savedDate, source: savedSrc, recordType: savedSrc === '退货' ? 'return' : 'purchase', items: savedItems });
         });
         toast('已保存');
     }
@@ -1208,7 +1551,7 @@ function editPur(id) {
     if (!p) return;
     _pmItems = JSON.parse(JSON.stringify(p.items));
     _editPurId = id;
-    switchPT('manual');
+    switchPT('entry');
     $id('pmDate').value = p.date;
     $id('pmSrc').value = p.source || '外购';
     pmSrcChanged();
@@ -1247,7 +1590,6 @@ function editPurByDate(date, name) {
     var cats = getPurCats(found.section);
     var sources = getPurchaseSources();
     if (sources.length === 0) sources = ['外购']; // 兼容旧用户
-    sources.push('退货'); // 退货始终可选
     var curSource = found.source || foundP.source || '';
 
     var h = '<h3>编辑物品</h3>';
@@ -1316,6 +1658,7 @@ function doEditPurItem(date, origName) {
             for (var k = 0; k < p.items.length; k++) {
                 if (p.items[k].name === origName) {
                     removedFrom = p.source || newSource || '外购';
+                    originalItemId = p.items[k].id || (p.id + '_' + k);
                     p.items.splice(k, 1);
                     break;
                 }
@@ -1340,7 +1683,9 @@ function doEditPurItem(date, origName) {
             target = { id: 'p_' + Date.now(), date: newDate, source: updatedItem.source, items: [] };
             db.purchases.push(target);
         }
+        updatedItem.id = originalItemId || (target.id + '_' + target.items.length);
         target.items.push(updatedItem);
+        syncPurchaseReturnAttribution(db, target.id, updatedItem.id);
     });
 
     closeModal();
@@ -1606,7 +1951,7 @@ function showPurDayModal(date) {
         // 来源层
         h += '<div style="margin-bottom:12px">';
         h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--card-h);border:1px solid var(--bd);border-radius:8px;margin-bottom:6px;cursor:pointer" onclick="toggleSec(\'' + srcId + '\')">';
-        h += '<span style="font-size:.88rem;font-weight:700;color:var(--ac)">▾ ' + src + '</span>';
+        h += '<span class="pur-toggle-title"><span class="pur-toggle-arrow open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span><span style="font-size:.88rem;font-weight:700;color:var(--ac)">' + src + '</span></span>';
         h += '<div style="display:flex;align-items:center;gap:6px">';
         h += '<span style="font-family:var(--fm);font-size:.88rem;font-weight:600">¥' + fmtC(srcTotals[src]) + '</span>';
         h += '<button class="btn s" style="font-size:.65rem;padding:2px 6px" onclick="event.stopPropagation();editPurSrc(\'' + date + '\',\'' + src.replace(/'/g, "\\'") + '\')">编</button>';
@@ -1645,7 +1990,7 @@ function showPurDayModal(date) {
             // 区域层
             h += '<div style="margin-left:8px;margin-bottom:6px">';
             h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;background:var(--card);border:1px solid var(--bd-l);border-radius:6px;margin-bottom:4px;cursor:pointer" onclick="toggleSec(\'' + secId + '\')">';
-            h += '<span style="font-size:.82rem;font-weight:700;color:var(--tx)">▾ ' + sec + '</span>';
+            h += '<span class="pur-toggle-title"><span class="pur-toggle-arrow open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span><span style="font-size:.82rem;font-weight:700;color:var(--tx)">' + sec + '</span></span>';
             h += '<div style="display:flex;align-items:center;gap:6px">';
             h += '<span style="font-family:var(--fm);font-size:.82rem;font-weight:600">¥' + fmtC(Math.abs(secTotals[sec])) + '</span>';
             // 显示退货总额（如果有）
@@ -1677,7 +2022,7 @@ function showPurDayModal(date) {
 
                 h += '<div style="margin-left:8px;margin-bottom:4px">';
                 h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;margin-bottom:3px;cursor:pointer" onclick="toggleSec(\'' + catId + '\')">';
-                h += '<span style="font-size:.75rem;font-weight:600;color:var(--tx-m)">▾ ' + cat + '</span>';
+                h += '<span class="pur-toggle-title"><span class="pur-toggle-arrow open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span><span style="font-size:.75rem;font-weight:600;color:var(--tx-m)">' + cat + '</span></span>';
                 h += '<div style="display:flex;align-items:center;gap:4px">';
                 h += '<span style="font-family:var(--fm);font-size:.75rem;color:var(--tx-m)">¥' + fmtC(Math.abs(group.total)) + '</span>';
                 // 显示退货总额（如果有）
@@ -1737,7 +2082,11 @@ function showPurDayModal(date) {
 function toggleSec(id) {
     var el = $id(id);
     if (!el) return;
-    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    var show = el.style.display === 'none';
+    el.style.display = show ? 'block' : 'none';
+    var header = el.previousElementSibling;
+    var arrow = header ? header.querySelector('.pur-toggle-arrow') : null;
+    if (arrow) arrow.classList.toggle('open', show);
 }
 
 // 计算物品单价涨幅
@@ -1873,12 +2222,18 @@ function delPurCat(date, sec, cat) {
 // 删除单个物品
 function delPurFromModal(date, name) {
     if (!confirm('确认删除？')) return;
+    var originalItemId = '';
     upd(function(db) {
-        db.purchases.forEach(function(p) {
-            if (p.date !== date) return;
-            p.items = p.items.filter(function(item) { return item.name !== name; });
-        });
-        db.purchases = db.purchases.filter(function(p) { return p.items.length > 0; });
+        for (var i = 0; i < db.purchases.length; i++) {
+            var purchase = db.purchases[i];
+            if (purchase.date !== date || isPurchaseReturnRecord(purchase)) continue;
+            for (var k = 0; k < purchase.items.length; k++) {
+                if (purchase.items[k].name === name) {
+                    deletePurchaseItemWithReturns(db, purchase.id, purchase.items[k].id || (purchase.id + '_' + k));
+                    break;
+                }
+            }
+        }
     });
     toast('已删除');
     renderPHist();
@@ -2015,23 +2370,38 @@ function _doReturnExec(date, name, retDate, retQty, retTotal, retReason, retRela
 
     var purchases = DB.purchases.filter(function(pp) { return pp.date === date; });
     var orig = null;
+    var origPurchase = null;
     for (var i = 0; i < purchases.length; i++) {
         for (var k = 0; k < purchases[i].items.length; k++) {
-            if (purchases[i].items[k].name === name && purchases[i].items[k].source !== '退货') {
+            if (purchases[i].items[k].name === name && !isPurchaseReturnItem(purchases[i].items[k]) && !isPurchaseReturnRecord(purchases[i])) {
                 orig = purchases[i].items[k];
+                origPurchase = purchases[i];
                 break;
             }
         }
         if (orig) break;
     }
     if (!orig) return;
+    var origItemId = orig.id || (origPurchase.id + '_' + purchases.indexOf(origPurchase));
+    var remaining = remainingReturnQty(origPurchase.id, origItemId);
+    if (retQty > remaining) {
+        toast('累计退货数量不能超过原采购数量');
+        return;
+    }
+    var originalSource = purchaseItemSource(origPurchase, orig);
 
     upd(function(db) {
         // 创建新的退货批次，使用用户选择的退货日期
-        var relatedTo = retRelate ? { date: date, name: name } : null;
+        var relatedTo = retRelate ? { purchaseId: origPurchase.id, itemId: origItemId, date: date, name: name } : null;
         var target = {
+            id: 'p_ret_' + Date.now(),
             date: retDate,
-            source: '退货',
+            source: originalSource,
+            originalSource: originalSource,
+            originalPurchaseId: origPurchase.id,
+            originalItemId: origItemId,
+            recordType: 'return',
+            type: 'return',
             items: [{
                 name: name,
                 section: orig.section,
@@ -2040,7 +2410,10 @@ function _doReturnExec(date, name, retDate, retQty, retTotal, retReason, retRela
                 unit: orig.unit || '',
                 unitPrice: orig.unitPrice || 0,
                 total: -Math.abs(retTotal),
-                source: '退货',
+                source: originalSource,
+                originalSource: originalSource,
+                recordType: 'return',
+                return: true,
                 note: retReason,
                 relatedTo: relatedTo
             }]
@@ -2120,7 +2493,6 @@ function editPurSrc(date, src) {
 
     var sources = getPurchaseSources();
     if (sources.length === 0) sources = ['外购'];
-    sources.push('退货');
     // 去重
     var uniq = [];
     sources.forEach(function(s) { if (uniq.indexOf(s) < 0) uniq.push(s); });
@@ -2263,10 +2635,7 @@ function delPurByIdx(pid, idx) {
     upd(function(db) {
         var pp = db.purchases.find(function(p) { return p.id === pid; });
         if (!pp) return;
-        pp.items.splice(idx, 1);
-        if (!pp.items.length) {
-            db.purchases = db.purchases.filter(function(ppp) { return ppp.id !== pid; });
-        }
+        deletePurchaseItemWithReturns(db, pid, pp.items[idx].id || (pid + '_' + idx));
     });
     toast('已删除');
     renderPHist();

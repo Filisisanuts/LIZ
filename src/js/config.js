@@ -30,7 +30,7 @@ var NAV = [
 
 // 数据库初始化模板
 function initDB() {
-    return { dailyReports:[],purchases:[],expenses:[],salaryRecords:[],salaryTrash:[],teaItems:[],cigItems:[],alcItems:[],otherItems:[],areaCats:{},aiHistory:[],whCats:[],whItems:[],damageRecords:[],exchangeRecords:[],settings:{} };
+    return { dailyReports:[],purchases:[],expenses:[],salaryRecords:[],salaryTrash:[],purchaseTrash:[],teaItems:[],cigItems:[],alcItems:[],otherItems:[],areaCats:{},aiHistory:[],whCats:[],whItems:[],damageRecords:[],exchangeRecords:[],settings:{} };
 }
 
 // 默认配置

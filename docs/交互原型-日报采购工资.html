@@ -1,0 +1,1473 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ax-Coffee 交互原型</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --canvas: #f5f0e8;
+      --paper: rgba(255, 253, 248, 0.92);
+      --paper-solid: #fffdf8;
+      --ink: #23313a;
+      --muted: #6c777c;
+      --line: rgba(55, 67, 72, 0.14);
+      --line-strong: rgba(55, 67, 72, 0.24);
+      --accent: #9b691c;
+      --accent-strong: #744b10;
+      --accent-soft: #efe0bd;
+      --teal: #2c6c68;
+      --teal-soft: #d9ebe6;
+      --danger: #a64c3c;
+      --danger-soft: #f5ddd7;
+      --success: #3c7655;
+      --shadow: 0 22px 60px rgba(66, 53, 36, 0.11);
+      --shadow-soft: 0 10px 30px rgba(66, 53, 36, 0.08);
+      --radius-xl: 28px;
+      --radius-lg: 18px;
+      --radius-md: 12px;
+      --font-display: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
+      --font-ui: "Avenir Next", "Segoe UI", "PingFang SC", sans-serif;
+      --font-mono: "Cascadia Code", "SFMono-Regular", monospace;
+    }
+
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --canvas: #17232a;
+      --paper: rgba(31, 45, 52, 0.92);
+      --paper-solid: #203139;
+      --ink: #f4eee2;
+      --muted: #a7b2b5;
+      --line: rgba(237, 231, 219, 0.13);
+      --line-strong: rgba(237, 231, 219, 0.23);
+      --accent: #e1b76d;
+      --accent-strong: #f0c97c;
+      --accent-soft: #55431f;
+      --teal: #7dc1b8;
+      --teal-soft: #274c4a;
+      --danger: #ef9c8b;
+      --danger-soft: #53322e;
+      --success: #8bd1a3;
+      --shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+      --shadow-soft: 0 10px 32px rgba(0, 0, 0, 0.18);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: var(--font-ui);
+      background:
+        radial-gradient(circle at 12% 18%, rgba(155, 105, 28, 0.09), transparent 26rem),
+        radial-gradient(circle at 88% 82%, rgba(44, 108, 104, 0.09), transparent 28rem),
+        var(--canvas);
+    }
+
+    button,
+    input,
+    textarea,
+    select {
+      font: inherit;
+    }
+
+    button {
+      color: inherit;
+    }
+
+    button:focus-visible,
+    input:focus-visible,
+    textarea:focus-visible {
+      outline: 3px solid color-mix(in srgb, var(--accent) 52%, transparent);
+      outline-offset: 2px;
+    }
+
+    .shell {
+      width: min(1440px, calc(100% - 32px));
+      margin: 20px auto;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-xl);
+      background: var(--paper);
+      box-shadow: var(--shadow);
+      overflow: clip;
+      backdrop-filter: blur(18px);
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 42px;
+      height: 42px;
+      place-items: center;
+      border-radius: 14px;
+      color: #fff;
+      background: linear-gradient(145deg, var(--accent), var(--accent-strong));
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 700;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .brand-copy {
+      min-width: 0;
+    }
+
+    .brand-copy strong {
+      display: block;
+      font-family: var(--font-display);
+      font-size: 22px;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-copy span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .topbar-spacer {
+      flex: 1;
+    }
+
+    .prototype-badge {
+      padding: 7px 11px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .icon-button,
+    .button {
+      min-height: 44px;
+      border: 1px solid var(--line-strong);
+      border-radius: 12px;
+      background: var(--paper-solid);
+      cursor: pointer;
+      transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+    }
+
+    .icon-button:hover,
+    .button:hover {
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+
+    .icon-button {
+      display: grid;
+      width: 44px;
+      place-items: center;
+      font-size: 17px;
+    }
+
+    .button {
+      padding: 0 16px;
+      font-weight: 650;
+    }
+
+    .button.primary {
+      border-color: var(--accent);
+      color: #fff;
+      background: var(--accent);
+    }
+
+    html[data-theme="dark"] .button.primary {
+      color: #1b272c;
+    }
+
+    .button.danger {
+      border-color: var(--danger);
+      color: var(--danger);
+      background: var(--danger-soft);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 210px minmax(0, 1fr);
+      min-height: 760px;
+    }
+
+    .side {
+      padding: 22px 16px;
+      border-right: 1px solid var(--line);
+    }
+
+    .side-label {
+      margin: 0 10px 10px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+    }
+
+    .side-nav {
+      display: grid;
+      gap: 8px;
+    }
+
+    .side-nav button {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 48px;
+      padding: 0 13px;
+      border: 0;
+      border-radius: 13px;
+      color: var(--muted);
+      background: transparent;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .side-nav button.active {
+      color: var(--ink);
+      background: var(--accent-soft);
+    }
+
+    .nav-index {
+      display: grid;
+      width: 25px;
+      height: 25px;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+
+    .content {
+      min-width: 0;
+      padding: 34px;
+    }
+
+    .page {
+      display: none;
+      animation: rise 220ms ease both;
+    }
+
+    .page.active {
+      display: block;
+    }
+
+    @keyframes rise {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 850;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    h1 {
+      max-width: 840px;
+      margin-bottom: 10px;
+      font-family: var(--font-display);
+      font-size: clamp(34px, 5vw, 58px);
+      line-height: 0.98;
+      letter-spacing: -0.04em;
+    }
+
+    h2 {
+      margin-bottom: 18px;
+      font-family: var(--font-display);
+      font-size: 30px;
+      letter-spacing: -0.025em;
+    }
+
+    h3 {
+      margin-bottom: 12px;
+      font-size: 15px;
+    }
+
+    .lede {
+      max-width: 760px;
+      margin-bottom: 26px;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.75;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.6fr);
+      gap: 22px;
+      align-items: stretch;
+      margin-bottom: 30px;
+    }
+
+    .hero-copy,
+    .hero-card,
+    .card,
+    .workspace {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: var(--paper-solid);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .hero-copy {
+      padding: 34px;
+    }
+
+    .hero-card {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 22px;
+      background:
+        linear-gradient(145deg, color-mix(in srgb, var(--teal-soft) 66%, transparent), transparent),
+        var(--paper-solid);
+    }
+
+    .metric {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .metric:last-child {
+      border-bottom: 0;
+    }
+
+    .metric strong {
+      font-family: var(--font-display);
+      font-size: 31px;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .segmented {
+      display: inline-flex;
+      gap: 5px;
+      padding: 5px;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      background: color-mix(in srgb, var(--canvas) 66%, transparent);
+    }
+
+    .segmented button {
+      min-width: 92px;
+      min-height: 42px;
+      padding: 0 16px;
+      border: 0;
+      border-radius: 11px;
+      color: var(--muted);
+      background: transparent;
+      cursor: pointer;
+      font-weight: 750;
+      transition: color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+    }
+
+    .segmented button.active {
+      color: var(--ink);
+      background: var(--paper-solid);
+      box-shadow: 0 7px 18px rgba(64, 48, 27, 0.12);
+    }
+
+    .toolbar-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .workspace {
+      overflow: visible;
+    }
+
+    .workspace-pad {
+      padding: 22px;
+    }
+
+    .paste-zone {
+      padding: 22px;
+      border-bottom: 1px solid var(--line);
+      background:
+        linear-gradient(115deg, color-mix(in srgb, var(--accent-soft) 38%, transparent), transparent 55%);
+    }
+
+    textarea,
+    .field input,
+    .field select {
+      width: 100%;
+      border: 1px solid var(--line-strong);
+      border-radius: 12px;
+      color: var(--ink);
+      background: var(--paper-solid);
+    }
+
+    textarea {
+      min-height: 118px;
+      padding: 14px;
+      resize: vertical;
+      line-height: 1.65;
+    }
+
+    .paste-actions,
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .view {
+      display: none;
+    }
+
+    .view.active {
+      display: block;
+    }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 11px;
+      border-radius: 999px;
+      color: var(--success);
+      background: color-mix(in srgb, var(--teal-soft) 68%, transparent);
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .field {
+      min-width: 0;
+    }
+
+    .field label,
+    .field-label {
+      display: block;
+      margin-bottom: 7px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .field input,
+    .field select {
+      min-height: 44px;
+      padding: 0 12px;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th,
+    td {
+      padding: 13px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    th {
+      color: var(--muted);
+      background: color-mix(in srgb, var(--canvas) 62%, transparent);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    tfoot td {
+      font-weight: 800;
+      background: color-mix(in srgb, var(--accent-soft) 48%, transparent);
+    }
+
+    .money {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .notice {
+      display: flex;
+      gap: 12px;
+      padding: 15px;
+      border: 1px solid color-mix(in srgb, var(--teal) 28%, var(--line));
+      border-radius: 14px;
+      color: var(--teal);
+      background: color-mix(in srgb, var(--teal-soft) 56%, transparent);
+      line-height: 1.65;
+    }
+
+    .notice.danger {
+      border-color: color-mix(in srgb, var(--danger) 30%, var(--line));
+      color: var(--danger);
+      background: color-mix(in srgb, var(--danger-soft) 58%, transparent);
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(280px, 0.38fr);
+      gap: 18px;
+    }
+
+    .card {
+      padding: 20px;
+    }
+
+    .summary-list {
+      display: grid;
+      gap: 11px;
+    }
+
+    .summary-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      padding-bottom: 11px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .summary-item:last-child {
+      padding-bottom: 0;
+      border-bottom: 0;
+    }
+
+    .summary-item span {
+      color: var(--muted);
+    }
+
+    .summary-item strong {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .select {
+      position: relative;
+    }
+
+    .select-trigger {
+      display: flex;
+      width: 100%;
+      min-height: 44px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: 12px;
+      color: var(--ink);
+      background: var(--paper-solid);
+      cursor: pointer;
+    }
+
+    .select-trigger svg {
+      width: 18px;
+      height: 18px;
+      color: var(--muted);
+      transition: transform 160ms ease;
+    }
+
+    .select.open .select-trigger svg {
+      transform: rotate(180deg);
+    }
+
+    .select-menu {
+      position: absolute;
+      z-index: 30;
+      top: calc(100% + 7px);
+      left: 0;
+      display: grid;
+      width: 100%;
+      max-height: 250px;
+      padding: 6px;
+      overflow: auto;
+      border: 1px solid var(--line-strong);
+      border-radius: 13px;
+      background: var(--paper-solid);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .select-menu[hidden] {
+      display: none;
+    }
+
+    .select-option {
+      min-height: 42px;
+      padding: 0 11px;
+      border: 0;
+      border-radius: 9px;
+      color: var(--ink);
+      background: transparent;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .select-option:hover,
+    .select-option.active {
+      background: var(--accent-soft);
+    }
+
+    .department {
+      margin-bottom: 18px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .department-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 15px 17px;
+      background: color-mix(in srgb, var(--teal-soft) 44%, transparent);
+    }
+
+    .department-head strong {
+      font-family: var(--font-display);
+      font-size: 21px;
+    }
+
+    .department-total {
+      color: var(--teal);
+      font-family: var(--font-mono);
+      font-weight: 850;
+    }
+
+    .template-callout {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 18px;
+      padding: 15px 17px;
+      border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--accent-soft) 45%, transparent);
+    }
+
+    .template-callout div {
+      flex: 1;
+    }
+
+    .template-callout strong {
+      display: block;
+      margin-bottom: 3px;
+    }
+
+    .template-callout span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .component-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .swatches {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .swatch {
+      width: 76px;
+      height: 76px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+    }
+
+    .toast-demo {
+      position: fixed;
+      right: 24px;
+      bottom: 24px;
+      z-index: 80;
+      max-width: 340px;
+      padding: 14px 16px;
+      border: 1px solid var(--line-strong);
+      border-radius: 13px;
+      background: var(--paper-solid);
+      box-shadow: var(--shadow);
+      transform: translateY(20px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 180ms ease, transform 180ms ease;
+    }
+
+    .toast-demo.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      z-index: 70;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: rgba(17, 25, 29, 0.55);
+    }
+
+    .modal-backdrop[hidden] {
+      display: none;
+    }
+
+    .modal {
+      width: min(560px, 100%);
+      max-height: min(720px, calc(100vh - 40px));
+      overflow: auto;
+      border: 1px solid var(--line-strong);
+      border-radius: 22px;
+      background: var(--paper-solid);
+      box-shadow: var(--shadow);
+    }
+
+    .modal-head,
+    .modal-body,
+    .modal-foot {
+      padding: 20px;
+    }
+
+    .modal-head,
+    .modal-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .modal-head {
+      border-bottom: 1px solid var(--line);
+    }
+
+    .modal-foot {
+      border-top: 1px solid var(--line);
+    }
+
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 44px;
+    }
+
+    .check-row input {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--accent);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 980px) {
+      .hero,
+      .two-col {
+        grid-template-columns: 1fr;
+      }
+
+      .form-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 720px) {
+      .shell {
+        width: min(100% - 18px, 1440px);
+        margin: 9px auto;
+        border-radius: 21px;
+      }
+
+      .topbar {
+        align-items: flex-start;
+        padding: 15px;
+      }
+
+      .prototype-badge {
+        display: none;
+      }
+
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .side {
+        position: sticky;
+        z-index: 20;
+        top: 0;
+        padding: 10px;
+        overflow-x: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+        background: var(--paper-solid);
+      }
+
+      .side-label {
+        display: none;
+      }
+
+      .side-nav {
+        display: flex;
+        min-width: max-content;
+      }
+
+      .side-nav button {
+        min-width: 112px;
+      }
+
+      .content {
+        padding: 22px 14px;
+      }
+
+      .hero-copy,
+      .hero-card,
+      .card,
+      .workspace-pad,
+      .paste-zone {
+        padding: 17px;
+      }
+
+      h1 {
+        font-size: 39px;
+      }
+
+      .toolbar-row {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .segmented {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        width: 100%;
+      }
+
+      .segmented button {
+        min-width: 0;
+        padding: 0 9px;
+      }
+
+      .form-grid,
+      .component-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .template-callout {
+        align-items: stretch;
+        flex-direction: column;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand-mark">A</div>
+      <div class="brand-copy">
+        <strong>岸香咖啡 · 经营台</strong>
+        <span>日报、采购、工资交互重构原型</span>
+      </div>
+      <div class="topbar-spacer"></div>
+      <div class="prototype-badge">可点击原型 · 数据仅保存在当前页面</div>
+      <button class="icon-button" id="themeToggle" type="button" aria-label="切换主题">◐</button>
+    </header>
+
+    <div class="layout">
+      <aside class="side">
+        <p class="side-label">PROTOTYPE</p>
+        <nav class="side-nav" aria-label="原型页面">
+          <button class="active" type="button" data-page-target="daily"><span class="nav-index">01</span>日报</button>
+          <button type="button" data-page-target="purchase"><span class="nav-index">02</span>采购</button>
+          <button type="button" data-page-target="salary"><span class="nav-index">03</span>工资</button>
+          <button type="button" data-page-target="components"><span class="nav-index">04</span>组件</button>
+        </nav>
+      </aside>
+
+      <section class="content">
+        <section class="page active" id="page-daily">
+          <div class="hero">
+            <div class="hero-copy">
+              <p class="eyebrow">Daily operations</p>
+              <h1>解析在上，录入在下。</h1>
+              <p class="lede">粘贴文本框不再和手动录入互相抢位置。解析后，结构化数据直接进入可编辑表格；“明细”只负责查看历史记录。</p>
+              <div class="segmented" data-tab-group="daily">
+                <button class="active" type="button" data-tab-target="daily-entry">录入</button>
+                <button type="button" data-tab-target="daily-detail">明细</button>
+              </div>
+            </div>
+            <div class="hero-card">
+              <div>
+                <p class="eyebrow">Today</p>
+                <h2>2026-09-25</h2>
+              </div>
+              <div class="metric"><span>实收</span><strong>¥12,800</strong></div>
+              <div class="metric"><span>客数</span><strong>86</strong></div>
+              <div class="metric"><span>外卖</span><strong>¥1,200</strong></div>
+            </div>
+          </div>
+
+          <div class="workspace">
+            <section class="view active" id="daily-entry">
+              <div class="paste-zone">
+                <label class="field-label" for="dailyPaste">日报原文</label>
+                <textarea id="dailyPaste" placeholder="粘贴日报文字...">流水 12800
+厨房 7200
+吧台 6000
+外卖 1200
+人数 86</textarea>
+                <div class="paste-actions">
+                  <button class="button primary" id="parseDaily" type="button">解析日报</button>
+                  <button class="button" type="button" onclick="showToast('已清空解析草稿')">清空草稿</button>
+                </div>
+              </div>
+
+              <div class="workspace-pad" id="dailyParsed">
+                <div class="status-row">
+                  <span class="status-pill"><span class="status-dot"></span>解析完成，可继续修改</span>
+                  <span class="muted">草稿尚未保存</span>
+                </div>
+
+                <div class="form-grid">
+                  <div class="field"><label for="dailyDate">日期</label><input id="dailyDate" value="2026-09-25"></div>
+                  <div class="field"><label for="dailyNet">实收</label><input id="dailyNet" value="12800"></div>
+                  <div class="field"><label for="dailyKitchen">厨房</label><input id="dailyKitchen" value="7200"></div>
+                  <div class="field"><label for="dailyBar">吧台</label><input id="dailyBar" value="6000"></div>
+                </div>
+
+                <div class="table-wrap">
+                  <table>
+                    <thead><tr><th>字段</th><th>解析值</th><th>修正值</th><th>状态</th></tr></thead>
+                    <tbody>
+                      <tr><td>外卖</td><td class="money">1,200</td><td><input value="1200" aria-label="外卖修正值"></td><td><span class="status-pill">已映射</span></td></tr>
+                      <tr><td>人数</td><td class="money">86</td><td><input value="86" aria-label="人数修正值"></td><td><span class="status-pill">已映射</span></td></tr>
+                      <tr><td>其他收入</td><td class="money">300</td><td><input value="300" aria-label="其他收入修正值"></td><td><span class="status-pill">可修改</span></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="actions">
+                  <button class="button primary" type="button" onclick="showToast('原型：日报草稿已保存')">保存日报</button>
+                  <button class="button" type="button" onclick="showToast('原型：继续显示录入草稿')">继续修改</button>
+                </div>
+              </div>
+            </section>
+
+            <section class="view" id="daily-detail">
+              <div class="workspace-pad">
+                <div class="toolbar-row">
+                  <div><h2>日报明细</h2><div class="muted">按月份查看已保存记录</div></div>
+                  <button class="button" type="button">2026-09</button>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead><tr><th>日期</th><th>实收</th><th>客数</th><th>厨房</th><th>吧台</th><th>外卖</th></tr></thead>
+                    <tbody>
+                      <tr><td>2026-09-25</td><td class="money">¥12,800</td><td class="money">86</td><td class="money">¥7,200</td><td class="money">¥6,000</td><td class="money">¥1,200</td></tr>
+                      <tr><td>2026-09-24</td><td class="money">¥11,360</td><td class="money">78</td><td class="money">¥6,580</td><td class="money">¥5,400</td><td class="money">¥980</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="page" id="page-purchase">
+          <p class="eyebrow">Procurement</p>
+          <h1>录入、退货、明细，各自说清楚。</h1>
+          <p class="lede">粘贴分析入口固定在上方。退货不再伪装成来源，而是继承原采购单的来源、区域和分类。</p>
+
+          <div class="segmented" data-tab-group="purchase">
+            <button class="active" type="button" data-tab-target="purchase-entry">录入</button>
+            <button type="button" data-tab-target="purchase-return">退货</button>
+            <button type="button" data-tab-target="purchase-detail">明细</button>
+          </div>
+
+          <div class="workspace" style="margin-top:18px">
+            <div class="paste-zone">
+              <label class="field-label" for="purchasePaste">粘贴采购单 / 出库单</label>
+              <textarea id="purchasePaste" placeholder="粘贴采购单文字...">咖啡豆 10kg 120/kg 1200 咖啡类
+纸巾 20箱 59/箱 1180 易耗品</textarea>
+              <div class="paste-actions">
+                <button class="button primary" type="button" onclick="showToast('原型：解析结果已填入录入表')">解析并填入</button>
+                <button class="button" type="button">AI 识图</button>
+              </div>
+            </div>
+
+            <section class="view active" id="purchase-entry">
+              <div class="workspace-pad">
+                <div class="form-grid">
+                  <div class="field"><label for="purchaseDate">日期</label><input id="purchaseDate" value="2026-09-25"></div>
+                  <div class="field">
+                    <label for="purchaseSource">来源</label>
+                    <div class="select" id="purchaseSource">
+                      <button class="select-trigger" type="button" aria-haspopup="listbox" aria-expanded="false"><span>岸香贸易</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m7 10 5 5 5-5"/></svg></button>
+                      <div class="select-menu" role="listbox" hidden>
+                        <button class="select-option active" type="button" role="option" aria-selected="true">岸香贸易</button>
+                        <button class="select-option" type="button" role="option" aria-selected="false">外购</button>
+                        <button class="select-option" type="button" role="option" aria-selected="false">网购</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="field"><label for="purchaseSection">区域</label><input id="purchaseSection" value="吧台"></div>
+                  <div class="field"><label for="purchaseCategory">分类</label><input id="purchaseCategory" value="咖啡类"></div>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead><tr><th>物品</th><th>数量</th><th>单位</th><th>单价</th><th>总价</th><th>归属</th></tr></thead>
+                    <tbody>
+                      <tr><td>咖啡豆</td><td class="money">10</td><td>kg</td><td class="money">¥120</td><td class="money">¥1,200</td><td>吧台 / 咖啡类</td></tr>
+                      <tr><td>纸巾</td><td class="money">20</td><td>箱</td><td class="money">¥59</td><td class="money">¥1,180</td><td>外场 / 易耗品</td></tr>
+                    </tbody>
+                    <tfoot><tr><td>合计</td><td></td><td></td><td></td><td class="money">¥2,380</td><td></td></tr></tfoot>
+                  </table>
+                </div>
+                <div class="actions"><button class="button primary" type="button" onclick="showToast('原型：采购单已保存')">保存采购单</button><button class="button" type="button">+ 添加物品</button></div>
+              </div>
+            </section>
+
+            <section class="view" id="purchase-return">
+              <div class="workspace-pad">
+                <div class="notice">
+                  <strong>归属锁定</strong>
+                  <div>退货不是来源。选择原采购后，来源、区域和分类自动继承原记录，避免统计数据把退货误当成一个供应商。</div>
+                </div>
+                <div class="form-grid" style="margin-top:18px">
+                  <div class="field">
+                    <label for="returnPurchase">原采购单</label>
+                    <div class="select" id="returnPurchase">
+                      <button class="select-trigger" type="button" aria-haspopup="listbox" aria-expanded="false"><span>2026-09-25 · 岸香贸易</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m7 10 5 5 5-5"/></svg></button>
+                      <div class="select-menu" role="listbox" hidden>
+                        <button class="select-option active" type="button" role="option" aria-selected="true">2026-09-25 · 岸香贸易</button>
+                        <button class="select-option" type="button" role="option" aria-selected="false">2026-09-24 · 外购</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="field"><label for="returnDate">退货日期</label><input id="returnDate" value="2026-09-26"></div>
+                  <div class="field"><label for="returnQty">退货数量</label><input id="returnQty" value="2"></div>
+                  <div class="field"><label for="returnTotal">退货金额</label><input id="returnTotal" value="240"></div>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead><tr><th>物品</th><th>原来源</th><th>区域</th><th>分类</th><th>退货数量</th><th>退货金额</th></tr></thead>
+                    <tbody>
+                      <tr><td>咖啡豆</td><td>岸香贸易</td><td>吧台</td><td>咖啡类</td><td><input value="2" aria-label="咖啡豆退货数量"></td><td><input value="240" aria-label="咖啡豆退货金额"></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="actions"><button class="button danger" type="button" onclick="showToast('原型：退货记录已保存，并继承原归属')">确认退货</button></div>
+              </div>
+            </section>
+
+            <section class="view" id="purchase-detail">
+              <div class="workspace-pad">
+                <div class="toolbar-row">
+                  <div><h2>采购明细</h2><div class="muted">正常采购与退货分开统计</div></div>
+                  <button class="button" type="button">2026-09</button>
+                </div>
+                <div class="two-col">
+                  <div class="table-wrap">
+                    <table>
+                      <thead><tr><th>日期</th><th>来源</th><th>类型</th><th>区域</th><th>金额</th></tr></thead>
+                      <tbody>
+                        <tr><td>2026-09-25</td><td>岸香贸易</td><td>采购</td><td>吧台</td><td class="money">¥1,200</td></tr>
+                        <tr><td>2026-09-25</td><td>岸香贸易</td><td>采购</td><td>外场</td><td class="money">¥1,180</td></tr>
+                        <tr><td>2026-09-26</td><td>岸香贸易</td><td>退货</td><td>吧台</td><td class="money">-¥240</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="card">
+                    <h3>归属统计</h3>
+                    <div class="summary-list">
+                      <div class="summary-item"><span>岸香贸易采购</span><strong>¥2,380</strong></div>
+                      <div class="summary-item"><span>岸香贸易退货</span><strong>-¥240</strong></div>
+                      <div class="summary-item"><span>净采购</span><strong>¥2,140</strong></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="page" id="page-salary">
+          <p class="eyebrow">Payroll</p>
+          <h1>部门有节奏，模板跟着账号走。</h1>
+          <p class="lede">工资录入按部门分组，部门合计实时计算。模板只保留部门、姓名、职务和基本工资，并通过账号云端恢复。</p>
+
+          <div class="toolbar-row">
+            <div class="segmented" data-tab-group="salary">
+              <button class="active" type="button" data-tab-target="salary-entry">录入</button>
+              <button type="button" data-tab-target="salary-detail">明细</button>
+            </div>
+            <div class="actions" style="margin-top:0">
+              <button class="button" type="button" onclick="openTemplateModal()">保存模板</button>
+              <button class="button primary" type="button" onclick="showToast('原型：工资表已保存')">保存工资表</button>
+            </div>
+          </div>
+
+          <div class="template-callout">
+            <div>
+              <strong>账号云端模板</strong>
+              <span>只保存部门、姓名、职务、基本工资；津贴、提成、社保和个税不进入模板。</span>
+            </div>
+            <span class="status-pill"><span class="status-dot"></span>已同步</span>
+          </div>
+
+          <section class="view active" id="salary-entry">
+            <div class="department">
+              <div class="department-head"><strong>吧台</strong><span class="department-total">合计 ¥12,600</span></div>
+              <div class="table-wrap" style="border:0;border-radius:0">
+                <table>
+                  <thead><tr><th>姓名</th><th>职务</th><th>基本工资</th><th>津贴</th><th>提成</th><th>实发</th></tr></thead>
+                  <tbody>
+                    <tr><td>小林</td><td>吧台主管</td><td class="money">5,800</td><td class="money">600</td><td class="money">1,200</td><td class="money">7,600</td></tr>
+                    <tr><td>小周</td><td>咖啡师</td><td class="money">4,200</td><td class="money">300</td><td class="money">500</td><td class="money">5,000</td></tr>
+                  </tbody>
+                  <tfoot><tr><td>部门合计</td><td></td><td class="money">¥10,000</td><td class="money">¥900</td><td class="money">¥1,700</td><td class="money">¥12,600</td></tr></tfoot>
+                </table>
+              </div>
+            </div>
+
+            <div class="department">
+              <div class="department-head"><strong>厨房</strong><span class="department-total">合计 ¥18,400</span></div>
+              <div class="table-wrap" style="border:0;border-radius:0">
+                <table>
+                  <thead><tr><th>姓名</th><th>职务</th><th>基本工资</th><th>津贴</th><th>提成</th><th>实发</th></tr></thead>
+                  <tbody>
+                    <tr><td>阿杰</td><td>厨师长</td><td class="money">7,200</td><td class="money">1,000</td><td class="money">1,600</td><td class="money">9,800</td></tr>
+                    <tr><td>小陈</td><td>厨师</td><td class="money">5,600</td><td class="money">800</td><td class="money">2,200</td><td class="money">8,600</td></tr>
+                  </tbody>
+                  <tfoot><tr><td>部门合计</td><td></td><td class="money">¥12,800</td><td class="money">¥1,800</td><td class="money">¥3,800</td><td class="money">¥18,400</td></tr></tfoot>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section class="view" id="salary-detail">
+            <div class="card">
+              <h2>工资明细</h2>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>月份</th><th>人数</th><th>部门</th><th>实发工资</th><th>操作</th></tr></thead>
+                  <tbody>
+                    <tr><td>2026-09</td><td class="money">4</td><td>吧台 / 厨房</td><td class="money">¥31,000</td><td><button class="button" type="button">查看</button></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section class="page" id="page-components">
+          <p class="eyebrow">Design system</p>
+          <h1>主题感知，不靠一次性样式。</h1>
+          <p class="lede">这套组件会吸收日期选择器的圆角、边框、焦点和阴影语言，并为键盘、移动端和错误状态提供完整行为。</p>
+
+          <div class="component-grid">
+            <div class="card">
+              <h2>主题感知下拉框</h2>
+              <div class="field">
+                <label for="componentSelect">来源</label>
+                <div class="select" id="componentSelect">
+                  <button class="select-trigger" type="button" aria-haspopup="listbox" aria-expanded="false"><span>岸香贸易</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m7 10 5 5 5-5"/></svg></button>
+                  <div class="select-menu" role="listbox" hidden>
+                    <button class="select-option active" type="button" role="option" aria-selected="true">岸香贸易</button>
+                    <button class="select-option" type="button" role="option" aria-selected="false">外购</button>
+                    <button class="select-option" type="button" role="option" aria-selected="false">网购</button>
+                  </div>
+                </div>
+              </div>
+              <div class="actions">
+                <button class="button primary" type="button">主要按钮</button>
+                <button class="button" type="button">次要按钮</button>
+                <button class="button danger" type="button">删除按钮</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <h2>色彩与密度</h2>
+              <div class="swatches">
+                <div class="swatch" style="background:var(--canvas)"></div>
+                <div class="swatch" style="background:var(--paper-solid)"></div>
+                <div class="swatch" style="background:var(--accent)"></div>
+                <div class="swatch" style="background:var(--teal)"></div>
+                <div class="swatch" style="background:var(--danger)"></div>
+              </div>
+              <p class="muted" style="margin-top:18px;line-height:1.8">正文 15–16px，控件高度 44px，主转场 160–220ms，数字使用等宽数字。主题通过 CSS 变量切换，不复制组件代码。</p>
+            </div>
+
+            <div class="card">
+              <h2>表单状态</h2>
+              <div class="form-grid" style="grid-template-columns:1fr">
+                <div class="field"><label for="dateComponent">日期</label><input id="dateComponent" value="2026-09-25"></div>
+                <div class="field"><label for="disabledComponent">禁用状态</label><input id="disabledComponent" value="不可修改" disabled></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <h2>动效与可访问性</h2>
+              <div class="notice">
+                <strong>检查点</strong>
+                <div>方向键切换选项、Escape 关闭菜单、焦点环可见、弹窗焦点不丢失、prefers-reduced-motion 自动降级。</div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </section>
+    </div>
+  </main>
+
+  <div class="toast-demo" id="toast" role="status" aria-live="polite"></div>
+
+  <div class="modal-backdrop" id="templateModal" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="templateTitle">
+      <header class="modal-head">
+        <div><p class="eyebrow">Template</p><h2 id="templateTitle">保存工资模板</h2></div>
+        <button class="icon-button" type="button" aria-label="关闭模板弹窗" onclick="closeTemplateModal()">×</button>
+      </header>
+      <div class="modal-body">
+        <div class="notice">
+          <strong>只保存稳定字段</strong>
+          <div>部门、姓名、职务、基本工资会随账号云端保存。津贴、提成、绩效、社保、个税和备注不会写入模板。</div>
+        </div>
+        <div style="margin-top:18px">
+          <label class="check-row"><input type="checkbox" checked> 吧台 · 小林 · 吧台主管 · ¥5,800</label>
+          <label class="check-row"><input type="checkbox" checked> 吧台 · 小周 · 咖啡师 · ¥4,200</label>
+          <label class="check-row"><input type="checkbox" checked> 厨房 · 阿杰 · 厨师长 · ¥7,200</label>
+          <label class="check-row"><input type="checkbox" checked> 厨房 · 小陈 · 厨师 · ¥5,600</label>
+        </div>
+      </div>
+      <footer class="modal-foot">
+        <button class="button" type="button" onclick="closeTemplateModal()">取消</button>
+        <button class="button primary" type="button" onclick="closeTemplateModal(); showToast('原型：模板已保存到账号云端')">保存模板</button>
+      </footer>
+    </section>
+  </div>
+
+  <script>
+    const pageButtons = Array.from(document.querySelectorAll('[data-page-target]'));
+    const pages = Array.from(document.querySelectorAll('.page'));
+    const tabGroups = Array.from(document.querySelectorAll('[data-tab-group]'));
+    const toast = document.getElementById('toast');
+    let toastTimer = 0;
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(function () {
+        toast.classList.remove('show');
+      }, 2200);
+    }
+
+    pageButtons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        const target = button.getAttribute('data-page-target');
+        pageButtons.forEach(function (item) {
+          item.classList.toggle('active', item === button);
+        });
+        pages.forEach(function (page) {
+          page.classList.toggle('active', page.id === 'page-' + target);
+        });
+      });
+    });
+
+    tabGroups.forEach(function (group) {
+      const buttons = Array.from(group.querySelectorAll('[data-tab-target]'));
+      buttons.forEach(function (button) {
+        button.addEventListener('click', function () {
+          const target = button.getAttribute('data-tab-target');
+          buttons.forEach(function (item) {
+            item.classList.toggle('active', item === button);
+            item.setAttribute('aria-selected', String(item === button));
+          });
+          document.querySelectorAll('.view').forEach(function (view) {
+            if (['daily-entry', 'daily-detail', 'purchase-entry', 'purchase-return', 'purchase-detail', 'salary-entry', 'salary-detail'].includes(view.id)) {
+              view.classList.toggle('active', view.id === target);
+            }
+          });
+        });
+      });
+    });
+
+    document.getElementById('themeToggle').addEventListener('click', function () {
+      const root = document.documentElement;
+      const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      showToast(next === 'dark' ? '已切换到深色主题' : '已切换到浅色主题');
+    });
+
+    document.getElementById('parseDaily').addEventListener('click', function () {
+      const button = document.getElementById('parseDaily');
+      document.getElementById('dailyParsed').classList.remove('hidden');
+      button.textContent = '重新解析';
+      showToast('解析完成，结构化草稿可以继续修改');
+    });
+
+    document.querySelectorAll('.select').forEach(function (select) {
+      const trigger = select.querySelector('.select-trigger');
+      const menu = select.querySelector('.select-menu');
+      const options = Array.from(select.querySelectorAll('.select-option'));
+
+      function close() {
+        select.classList.remove('open');
+        menu.hidden = true;
+        trigger.setAttribute('aria-expanded', 'false');
+      }
+
+      trigger.addEventListener('click', function () {
+        const open = menu.hidden;
+        document.querySelectorAll('.select.open').forEach(function (other) {
+          other.classList.remove('open');
+          other.querySelector('.select-menu').hidden = true;
+          other.querySelector('.select-trigger').setAttribute('aria-expanded', 'false');
+        });
+        select.classList.toggle('open', open);
+        menu.hidden = !open;
+        trigger.setAttribute('aria-expanded', String(open));
+        if (open && options[0]) options[0].focus();
+      });
+
+      options.forEach(function (option, index) {
+        option.addEventListener('click', function () {
+          options.forEach(function (item) {
+            item.classList.remove('active');
+            item.setAttribute('aria-selected', 'false');
+          });
+          option.classList.add('active');
+          option.setAttribute('aria-selected', 'true');
+          trigger.querySelector('span').textContent = option.textContent;
+          close();
+          trigger.focus();
+        });
+
+        option.addEventListener('keydown', function (event) {
+          if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            options[(index + 1) % options.length].focus();
+          }
+          if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            options[(index - 1 + options.length) % options.length].focus();
+          }
+          if (event.key === 'Escape') {
+            close();
+            trigger.focus();
+          }
+        });
+      });
+
+      trigger.addEventListener('keydown', function (event) {
+        if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          trigger.click();
+        }
+      });
+    });
+
+    function openTemplateModal() {
+      const modal = document.getElementById('templateModal');
+      modal.hidden = false;
+      modal.querySelector('button').focus();
+    }
+
+    function closeTemplateModal() {
+      document.getElementById('templateModal').hidden = true;
+    }
+
+    document.getElementById('templateModal').addEventListener('click', function (event) {
+      if (event.target === event.currentTarget) closeTemplateModal();
+    });
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        closeTemplateModal();
+        document.querySelectorAll('.select.open').forEach(function (select) {
+          select.classList.remove('open');
+          select.querySelector('.select-menu').hidden = true;
+          select.querySelector('.select-trigger').setAttribute('aria-expanded', 'false');
+        });
+      }
+    });
+  </script>
+</body>
+</html>

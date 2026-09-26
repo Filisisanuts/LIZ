@@ -16,9 +16,9 @@ function rExpense() {
     var h = '';
 
     // 标签栏
-    h += '<div class="tab-bar" id="expTabs">';
-    h += '<button class="tab-btn active" onclick="switchExpTab(\'input\')">录入</button>';
-    h += '<button class="tab-btn" onclick="switchExpTab(\'detail\')">明细</button>';
+    h += '<div class="view-tabs" id="expTabs" role="tablist" aria-label="费用视图">';
+    h += '<button type="button" class="view-tab active" role="tab" aria-selected="true" onclick="switchExpTab(\'input\')">录入</button>';
+    h += '<button type="button" class="view-tab" role="tab" aria-selected="false" onclick="switchExpTab(\'detail\')">明细</button>';
     h += '</div>';
 
     // 录入页
@@ -160,9 +160,11 @@ function delExp(id) {
 function switchExpTab(tab){
     document.getElementById('expInput').style.display=tab==='input'?'':'none';
     document.getElementById('expDetail').style.display=tab==='detail'?'':'none';
-    var btns=document.querySelectorAll('#expTabs .tab-btn');
-    btns[0].className='tab-btn'+(tab==='input'?' active':'');
-    btns[1].className='tab-btn'+(tab==='detail'?' active':'');
+    var btns=document.querySelectorAll('#expTabs .view-tab');
+    btns[0].className='view-tab'+(tab==='input'?' active':'');
+    btns[1].className='view-tab'+(tab==='detail'?' active':'');
+    btns[0].setAttribute('aria-selected', String(tab==='input'));
+    btns[1].setAttribute('aria-selected', String(tab==='detail'));
     if(tab==='detail'){
         document.getElementById('expDetail').innerHTML=renderExpCalendar();
     }
@@ -464,7 +466,7 @@ function printExpPDF() {
     html += '.nr{text-align:right;font-family:"Lexend",monospace}tr.total{background:#f8f6f0;font-weight:600}tr.total td{border-top:2px solid #b08d57}';
     html += '.footer{text-align:center;color:#aaa;font-size:.68rem;margin-top:30px;padding-top:12px;border-top:1px solid #eee}';
     html += '.print-bar{position:fixed;bottom:20px;right:20px;display:flex;gap:8px;z-index:100}';
-    html += '.print-btn{padding:10px 20px;border:none;border-radius:8px;font-size:.82rem;cursor:pointer;transition:all .2s}';
+    html += '.print-btn{padding:10px 20px;border:none;border-radius:8px;font-size:.82rem;cursor:pointer;transition:color .2s ease,background-color .2s ease,border-color .2s ease,transform .2s ease}';
     html += '.print-btn.primary{background:#b08d57;color:#fff}.print-btn.secondary{background:#f0ece4;color:#333;border:1px solid #ddd}';
     html += '.print-btn:hover{opacity:.85}@media print{.print-bar{display:none}}</style></head><body>';
 
@@ -556,7 +558,7 @@ function doExportExpPDF() {
     html += '.nr{text-align:right;font-family:"Lexend",monospace}tr.total{background:#f8f6f0;font-weight:600}tr.total td{border-top:2px solid #b08d57}';
     html += '.footer{text-align:center;color:#aaa;font-size:.68rem;margin-top:30px;padding-top:12px;border-top:1px solid #eee}';
     html += '.print-bar{position:fixed;bottom:20px;right:20px;display:flex;gap:8px;z-index:100}';
-    html += '.print-btn{padding:10px 20px;border:none;border-radius:8px;font-size:.82rem;cursor:pointer;transition:all .2s}.print-btn.primary{background:#b08d57;color:#fff}.print-btn.secondary{background:#f0ece4;color:#333;border:1px solid #ddd}';
+    html += '.print-btn{padding:10px 20px;border:none;border-radius:8px;font-size:.82rem;cursor:pointer;transition:color .2s ease,background-color .2s ease,border-color .2s ease,transform .2s ease}.print-btn.primary{background:#b08d57;color:#fff}.print-btn.secondary{background:#f0ece4;color:#333;border:1px solid #ddd}';
     html += '.print-btn:hover{opacity:.85}@media print{.print-bar{display:none}}</style></head><body>';
 
     html += '<div class="print-bar no-print"><button class="print-btn secondary" onclick="window.close()">关闭</button><button class="print-btn primary" onclick="window.print()">打印 / 导出PDF</button></div>';

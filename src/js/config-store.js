@@ -13,6 +13,7 @@ function appConfigDefaults() {
     return {
         enabledModules: [],
         dailyLabels: [],
+        dailyFieldDefinitions: defaultDailyFieldDefinitions(),
         roomTypes: ['普通包厢', '500+包厢'],
         purchaseSources: [],
         purchaseSections: [],
@@ -21,11 +22,78 @@ function appConfigDefaults() {
         warehouseCategories: [],
         inventoryTypes: [],
         customInventoryTypes: [],
+        salaryDepartments: [],
+        salaryTemplates: [],
+        defaultSalaryTemplateId: '',
         dailyFeatures: { roomEnabled: false, reporterEnabled: false },
         onboardingCompleted: false,
         schemaVersion: APP_CONFIG_SCHEMA_VERSION,
         updatedAt: 0
     };
+}
+
+function defaultDailyFieldDefinitions() {
+    return [
+        { id: 'grossSales', label: '流水', group: '营收', path: 'revenue.grossSales', type: 'currency', statistic: 'revenue', visible: true, builtin: true },
+        { id: 'discount', label: '折扣', group: '营收', path: 'revenue.discount', type: 'currency', statistic: 'revenue', visible: true, builtin: true },
+        { id: 'netSales', label: '实收', group: '营收', path: 'revenue.netSales', type: 'currency', statistic: 'revenue', visible: true, builtin: true },
+        { id: 'kitchenSales', label: '厨房', group: '营收', path: 'revenue.kitchenSales', type: 'currency', statistic: 'revenue', visible: true, builtin: true },
+        { id: 'barSales', label: '吧台', group: '营收', path: 'revenue.barSales', type: 'currency', statistic: 'revenue', visible: true, builtin: true },
+        { id: 'cigaretteSales', label: '香烟', group: '营收', path: 'revenue.cigarette.total', type: 'currency', statistic: 'revenue', visible: true, builtin: true },
+        { id: 'otherRevenue', label: '其他', group: '营收', path: 'revenue.other', type: 'currency', statistic: 'revenue', visible: true, builtin: true },
+        { id: 'pos', label: 'POS', group: '支付', path: 'payment.pos', type: 'currency', statistic: 'payment', visible: true, builtin: true },
+        { id: 'ccbLife', label: '建行', group: '支付', path: 'payment.ccbLife', type: 'currency', statistic: 'payment', visible: true, builtin: true },
+        { id: 'cash', label: '现金', group: '支付', path: 'payment.cash', type: 'currency', statistic: 'payment', visible: true, builtin: true },
+        { id: 'memberCard', label: '会员', group: '支付', path: 'payment.memberCard', type: 'currency', statistic: 'payment', visible: true, builtin: true },
+        { id: 'treat', label: '招待', group: '支付', path: 'payment.treat', type: 'currency', statistic: 'payment', visible: true, builtin: true },
+        { id: 'arTotal', label: '合计', group: '应收', path: 'payment.ar.total', type: 'currency', statistic: 'receivable', visible: true, builtin: true, readonly: true },
+        { id: 'arMeituan', label: '美团团购', group: '应收', path: 'payment.ar.meituan', type: 'currency', statistic: 'receivable', visible: true, builtin: true },
+        { id: 'arDouyin', label: '抖音团购', group: '应收', path: 'payment.ar.douyin', type: 'currency', statistic: 'receivable', visible: true, builtin: true },
+        { id: 'deliveryTotal', label: '合计', group: '外卖', path: 'delivery.total', type: 'currency', statistic: 'delivery', visible: true, builtin: true, readonly: true },
+        { id: 'deliveryMeituan', label: '美团', group: '外卖', path: 'delivery.meituan', type: 'currency', statistic: 'delivery', visible: true, builtin: true },
+        { id: 'deliveryTaobao', label: '淘宝', group: '外卖', path: 'delivery.taobao', type: 'currency', statistic: 'delivery', visible: true, builtin: true },
+        { id: 'deliveryJd', label: '京东', group: '外卖', path: 'delivery.jd', type: 'currency', statistic: 'delivery', visible: true, builtin: true },
+        { id: 'guestCount', label: '人数', group: '客情', path: 'guest.count', type: 'number', statistic: 'guest', visible: true, builtin: true },
+        { id: 'avgSpend', label: '人均', group: '客情', path: 'guest.avgSpend', type: 'currency', statistic: 'none', visible: true, builtin: true },
+        { id: 'premiumRoomsToday', label: '500+包厢', group: '客情', path: 'guest.premiumRoomsToday', type: 'number', statistic: 'guest', visible: true, builtin: true },
+        { id: 'rooms', label: '包厢预定', group: '包厢预定', path: '', type: 'rooms', statistic: 'none', visible: true, builtin: true }
+    ].map(function(field, index) {
+        field.order = index;
+        return field;
+    });
+}
+
+function normalizeDailyFieldDefinitions(value) {
+    var defaults = defaultDailyFieldDefinitions();
+    var source = Array.isArray(value) ? value : [];
+    var result = [];
+    var used = {};
+
+    source.forEach(function(field, index) {
+        if (!field || !field.id) return;
+        var base = defaults.find(function(item) { return item.id === field.id; }) || {};
+        var definition = Object.assign({}, base, field);
+        definition.id = String(field.id);
+        definition.label = String(field.label || base.label || definition.id).trim();
+        definition.group = String(field.group || base.group || '其他').trim();
+        definition.path = String(field.path || base.path || '');
+        definition.type = field.type || base.type || 'currency';
+        definition.statistic = field.statistic || base.statistic || 'none';
+        definition.visible = field.visible !== false;
+        definition.builtin = field.builtin === true || base.builtin === true;
+        definition.readonly = field.readonly === true || base.readonly === true;
+        definition.order = Number.isFinite(Number(field.order)) ? Number(field.order) : index;
+        used[definition.id] = true;
+        result.push(definition);
+    });
+
+    defaults.forEach(function(field) {
+        if (!used[field.id]) result.push(Object.assign({}, field));
+    });
+    return result.sort(function(a, b) { return a.order - b.order; }).map(function(field, index) {
+        field.order = index;
+        return field;
+    });
 }
 
 function copyAppConfigValue(value) {
@@ -92,25 +160,23 @@ function appConfigTimestamp(raw) {
 }
 
 function mergeAppConfigCandidates(candidates) {
-    var merged = {};
-    for (var i = candidates.length - 1; i >= 0; i--) {
-        var raw = candidates[i];
-        Object.keys(raw).forEach(function(key) {
-            merged[key] = copyAppConfigValue(raw[key]);
-        });
-    }
-
+    // 配置是完整快照。逐字段混合本地与云端快照会让“空数组”覆盖云端已有项，
+    // 也会把不同时间点的配置拼成一个从未真实保存过的状态。
+    // 优先选择已完成引导或包含实际设置的候选项，再在其中取最新的一份。
+    var authoritative = candidates.filter(function(raw) {
+        return hasMeaningfulAppConfig(raw) || raw.onboardingCompleted === true;
+    });
+    var source = authoritative.length ? authoritative : candidates;
     var newest = null;
     var newestTime = -1;
-    candidates.forEach(function(raw) {
+    source.forEach(function(raw) {
         var time = appConfigTimestamp(raw);
         if (time > newestTime) {
             newest = raw;
             newestTime = time;
         }
     });
-    if (newest && newest.updatedAt !== undefined) merged.updatedAt = newest.updatedAt;
-    return merged;
+    return newest ? copyAppConfigValue(newest) : {};
 }
 
 function uniqueStrings(value, fallback) {
@@ -157,6 +223,8 @@ function legacyAppConfig(database) {
     var expenseCategories = [];
     var warehouseCategories = uniqueStrings(db.whCats, []);
     var purchaseCategories = categoryMap(db.areaCats, {});
+    var salaryDepartments = [];
+    var legacySalaryTemplate = [];
 
     try {
         labels = uniqueStrings(JSON.parse(localStorage.getItem('ax_fl') || '[]'), []);
@@ -185,6 +253,27 @@ function legacyAppConfig(database) {
         });
     }
 
+    (db.salaryRecords || []).forEach(function(record) {
+        var department = record && record.department ? String(record.department).trim() : '';
+        if (department && salaryDepartments.indexOf(department) < 0) salaryDepartments.push(department);
+    });
+
+    try {
+        legacySalaryTemplate = JSON.parse(localStorage.getItem(getConfigKey() + '_salaryTemplate') || '[]');
+        if (!Array.isArray(legacySalaryTemplate)) legacySalaryTemplate = [];
+        legacySalaryTemplate = legacySalaryTemplate.map(function(row) {
+            return {
+                department: String(row && row.department || '').trim(),
+                employee: String(row && row.employee || '').trim(),
+                position: String(row && row.position || '').trim(),
+                baseSalary: Number(row && row.baseSalary) || 0
+            };
+        }).filter(function(row) { return row.employee; });
+        legacySalaryTemplate.forEach(function(row) {
+            if (row.department && salaryDepartments.indexOf(row.department) < 0) salaryDepartments.push(row.department);
+        });
+    } catch (e) {}
+
     return {
         dailyLabels: labels,
         purchaseSources: sources,
@@ -192,8 +281,44 @@ function legacyAppConfig(database) {
         purchaseCategories: purchaseCategories,
         expenseCategories: expenseCategories,
         warehouseCategories: warehouseCategories,
+        salaryDepartments: salaryDepartments,
+        legacySalaryTemplate: legacySalaryTemplate,
         hasBusinessData: hasExistingBusinessData(db)
     };
+}
+
+function normalizeSalaryTemplateRows(value) {
+    if (!Array.isArray(value)) return [];
+    return value.map(function(row) {
+        return {
+            department: String(row && row.department || '').trim(),
+            employee: String(row && row.employee || '').trim(),
+            position: String(row && row.position || '').trim(),
+            baseSalary: Number(row && row.baseSalary) || 0
+        };
+    }).filter(function(row) { return row.employee; });
+}
+
+function normalizeSalaryTemplates(value, legacyRows) {
+    var source = Array.isArray(value) ? value : [];
+    var templates = source.map(function(template, index) {
+        return {
+            id: String(template && template.id || ('salary_template_' + (index + 1))),
+            name: String(template && template.name || ('模板 ' + (index + 1))).trim(),
+            isDefault: template && template.isDefault === true,
+            rows: normalizeSalaryTemplateRows(template && template.rows)
+        };
+    }).filter(function(template) { return template.name; });
+
+    if (!templates.length && legacyRows.length) {
+        templates = [{
+            id: 'salary_template_default',
+            name: '默认模板',
+            isDefault: true,
+            rows: normalizeSalaryTemplateRows(legacyRows)
+        }];
+    }
+    return templates;
 }
 
 function hasMeaningfulAppConfig(raw) {
@@ -206,6 +331,8 @@ function hasMeaningfulAppConfig(raw) {
         if (Array.isArray(raw[fields[i]]) && raw[fields[i]].length > 0) return true;
     }
     if (raw.purchaseCategories && Object.keys(raw.purchaseCategories).length > 0) return true;
+    if (Array.isArray(raw.salaryDepartments) && raw.salaryDepartments.length > 0) return true;
+    if (Array.isArray(raw.salaryTemplates) && raw.salaryTemplates.length > 0) return true;
     if (raw.dailyFeatures && (raw.dailyFeatures.roomEnabled || raw.dailyFeatures.reporterEnabled)) return true;
     return false;
 }
@@ -217,6 +344,7 @@ function normalizeAppConfig(raw, legacy) {
 
     config.enabledModules = uniqueStrings(source.enabledModules, []);
     config.dailyLabels = stringsWithLegacy(source.dailyLabels, legacy.dailyLabels, needsMigration);
+    config.dailyFieldDefinitions = normalizeDailyFieldDefinitions(source.dailyFieldDefinitions);
     config.roomTypes = uniqueStrings(source.roomTypes, config.roomTypes);
     config.purchaseSources = stringsWithLegacy(source.purchaseSources, legacy.purchaseSources, needsMigration);
     config.purchaseCategories = needsMigration
@@ -233,6 +361,10 @@ function normalizeAppConfig(raw, legacy) {
     config.warehouseCategories = stringsWithLegacy(source.warehouseCategories, legacy.warehouseCategories, needsMigration);
     config.inventoryTypes = uniqueStrings(source.inventoryTypes, []);
     config.customInventoryTypes = uniqueStrings(source.customInventoryTypes, []);
+    config.salaryDepartments = stringsWithLegacy(source.salaryDepartments, legacy.salaryDepartments, true);
+    config.salaryTemplates = normalizeSalaryTemplates(source.salaryTemplates, legacy.legacySalaryTemplate);
+    config.defaultSalaryTemplateId = String(source.defaultSalaryTemplateId || '') ||
+        (config.salaryTemplates.length && config.salaryTemplates[0].id) || '';
 
     var features = source.dailyFeatures && typeof source.dailyFeatures === 'object' ? source.dailyFeatures : {};
     config.dailyFeatures = {
@@ -265,6 +397,9 @@ function storeAppConfig(nextConfig) {
     if (typeof DB !== 'undefined' && DB) {
         if (!DB.settings) DB.settings = {};
         DB.settings[key] = copyAppConfigValue(config);
+        // 旧模块仍会读取这两个字段。显式保存配置时同步它们，保证新旧入口一致。
+        DB.areaCats = copyAppConfigValue(config.purchaseCategories) || {};
+        DB.whCats = copyAppConfigValue(config.warehouseCategories) || [];
         if (typeof saveDB === 'function') saveDB(DB);
         if (typeof sbScheduleSave === 'function') sbScheduleSave();
     }
@@ -275,7 +410,11 @@ function migrateAppConfig() {
     var config = getAppConfig();
     var key = getConfigKey();
     var raw = mergeAppConfigCandidates(appConfigCandidates());
-    if (typeof DB !== 'undefined' && DB) {
+    // 新浏览器在云端数据到达前没有任何配置可迁移。此时不能生成并上传一份
+    // 默认空配置，否则会覆盖同账号其他浏览器已经保存的分类。
+    var hasPersistedConfig = Object.keys(raw).length > 0;
+    var canSyncLegacyFields = hasPersistedConfig || hasMeaningfulAppConfig(config);
+    if (typeof DB !== 'undefined' && DB && canSyncLegacyFields) {
         var areaCats = copyAppConfigValue(config.purchaseCategories) || {};
         var whCats = copyAppConfigValue(config.warehouseCategories) || [];
         var needsDbSync = JSON.stringify(DB.areaCats || {}) !== JSON.stringify(areaCats)
@@ -287,9 +426,9 @@ function migrateAppConfig() {
         }
     }
 
-    var needsConfigWrite = !localStorage.getItem(key)
+    var needsConfigWrite = hasPersistedConfig && (!localStorage.getItem(key)
         || Number(raw.schemaVersion || 0) < APP_CONFIG_SCHEMA_VERSION
-        || JSON.stringify(raw) !== JSON.stringify(config);
+        || JSON.stringify(raw) !== JSON.stringify(config));
     return needsConfigWrite ? storeAppConfig(config) : config;
 }
 

@@ -69,7 +69,7 @@ var _salaryDetailPeriod = '';
 var SALARY_TRASH_RETENTION_DAYS = 30;
 var SALARY_FIELDS = [
     { key: 'department', label: '部门', width: '70px' },
-    { key: 'employee', label: '姓名', width: '70px' },
+    { key: 'employee', label: '姓名', width: '110px' },
     { key: 'position', label: '职务', width: '90px' },
     { key: 'baseSalary', label: '基本工资', width: '70px', numeric: true },
     { key: 'positionSubsidy', label: '职务补贴', width: '65px', numeric: true },
@@ -83,6 +83,9 @@ var SALARY_FIELDS = [
     { key: 'socialInsurance', label: '社保', width: '65px', numeric: true },
     { key: 'tax', label: '个税', width: '65px', numeric: true }
 ];
+var SALARY_TABLE_FIELDS = SALARY_FIELDS.filter(function(field) {
+    return field.key !== 'department';
+});
 
 function salaryRowId() {
     return 'sal_draft_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
@@ -98,6 +101,7 @@ function normalizeSalaryRow(row) {
         result[field.key] = field.numeric ? (Number(row[field.key]) || 0) : (row[field.key] || '');
     });
     result.id = row.id || salaryRowId();
+    result.employeeId = row.employeeId || row.id || salaryRowId();
     result.period = _salaryPeriod;
     result.note = row.note || '';
     return result;
@@ -130,9 +134,9 @@ function rSalary() {
 }
 
 function renderSalaryPage() {
-    var h = '<div class="salary-module-tabs" role="tablist" aria-label="工资功能">';
-    h += '<button type="button" class="salary-module-tab ' + (_salaryView === 'entry' ? 'active' : '') + '" role="tab" aria-selected="' + (_salaryView === 'entry') + '" onclick="switchSalaryView(\'entry\')">录入</button>';
-    h += '<button type="button" class="salary-module-tab ' + (_salaryView === 'detail' ? 'active' : '') + '" role="tab" aria-selected="' + (_salaryView === 'detail') + '" onclick="switchSalaryView(\'detail\')">明细</button>';
+    var h = '<div class="view-tabs" role="tablist" aria-label="工资视图">';
+    h += '<button type="button" class="view-tab ' + (_salaryView === 'entry' ? 'active' : '') + '" role="tab" aria-selected="' + (_salaryView === 'entry') + '" onclick="switchSalaryView(\'entry\')">录入</button>';
+    h += '<button type="button" class="view-tab ' + (_salaryView === 'detail' ? 'active' : '') + '" role="tab" aria-selected="' + (_salaryView === 'detail') + '" onclick="switchSalaryView(\'detail\')">明细</button>';
     h += '</div>';
     h += _salaryView === 'detail' ? renderSalaryDetailView() : renderSalaryEntryView();
     setMain('工资', h);
@@ -140,26 +144,62 @@ function renderSalaryPage() {
 }
 
 function renderSalaryEntryView() {
-    var h = '<div style="display:flex;gap:8px;margin-bottom:16px;align-items:center;flex-wrap:wrap">';
+    var h = '<div class="salary-entry-toolbar" style="display:flex;gap:8px;margin-bottom:16px;align-items:center;flex-wrap:wrap">';
     h += '<label>月份</label><button class="btn s" onclick="salaryCalNav(-1)">◀</button>';
     h += '<input class="inp" id="salPeriod" type="text" readonly value="' + _salaryPeriod + '" onclick="_mpOpen(\'salPeriod\')" onchange="changeSalaryPeriod(this.value)" style="max-width:180px;cursor:pointer">';
-    h += '<button class="btn s" onclick="salaryCalNav(1)">▶</button><span id="salDraftState" style="font-size:.72rem;color:var(--og)"></span><div style="flex:1"></div>';
-    h += '<button class="btn" onclick="addSalaryRow()">+ 添加行</button><button class="btn" onclick="importSalaryExcel()">📥 导入Excel</button><button class="btn" onclick="saveSalaryTemplate()">💾 保存模板</button><button class="btn p" onclick="saveSalaryTable()">💾 保存</button></div>';
+    h += '<button class="btn s" onclick="salaryCalNav(1)" aria-label="下一月">▶</button><span id="salDraftState" style="font-size:.72rem;color:var(--og)"></span><div style="flex:1"></div>';
+    h += '<button class="btn" onclick="addSalaryRow()">+ 添加员工</button><button class="btn" onclick="openSalaryTemplateMenu()">模板</button><button class="btn p" onclick="saveSalaryTable()">保存工资</button></div>';
     h += '<input type="file" id="salExcelInput" accept=".xlsx,.xls" style="display:none" onchange="handleSalaryExcel(event)">';
-    h += '<div class="tw" style="overflow-x:auto"><table id="salTable"><thead><tr><th style="width:34px"></th>';
-    SALARY_FIELDS.forEach(function(field) { h += '<th class="' + (field.numeric ? 'nr' : '') + '">' + field.label + '</th>'; });
+    h += '<div class="tw" style="overflow-x:auto"><table id="salTable"><thead><tr><th class="salary-drag-column"></th><th class="salary-name-column">姓名</th>';
+    SALARY_TABLE_FIELDS.filter(function(field) { return field.key !== 'employee'; }).forEach(function(field) { h += '<th class="' + (field.numeric ? 'nr' : '') + '">' + field.label + '</th>'; });
     h += '<th class="nr">实发工资</th><th>操作</th></tr></thead><tbody id="salTableBody"></tbody><tfoot id="salTableFoot"></tfoot></table></div>';
     return h;
 }
 
 function createSalaryInput(row, field) {
-    var input = document.createElement('input');
-    input.className = 'inp' + (field.numeric ? ' nr' : '');
+    var input;
+    if (field.key === 'department') {
+        input = document.createElement('select');
+        input.className = 'inp';
+        input.style.width = '112px';
+        input.setAttribute('data-allow-custom', 'true');
+        input.setAttribute('data-placeholder', '选择部门');
+        var departments = salaryDepartments();
+        var current = row.department || '';
+        if (current && departments.indexOf(current) < 0) departments.push(current);
+        input.innerHTML = '<option value="">未分部门</option>' + departments.map(function(department) {
+            return '<option value="' + salaryEscape(department) + '"' + (department === current ? ' selected' : '') + '>' + salaryEscape(department) + '</option>';
+        }).join('') + '<option value="__custom">自定义部门…</option>';
+        input.addEventListener('change', function() {
+            if (input.value === '__custom') {
+                var department = (window.prompt('输入部门名称') || '').trim();
+                if (!department) {
+                    input.value = current || '';
+                    return;
+                }
+                var option = document.createElement('option');
+                option.value = department;
+                option.textContent = department;
+                input.insertBefore(option, input.querySelector('option[value="__custom"]'));
+                option.selected = true;
+            }
+            updateSalaryRow(row.id, field.key, input.value);
+        });
+        return input;
+    }
+
+    input = document.createElement('input');
+    var emptyValue = field.numeric ? Number(row[field.key] || 0) === 0 : !String(row[field.key] || '').trim();
+    input.className = 'inp salary-input' + (field.numeric ? ' nr' : '') + (emptyValue ? ' salary-empty-value' : '');
     input.type = field.numeric ? 'number' : 'text';
+    input.setAttribute('aria-label', field.label);
     input.value = field.numeric ? String(row[field.key] || 0) : row[field.key];
     input.style.width = field.width;
     input.style.padding = '4px';
     input.addEventListener('input', function() {
+        input.classList.toggle('salary-empty-value', field.numeric
+            ? Number(input.value || 0) === 0
+            : !input.value.trim());
         updateSalaryRow(row.id, field.key, input.value);
     });
     return input;
@@ -177,6 +217,7 @@ function createSalaryRowElement(row) {
     handle.className = 'btn s';
     handle.textContent = '⋮⋮';
     handle.title = '拖拽排序';
+    handle.setAttribute('aria-label', '拖拽排序工资行');
     handle.draggable = true;
     handle.style.cursor = 'grab';
     handle.style.padding = '2px 4px';
@@ -185,7 +226,13 @@ function createSalaryRowElement(row) {
     handleCell.appendChild(handle);
     tr.appendChild(handleCell);
 
-    SALARY_FIELDS.forEach(function(field) {
+    var employeeField = SALARY_FIELDS.find(function(field) { return field.key === 'employee'; });
+    var nameCell = document.createElement('td');
+    nameCell.className = 'salary-name-column';
+    nameCell.appendChild(createSalaryInput(row, employeeField));
+    tr.appendChild(nameCell);
+
+    SALARY_TABLE_FIELDS.filter(function(field) { return field.key !== 'employee'; }).forEach(function(field) {
         var cell = document.createElement('td');
         cell.appendChild(createSalaryInput(row, field));
         tr.appendChild(cell);
@@ -204,19 +251,72 @@ function createSalaryRowElement(row) {
     removeButton.type = 'button';
     removeButton.className = 'btn s d';
     removeButton.textContent = '×';
+    removeButton.setAttribute('aria-label', '删除工资行');
     removeButton.addEventListener('click', function() { removeSalaryRow(row.id); });
     actionCell.appendChild(removeButton);
     tr.appendChild(actionCell);
     return tr;
 }
 
+function salaryDepartments() {
+    var config = getAppConfig();
+    var departments = uniqueStrings(config.salaryDepartments || [], []);
+    _salaryTableData.forEach(function(row) {
+        var department = String(row.department || '').trim() || '未分部门';
+        if (departments.indexOf(department) < 0) departments.push(department);
+    });
+    if (departments.indexOf('未分部门') < 0) departments.unshift('未分部门');
+    return departments;
+}
+
+function salaryDepartmentRows(department) {
+    return _salaryTableData.filter(function(row) {
+        return (String(row.department || '').trim() || '未分部门') === department;
+    });
+}
+
 function renderSalaryTable() {
     var body = $id('salTableBody');
     if (!body) return;
     body.replaceChildren();
-    _salaryTableData.forEach(function(row) { body.appendChild(createSalaryRowElement(row)); });
+    salaryDepartments().forEach(function(department) {
+        var rows = salaryDepartmentRows(department);
+        if (!rows.length) return;
+
+        var header = document.createElement('tr');
+        header.className = 'salary-department-row';
+        var headerCell = document.createElement('td');
+        headerCell.colSpan = SALARY_TABLE_FIELDS.length + 3;
+        headerCell.textContent = department + ' · ' + rows.length + ' 人';
+        header.appendChild(headerCell);
+        body.appendChild(header);
+
+        rows.forEach(function(row) { body.appendChild(createSalaryRowElement(row)); });
+
+        var subtotal = document.createElement('tr');
+        subtotal.className = 'salary-department-subtotal';
+        var subtotalLabel = document.createElement('td');
+        subtotalLabel.colSpan = 3;
+        subtotalLabel.textContent = '部门小计';
+        subtotal.appendChild(subtotalLabel);
+        SALARY_FIELDS.filter(function(field) { return field.numeric; }).forEach(function(field) {
+            var cell = document.createElement('td');
+            cell.className = 'nr';
+            cell.dataset.salarySubtotal = department;
+            cell.dataset.salaryField = field.key;
+            subtotal.appendChild(cell);
+        });
+        var subtotalActual = document.createElement('td');
+        subtotalActual.className = 'nr';
+        subtotalActual.dataset.salarySubtotal = department;
+        subtotalActual.dataset.salaryField = 'actualSalary';
+        subtotal.appendChild(subtotalActual);
+        subtotal.appendChild(document.createElement('td'));
+        body.appendChild(subtotal);
+    });
     updateSalarySummaries();
     updateSalaryDraftState();
+    if (window.axUI && window.axUI.initSelects) window.axUI.initSelects(body);
 }
 
 function updateSalarySummaries() {
@@ -224,16 +324,24 @@ function updateSalarySummaries() {
         var actual = document.querySelector('[data-salary-actual="' + row.id + '"]');
         if (actual) actual.textContent = fmtC(calcSalaryActual(row));
     });
+    salaryDepartments().forEach(function(department) {
+        var totals = calcSalaryTotals(salaryDepartmentRows(department));
+        document.querySelectorAll('[data-salary-subtotal="' + CSS.escape(department) + '"]').forEach(function(cell) {
+            var field = cell.dataset.salaryField;
+            cell.textContent = fmtC(field === 'actualSalary' ? totals.actualSalary : totals[field] || 0);
+        });
+    });
     var foot = $id('salTableFoot');
     if (!foot) return;
     var totals = calcSalaryTotals(_salaryTableData);
     foot.replaceChildren();
     var tr = document.createElement('tr');
-    tr.style.background = 'var(--card-h)';
+    tr.className = 'salary-grand-total';
     tr.style.fontWeight = '600';
     var label = document.createElement('td');
-    label.colSpan = 4;
-    label.textContent = '合计';
+    label.className = 'salary-total-label';
+    label.colSpan = 3;
+    label.textContent = '全店总计';
     tr.appendChild(label);
     SALARY_FIELDS.filter(function(field) { return field.numeric; }).forEach(function(field) {
         var cell = document.createElement('td');
@@ -242,8 +350,7 @@ function updateSalarySummaries() {
         tr.appendChild(cell);
     });
     var actualTotal = document.createElement('td');
-    actualTotal.className = 'nr';
-    actualTotal.style.color = 'var(--ac)';
+    actualTotal.className = 'nr salary-total-actual';
     actualTotal.textContent = fmtC(totals.actualSalary);
     tr.appendChild(actualTotal);
     tr.appendChild(document.createElement('td'));
@@ -526,45 +633,215 @@ function permanentlyDeleteSalaryTrash(itemId) {
     renderSalaryPage();
 }
 
-// 工资模板功能
+// 工资模板功能：多个命名模板，保存在账号配置并随云端同步。
+function salaryTemplates() {
+    return getAppConfig().salaryTemplates || [];
+}
+
+function defaultSalaryTemplate() {
+    var templates = salaryTemplates();
+    var config = getAppConfig();
+    return templates.find(function(template) { return template.id === config.defaultSalaryTemplateId; })
+        || templates.find(function(template) { return template.isDefault; })
+        || templates[0]
+        || null;
+}
+
 function loadSalaryTemplate() {
-    try {
-        var config = JSON.parse(localStorage.getItem(getConfigKey() + '_salaryTemplate') || 'null');
-        if (config && config.length > 0) {
-            return config.map(normalizeSalaryRow);
-        }
-    } catch(e) {}
+    var template = defaultSalaryTemplate();
+    if (template && template.rows && template.rows.length) {
+        return template.rows.map(function(row) {
+            return normalizeSalaryRow(Object.assign({}, row, {
+                id: salaryRowId(),
+                employeeId: salaryRowId(),
+                period: _salaryPeriod
+            }));
+        });
+    }
     return [createSalaryEmptyRow()];
 }
 
-function saveSalaryTemplate() {
-    var template = _salaryTableData.filter(function(r) { return r.employee; }).map(function(r) {
+function salaryTemplateRowsFromCurrent() {
+    return _salaryTableData.filter(function(row) { return row.employee; }).map(function(row) {
         return {
-            department: r.department || '',
-            employee: r.employee || '',
-            position: r.position || '',
-            baseSalary: r.baseSalary || 0,
-            positionSubsidy: r.positionSubsidy || 0,
-            overtimeSubsidy: r.overtimeSubsidy || 0,
-            allowance: r.allowance || 0,
-            fullAttendance: r.fullAttendance || 0,
-            seniority: r.seniority || 0,
-            commission: 0,
-            otherSubsidy: 0,
-            performance: 0,
-            socialInsurance: r.socialInsurance || 0,
-            tax: 0,
-            note: ''
+            department: row.department || '',
+            employee: row.employee || '',
+            position: row.position || '',
+            baseSalary: Number(row.baseSalary) || 0
         };
     });
+}
 
-    if (template.length === 0) {
+function openSalaryTemplateMenu() {
+    var template = defaultSalaryTemplate();
+    var h = '<h3>工资模板</h3>';
+    h += '<p class="salary-move-hint">模板只保存部门、姓名、职务和基本工资，并随账号云端同步。</p>';
+    h += '<div class="salary-template-menu">';
+    h += '<button class="btn" onclick="openSalaryTemplateLoadDialog()">载入模板</button>';
+    h += '<button class="btn" onclick="openSalaryTemplateSaveDialog()">保存当前为模板</button>';
+    h += '<button class="btn" onclick="openSalaryTemplateManager()">管理模板</button>';
+    h += '<button class="btn" onclick="exportSalaryTemplate(\'' + (template ? salaryEscape(template.id) : '') + '\')">导出模板</button>';
+    h += '<button class="btn" onclick="openSalaryDepartmentManager()">管理部门</button>';
+    h += '</div><div class="brow"><button class="btn" onclick="closeModal()">关闭</button></div>';
+    showModal(h, 520);
+}
+
+function openSalaryTemplateLoadDialog() {
+    var templates = salaryTemplates();
+    var h = '<h3>载入工资模板</h3><p class="salary-move-hint">按姓名、部门、职务匹配；已有员工只更新模板字段，当月其他工资字段保持不变。</p><div class="salary-template-menu">';
+    if (!templates.length) h += '<div class="salary-trash-empty">还没有模板</div>';
+    templates.forEach(function(template) {
+        h += '<button class="btn" onclick="loadSalaryTemplateById(\'' + salaryEscape(template.id) + '\')">载入 ' + salaryEscape(template.name) + '（' + template.rows.length + '人）</button>';
+    });
+    h += '</div><div class="brow"><button class="btn" onclick="backToModal(function(){openSalaryTemplateMenu()})">返回</button></div>';
+    showModal(h, 560);
+}
+
+function loadSalaryTemplateById(templateId) {
+    var template = salaryTemplates().find(function(item) { return item.id === templateId; });
+    if (!template) { toast('模板不存在'); return; }
+    template.rows.forEach(function(templateRow) {
+        var key = [templateRow.employee, templateRow.department, templateRow.position].join('\u0000');
+        var existing = _salaryTableData.find(function(row) {
+            return [row.employee, row.department, row.position].join('\u0000') === key;
+        });
+        if (existing) {
+            existing.baseSalary = Number(templateRow.baseSalary) || 0;
+        } else {
+            var row = createSalaryEmptyRow();
+            row.department = templateRow.department || '';
+            row.employee = templateRow.employee || '';
+            row.position = templateRow.position || '';
+            row.baseSalary = Number(templateRow.baseSalary) || 0;
+            _salaryTableData.push(row);
+        }
+    });
+    cacheSalaryDraft();
+    closeModal();
+    renderSalaryPage();
+    toast('已载入模板：' + template.name);
+}
+
+function openSalaryTemplateSaveDialog() {
+    if (!_salaryTableData.some(function(row) { return row.employee; })) {
         toast('没有可保存的人员');
         return;
     }
+    var h = '<h3>保存工资模板</h3>';
+    h += '<label class="salary-move-field">模板名称<input class="inp" id="salaryTemplateName" value="工资模板 ' + td() + '"></label>';
+    h += '<label class="check-row"><input id="salaryTemplateDefault" type="checkbox"> 设为默认模板</label>';
+    h += '<p class="salary-move-hint">只保存部门、姓名、职务、基本工资；其他工资项目不会写入模板。</p>';
+    h += '<div class="brow"><button class="btn" onclick="backToModal(function(){openSalaryTemplateMenu()})">取消</button><button class="btn p" onclick="saveSalaryTemplateAs()">保存模板</button></div>';
+    showModal(h, 520);
+}
 
-    localStorage.setItem(getConfigKey() + '_salaryTemplate', JSON.stringify(template));
-    toast('已保存模板（' + template.length + '人）');
+function saveSalaryTemplateAs() {
+    var name = ($id('salaryTemplateName').value || '').trim();
+    var rows = salaryTemplateRowsFromCurrent();
+    if (!name) { toast('请填写模板名称'); return; }
+    if (!rows.length) { toast('没有可保存的人员'); return; }
+    var templates = salaryTemplates().map(function(template) { return Object.assign({}, template); });
+    var id = 'salary_template_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+    var isDefault = $id('salaryTemplateDefault').checked || templates.length === 0;
+    if (isDefault) templates.forEach(function(template) { template.isDefault = false; });
+    templates.push({ id: id, name: name, isDefault: isDefault, rows: rows });
+    localStorage.setItem(getConfigKey() + '_salaryTemplate_backup', JSON.stringify(salaryTemplates()));
+    storeAppConfig({
+        salaryTemplates: templates,
+        defaultSalaryTemplateId: isDefault ? id : (getAppConfig().defaultSalaryTemplateId || id)
+    });
+    closeModal();
+    toast('模板已保存到账号云端');
+}
+
+function openSalaryTemplateManager() {
+    var templates = salaryTemplates();
+    var h = '<h3>管理工资模板</h3><div class="salary-template-menu">';
+    if (!templates.length) h += '<div class="salary-trash-empty">还没有模板</div>';
+    templates.forEach(function(template) {
+        h += '<div class="salary-template-row"><div><strong>' + salaryEscape(template.name) + '</strong><small style="display:block;color:var(--tx-m)">' + template.rows.length + '人' + (template.isDefault ? ' · 默认' : '') + '</small></div>';
+        h += '<div style="display:flex;gap:5px;flex-wrap:wrap">';
+        h += '<button class="btn s" onclick="setDefaultSalaryTemplate(\'' + salaryEscape(template.id) + '\')">设默认</button>';
+        h += '<button class="btn s" onclick="renameSalaryTemplate(\'' + salaryEscape(template.id) + '\')">重命名</button>';
+        h += '<button class="btn s" onclick="exportSalaryTemplate(\'' + salaryEscape(template.id) + '\')">导出</button>';
+        h += '<button class="btn s d" onclick="deleteSalaryTemplate(\'' + salaryEscape(template.id) + '\')">删除</button></div></div>';
+    });
+    h += '</div><div class="brow"><button class="btn" onclick="backToModal(function(){openSalaryTemplateMenu()})">返回</button></div>';
+    showModal(h, 680);
+}
+
+function saveSalaryTemplates(templates, defaultId) {
+    localStorage.setItem(getConfigKey() + '_salaryTemplate_backup', JSON.stringify(salaryTemplates()));
+    storeAppConfig({ salaryTemplates: templates, defaultSalaryTemplateId: defaultId });
+}
+
+function setDefaultSalaryTemplate(templateId) {
+    var templates = salaryTemplates().map(function(template) {
+        template.isDefault = template.id === templateId;
+        return template;
+    });
+    saveSalaryTemplates(templates, templateId);
+    openSalaryTemplateManager();
+}
+
+function renameSalaryTemplate(templateId) {
+    var template = salaryTemplates().find(function(item) { return item.id === templateId; });
+    if (!template) return;
+    var name = (window.prompt('输入新的模板名称', template.name) || '').trim();
+    if (!name) return;
+    var templates = salaryTemplates().map(function(item) {
+        if (item.id === templateId) item.name = name;
+        return item;
+    });
+    saveSalaryTemplates(templates, getAppConfig().defaultSalaryTemplateId);
+    openSalaryTemplateManager();
+}
+
+function deleteSalaryTemplate(templateId) {
+    var template = salaryTemplates().find(function(item) { return item.id === templateId; });
+    if (!template || !confirm('删除模板“' + template.name + '”？')) return;
+    var templates = salaryTemplates().filter(function(item) { return item.id !== templateId; });
+    var defaultId = getAppConfig().defaultSalaryTemplateId === templateId ? (templates[0] ? templates[0].id : '') : getAppConfig().defaultSalaryTemplateId;
+    if (defaultId) templates.forEach(function(item) { item.isDefault = item.id === defaultId; });
+    saveSalaryTemplates(templates, defaultId);
+    openSalaryTemplateManager();
+}
+
+function exportSalaryTemplate(templateId) {
+    var template = salaryTemplates().find(function(item) { return item.id === templateId; }) || defaultSalaryTemplate();
+    if (!template) { toast('没有可导出的模板'); return; }
+    if (typeof XLSX === 'undefined') { toast('Excel 导出组件未加载'); return; }
+    var rows = template.rows.map(function(row) {
+        return { '部门': row.department, '姓名': row.employee, '职务': row.position, '基本工资': row.baseSalary };
+    });
+    var sheet = XLSX.utils.json_to_sheet(rows);
+    var workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, '工资模板');
+    XLSX.writeFile(workbook, template.name.replace(/[\\/:*?"<>|]/g, '_') + '.xlsx');
+    toast('模板已导出');
+}
+
+function openSalaryDepartmentManager() {
+    var h = '<h3>管理部门</h3><p class="salary-move-hint">每行一个部门。删除部门后，员工会移动到“未分部门”。</p>';
+    h += '<textarea id="salaryDepartmentsInput" class="inp" style="min-height:180px">' + salaryEscape(salaryDepartments().join('\n')) + '</textarea>';
+    h += '<div class="brow"><button class="btn" onclick="backToModal(function(){openSalaryTemplateMenu()})">取消</button><button class="btn p" onclick="saveSalaryDepartments()">保存部门</button></div>';
+    showModal(h, 560);
+}
+
+function saveSalaryDepartments() {
+    var values = ($id('salaryDepartmentsInput').value || '').split('\n').map(function(value) { return value.trim(); }).filter(Boolean);
+    var departments = [];
+    values.forEach(function(value) { if (departments.indexOf(value) < 0) departments.push(value); });
+    if (departments.indexOf('未分部门') < 0) departments.unshift('未分部门');
+    var allowed = departments.filter(function(value) { return value !== '未分部门'; });
+    _salaryTableData.forEach(function(row) {
+        if (row.department && allowed.indexOf(row.department) < 0) row.department = '';
+    });
+    storeAppConfig({ salaryDepartments: departments });
+    cacheSalaryDraft();
+    closeModal();
+    renderSalaryPage();
+    toast('部门已更新');
 }
 
 function onSalDragStart(event, rowId) {
@@ -593,13 +870,15 @@ function onSalDrop(event, targetRowId) {
     if (sourceIndex < 0 || targetIndex < 0) return;
     var moved = _salaryTableData.splice(sourceIndex, 1)[0];
     targetIndex = _salaryTableData.findIndex(function(row) { return row.id === targetRowId; });
+    var targetRow = _salaryTableData[targetIndex];
+    if (targetRow) moved.department = targetRow.department || '';
     _salaryTableData.splice(dropPosition === 'after' ? targetIndex + 1 : targetIndex, 0, moved);
     cacheSalaryDraft();
     var body = $id('salTableBody');
     var sourceElement = body && body.querySelector('[data-row-id="' + sourceRowId + '"]');
     var targetElement = body && body.querySelector('[data-row-id="' + targetRowId + '"]');
     if (sourceElement && targetElement) body.insertBefore(sourceElement, dropPosition === 'after' ? targetElement.nextSibling : targetElement);
-    updateSalaryDraftState();
+    renderSalaryTable();
 }
 
 function onSalDragEnd(event) {
@@ -630,7 +909,7 @@ function setSalaryDropIndicator(target, position) {
     marker.className = 'salary-drop-marker';
     marker.setAttribute('aria-hidden', 'true');
     var cell = document.createElement('td');
-    cell.colSpan = SALARY_FIELDS.length + 3;
+    cell.colSpan = SALARY_TABLE_FIELDS.length + 3;
     var line = document.createElement('div');
     line.className = 'salary-drop-line';
     var label = document.createElement('span');
@@ -644,6 +923,7 @@ function setSalaryDropIndicator(target, position) {
 function createSalaryEmptyRow() {
     return {
         id: salaryRowId(),
+        employeeId: salaryRowId(),
         period: _salaryPeriod,
         department: '',
         employee: '',
@@ -724,8 +1004,12 @@ function updateSalaryRow(rowId, field, value) {
     if (!row || !fieldDefinition) return;
     row[field] = fieldDefinition.numeric ? (parseFloat(value) || 0) : value;
     cacheSalaryDraft();
-    updateSalarySummaries();
-    updateSalaryDraftState();
+    if (field === 'department') {
+        renderSalaryTable();
+    } else {
+        updateSalarySummaries();
+        updateSalaryDraftState();
+    }
 }
 
 function salaryCalNav(dir) {
@@ -744,6 +1028,8 @@ function changeSalaryPeriod(period) {
 function saveSalaryTable() {
     var validRows = _salaryTableData.filter(function(r) { return r.employee && calcSalaryActual(r) !== 0; });
     if (validRows.length === 0) { toast('没有有效数据'); return; }
+    var departments = salaryDepartments();
+    storeAppConfig({ salaryDepartments: departments });
 
     upd(function(db) {
         if (!db.salaryRecords) db.salaryRecords = [];
@@ -752,6 +1038,7 @@ function saveSalaryTable() {
         // 添加新记录
         validRows.forEach(function(r) {
             r.period = _salaryPeriod;
+            r.employeeId = r.employeeId || salaryRowId();
             r.id = 'sal_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
             r.date = td();
             r.baseTotal = (r.baseSalary || 0) + (r.positionSubsidy || 0) + (r.overtimeSubsidy || 0) + (r.allowance || 0) + (r.fullAttendance || 0) + (r.seniority || 0);
@@ -901,8 +1188,10 @@ function renderNav() {
     renderGroup(whPages, 'toolbarWh');
     renderGroup(reportPages, 'toolbarReport');
 
-    var active = $id('toolbarMain').querySelector('.toolbar-btn');
-    if (active) active.classList.add('active');
+    var currentPage = localStorage.getItem('ax_lastPage') || _curPage || 'dash';
+    document.querySelectorAll('.toolbar-btn').forEach(function(button) {
+        button.classList.toggle('active', button.dataset.page === currentPage);
+    });
 }
 
 // 切换高亮
@@ -928,16 +1217,20 @@ function updateFnavTabs(page) {
   if (!tabList || !tabList.length) { el.innerHTML = ''; return; }
 
   el.innerHTML = tabList.map(function(t, i) {
-    return '<button class="fnav-tab' + (i === 0 ? ' active' : '') + '" onclick="fnavTabClick(this,\'' + page + '\',' + i + ')">' + t + '</button>';
+    return '<button type="button" class="view-tab' + (i === 0 ? ' active' : '') + '" role="tab" aria-selected="' + (i === 0) + '" onclick="fnavTabClick(this,\'' + page + '\',' + i + ')">' + t + '</button>';
   }).join('');
 }
 
 function fnavTabClick(btn, page, idx) {
-  $id('fnavTabs').querySelectorAll('.fnav-tab').forEach(function(t) { t.classList.remove('active'); });
+  $id('fnavTabs').querySelectorAll('.view-tab').forEach(function(t) {
+    t.classList.remove('active');
+    t.setAttribute('aria-selected', 'false');
+  });
   btn.classList.add('active');
+  btn.setAttribute('aria-selected', 'true');
 
   // 如果页面内有子标签栏，同步切换
-  var tabBtns = $id('mainContent').querySelectorAll('.tab-bar .tab-btn, .tab-bar button');
+  var tabBtns = $id('mainContent').querySelectorAll('.view-tabs .view-tab');
   if (tabBtns[idx]) tabBtns[idx].click();
 }
 
@@ -984,7 +1277,13 @@ function updateNav(p) {
 // ---------- 设置主内容区 ----------
 // 所有页面渲染时调用，设置标题和内容
 function setMain(t, c) {
-    $id('mainContent').innerHTML = '<div class="page-title">' + t + '</div><div class="page active">' + c + '</div>';
+    var animate = false;
+    try {
+        var key = 'ax_page_entered_' + _curPage;
+        animate = !sessionStorage.getItem(key);
+        sessionStorage.setItem(key, '1');
+    } catch (e) {}
+    $id('mainContent').innerHTML = '<div class="page-title">' + t + '</div><div class="page active' + (animate ? ' animate-once' : '') + '">' + c + '</div>';
     window.scrollTo(0, 0);
 }
 

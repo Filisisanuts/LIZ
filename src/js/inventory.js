@@ -21,7 +21,7 @@ function rInv(type, customCategory) {
     // 统计每个商品的指定月份数据
     var stats = [];
     items.forEach(function(item) {
-        var sales = item.sales.filter(function(s) { return s.date.startsWith(ym); });
+        var sales = (item.sales || []).filter(function(s) { return s.date && s.date.startsWith(ym); });
         var calc = invCalc(item, type, ym);
         var mc = invCalcMon(item, type, ym);
         var cups = 0, pots = 0, qty = 0, expected = 0;
@@ -84,9 +84,9 @@ function rInv(type, customCategory) {
     h += '</div>';
 
     // ===== 标签栏（明细优先） =====
-    h += '<div class="tab-bar" id="invT">';
-    h += '<button class="tab-btn active" data-tab="hist" onclick="switchInvT(\'hist\',\'' + type + '\')">明细</button>';
-    h += '<button class="tab-btn" data-tab="stock" onclick="switchInvT(\'stock\',\'' + type + '\')">库存</button>';
+    h += '<div class="view-tabs" id="invT" role="tablist" aria-label="库存视图">';
+    h += '<button type="button" class="view-tab active" role="tab" aria-selected="true" data-tab="hist" onclick="switchInvT(\'hist\',\'' + type + '\')">明细</button>';
+    h += '<button type="button" class="view-tab" role="tab" aria-selected="false" data-tab="stock" onclick="switchInvT(\'stock\',\'' + type + '\')">库存</button>';
     h += '</div>';
 
     // ===== 库存表格（默认隐藏） =====
@@ -276,7 +276,7 @@ function rInv(type, customCategory) {
 
     // 渲染前记住当前 tab
     var lastTab = 'hist';
-    var activeTab = document.querySelector('#invT .tab-btn.active');
+    var activeTab = document.querySelector('#invT .view-tab.active');
     if (activeTab) lastTab = activeTab.dataset.tab || 'hist';
 
     setMain(INV[type].label + '管理', h);
@@ -286,8 +286,9 @@ function rInv(type, customCategory) {
 
 // 切换库存标签页（库存/明细）
 function switchInvT(tab, type) {
-    document.querySelectorAll('#invT .tab-btn').forEach(function(b) {
+    document.querySelectorAll('#invT .view-tab').forEach(function(b) {
         b.classList.toggle('active', b.dataset.tab === tab);
+        b.setAttribute('aria-selected', String(b.dataset.tab === tab));
     });
     $id('invStock').style.display = tab === 'stock' ? '' : 'none';
     $id('invHist').style.display = tab === 'hist' ? '' : 'none';
@@ -319,7 +320,7 @@ function renderInvHist(type) {
     // 按日期汇总销售金额
     var dayTotals = {};
     items.forEach(function(item) {
-        item.sales.forEach(function(s) {
+        (item.sales || []).forEach(function(s) {
             if (!s.date || !s.date.startsWith(ym)) return;
             var day = parseInt(s.date.substring(8, 10));
             if (!dayTotals[day]) dayTotals[day] = 0;
@@ -372,7 +373,7 @@ function showInvDayModal(type, date) {
                type === 'cig' ? '包' : type === 'alc' ? '瓶' : '克';
     var records = [];
     items.forEach(function(item) {
-        item.sales.forEach(function(s, si) {
+        (item.sales || []).forEach(function(s, si) {
             if (s.date === date) records.push({ item: item, sale: s, si: si });
         });
     });
@@ -428,6 +429,7 @@ function delInvSaleConfirm(type, itemId, si, date) {
 
     if (!confirm('删除 ' + item.name + ' 的销售记录？\n' + desc)) return;
 
+    if (!item.sales) item.sales = [];
     item.sales.splice(si, 1);
     saveDB(DB);
     syncInvToDaily(type, date);
@@ -625,7 +627,7 @@ function buildRecords(item, type, ym) {
     });
 
     // 销售记录
-    item.sales.forEach(function(s, idx) {
+    (item.sales || []).forEach(function(s, idx) {
         if (!s.date.startsWith(ym)) return;
         var expected = 0;
         if (type === 'tea') {
@@ -639,7 +641,7 @@ function buildRecords(item, type, ym) {
 
     // 出入库记录（入库 + 无sales对应的手动出库）
     var saleDates = {};
-    item.sales.forEach(function(s) { if (s.date.startsWith(ym)) saleDates[s.date] = true; });
+    (item.sales || []).forEach(function(s) { if (s.date && s.date.startsWith(ym)) saleDates[s.date] = true; });
 
     (item.purchases || []).forEach(function(m, idx) {
         if (!m.date.startsWith(ym)) return;
@@ -725,7 +727,7 @@ function renderBuyDetail(item, type, ym, unit) {
     // 合并出入库+销售记录
     var allRows = [];
     moves.forEach(function(m) {
-        allRows.push({ date: m.date, type: m.qty >= 0 ? '入库' : '出库', qty: Math.abs(m.qty), reason: m.source || '-', cost: m.cost || 0, amount: 0, rowType: 'move', ref: item.purchases.indexOf(m) });
+        allRows.push({ date: m.date, type: m.qty >= 0 ? '入库' : '出库', qty: Math.abs(m.qty), reason: m.source || '-', cost: m.cost || 0, amount: 0, rowType: 'move', ref: (item.purchases || []).indexOf(m) });
     });
     sales.forEach(function(s) {
         var qty = 0, exp = 0;
@@ -739,7 +741,7 @@ function renderBuyDetail(item, type, ym, unit) {
             qty = s.qty || 0;
             exp = qty * (item.pricePerUnit || 0);
         }
-        allRows.push({ date: s.date, type: '销售', qty: qty, reason: '销售', cost: 0, expected: exp, amount: s.amount || 0, rowType: 'sale', ref: item.sales.indexOf(s) });
+        allRows.push({ date: s.date, type: '销售', qty: qty, reason: '销售', cost: 0, expected: exp, amount: s.amount || 0, rowType: 'sale', ref: (item.sales || []).indexOf(s) });
     });
 
     allRows.sort(function(a, b) { return a.date.localeCompare(b.date); });
@@ -1697,7 +1699,7 @@ function invCalc(item, type, ym) {
 // 月度进销存计算
 function invCalcMon(item, type, ym) {
     // 筛选出该月份的销售记录
-    var sales = item.sales.filter(function(s) { return s.date && s.date.startsWith(ym); });
+    var sales = (item.sales || []).filter(function(s) { return s.date && s.date.startsWith(ym); });
     var revenue = 0, cost = 0;
 
     if (type === 'tea') {
@@ -1995,6 +1997,7 @@ function doExchange() {
 
     // 库存 -1（给客人新货）
     if (!item.purchases) item.purchases = [];
+    if (!item.purchases) item.purchases = [];
     item.purchases.push({
         date: date,
         qty: -qty,
@@ -2124,6 +2127,7 @@ function confirmSettle(id) {
     var item = DB.otherItems.find(function(i) { return i.id === record.itemId; });
     if (item) {
         if (!item.purchases) item.purchases = [];
+        if (!item.purchases) item.purchases = [];
         item.purchases.push({
             date: date,
             qty: record.qty,
@@ -2153,6 +2157,7 @@ function cancelExchange(id) {
     // 恢复库存（之前扣了，现在加回来）
     var item = DB.otherItems.find(function(i) { return i.id === record.itemId; });
     if (item) {
+        if (!item.purchases) item.purchases = [];
         if (!item.purchases) item.purchases = [];
         item.purchases.push({
             date: td(),

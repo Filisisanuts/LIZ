@@ -145,12 +145,10 @@ function initToolbar() {
     }).join('');
   });
 
-  // 默认高亮总览
-  var first = $id('toolbarMain');
-  if (first) {
-    var btn = first.querySelector('.toolbar-btn');
-    if (btn) btn.classList.add('active');
-  }
+  var currentPage = localStorage.getItem('ax_lastPage') || _curPage || 'dash';
+  document.querySelectorAll('.toolbar-btn').forEach(function(button) {
+    button.classList.toggle('active', button.dataset.page === currentPage);
+  });
 }
 
 // ---------- 页面加载完成后启动 ----------

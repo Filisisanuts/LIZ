@@ -24,10 +24,10 @@ export function renderDaily(container: HTMLElement): void {
 
   // 标签栏
   html += `
-    <div class="tabs" id="dT">
-      <button class="tab-item active" onclick="switchDT('text')">粘贴</button>
-      <button class="tab-item" onclick="switchDT('manual')">手动</button>
-      <button class="tab-item" onclick="switchDT('hist')">明细</button>
+    <div class="view-tabs" id="dT" role="tablist" aria-label="日报视图">
+      <button type="button" class="view-tab active" role="tab" aria-selected="true" onclick="switchDT('text')">粘贴</button>
+      <button type="button" class="view-tab" role="tab" aria-selected="false" onclick="switchDT('manual')">手动</button>
+      <button type="button" class="view-tab" role="tab" aria-selected="false" onclick="switchDT('hist')">明细</button>
     </div>
   `;
 
@@ -189,7 +189,7 @@ function initDailyGlobals(): void {
     const textEl = document.getElementById('dText');
     const manEl = document.getElementById('dMan');
     const histEl = document.getElementById('dHist');
-    const tabs = document.querySelectorAll('#dT .tab-item');
+    const tabs = document.querySelectorAll('#dT .view-tab');
 
     tabs.forEach((t) => t.classList.remove('active'));
 

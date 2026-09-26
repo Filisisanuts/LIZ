@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>店铺管理 · 登录</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -175,6 +175,10 @@ body {
     .login-card { padding: 24px 18px; }
 }
 </style>
+<style>
+*:focus-visible { outline: 3px solid rgba(176,141,87,.38); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; } }
+</style>
 </head>
 <body>
 
@@ -187,8 +191,8 @@ body {
 
     <div class="login-card">
         <div class="tabs">
-            <div class="tab active" id="tabLogin" onclick="switchTab('login')">登录</div>
-            <div class="tab" id="tabReg" onclick="switchTab('reg')">注册</div>
+            <button type="button" class="tab active" id="tabLogin" onclick="switchTab('login')">登录</button>
+            <button type="button" class="tab" id="tabReg" onclick="switchTab('reg')">注册</button>
         </div>
 
         <!-- 登录表单 -->

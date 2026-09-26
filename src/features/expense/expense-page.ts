@@ -31,9 +31,9 @@ export function renderExpense(container: HTMLElement): void {
 
   // 标签栏
   html += `
-    <div class="tabs" id="expTabs">
-      <button class="tab-item active" onclick="switchExpTab('input')">录入</button>
-      <button class="tab-item" onclick="switchExpTab('detail')">明细</button>
+    <div class="view-tabs" id="expTabs" role="tablist" aria-label="费用视图">
+      <button type="button" class="view-tab active" role="tab" aria-selected="true" onclick="switchExpTab('input')">录入</button>
+      <button type="button" class="view-tab" role="tab" aria-selected="false" onclick="switchExpTab('detail')">明细</button>
     </div>
   `;
 
@@ -154,7 +154,7 @@ export function initExpenseGlobals(): void {
   (window as any).switchExpTab = (tab: string) => {
     const inputEl = document.getElementById('expInput');
     const detailEl = document.getElementById('expDetail');
-    const tabs = document.querySelectorAll('#expTabs .tab-item');
+    const tabs = document.querySelectorAll('#expTabs .view-tab');
 
     tabs.forEach((t) => t.classList.remove('active'));
 

@@ -1,25 +1,28 @@
 
 // 日报编辑临时数据（用于暂存当前正在编辑的日报内容）
 var _pd = null;
+var _dailyPendingParse = null;
+var _dailyPendingSave = null;
+var _dailySavedReport = null;
+var _dailySaveMode = '';
 
 
 // 日报主页
-// 三个标签页：粘贴（AI解析日报文字）、手动（手动填写）、明细（查看历史日报）
+// 两个主视图：录入（解析文本 + 结构化草稿）和明细（历史日报）
 function rDaily() {
-    var h = '<div class="tab-bar" id="dT">';
-    h += '<button class="tab-btn active" onclick="switchDT(\'text\')">粘贴</button>';
-    h += '<button class="tab-btn" onclick="switchDT(\'manual\')">手动</button>';
-    h += '<button class="tab-btn" onclick="switchDT(\'hist\')">明细</button>';
+    var h = '<div class="view-tabs" id="dT" role="tablist" aria-label="日报视图">';
+    h += '<button type="button" class="view-tab active" role="tab" aria-selected="true" onclick="switchDT(\'entry\')">录入</button>';
+    h += '<button type="button" class="view-tab" role="tab" aria-selected="false" onclick="switchDT(\'hist\')">明细</button>';
     h += '</div>';
 
     // 粘贴页
     h += '<div id="dText">';
     h += '<textarea id="dtInput" class="inp" placeholder="粘贴日报..." style="width:100%;max-height:120px;resize:vertical;box-sizing:border-box"></textarea>';
-    h += '<div class="brow"><button class="btn p" onclick="doParseDaily()">解析</button></div>';
+    h += '<div class="brow" style="margin:12px 0 20px"><button class="btn p" onclick="requestDailyParse()">解析日报</button><button class="btn" onclick="resetDailyDraft()">清空草稿</button></div>';
     h += '<div id="dailyPreview"></div>';
     h += '</div>';
 
-    // 手动页
+    // 解析后的结构化录入区
     h += '<div id="dMan" style="display:none">';
     h += '<div class="hrow"><label>日期</label><input class="inp" id="dmDate" type="text" readonly placeholder="选择日期" value="' + td() + '" onclick="_dpOpen(\'dmDate\')" style="cursor:pointer"></div>';
     h += '<div class="section-label">经营数据</div><div id="dmFreeList"></div>';
@@ -50,7 +53,7 @@ function rDaily() {
         h += '<div class="hrow"><label>汇报人</label><input class="inp" id="dmReporter" style="max-width:160px"></div>';
     }
 
-    h += '<div class="brow"><button class="btn p" onclick="doManualDaily()">保存</button></div>';
+    h += '<div class="brow"><button class="btn p" onclick="doManualDaily()">保存日报</button></div>';
     h += '</div>';
 
     // 明细页
@@ -64,7 +67,8 @@ function rDaily() {
     h += '</div>';
 
     setMain('日报', h);
-    setTimeout(renderDHist, 100);
+    if (!_pd) _pd = parseDaily('');
+    setTimeout(function() { if (_curPage === 'daily') switchDT('entry'); }, 0);
 }
 
 // 渲染日报历史列表
@@ -86,37 +90,65 @@ var _dailyPaymentFilter = {
     delJd: false,
     delTotal: false
 };
+var _dailyPaymentFilterExpanded = false;
 
 // 结算方式分组配置
 var _paymentGroups = [
     {
         name: '支付方式',
         items: [
-            { key: 'pos', label: 'POS机' },
-            { key: 'ccbLife', label: '建行生活' },
-            { key: 'cash', label: '现金' },
-            { key: 'memberCard', label: '会员卡' },
-            { key: 'treat', label: '招待' }
+            { key: 'pos', label: 'POS机', path: 'payment.pos' },
+            { key: 'ccbLife', label: '建行生活', path: 'payment.ccbLife' },
+            { key: 'cash', label: '现金', path: 'payment.cash' },
+            { key: 'memberCard', label: '会员卡', path: 'payment.memberCard' },
+            { key: 'treat', label: '招待', path: 'payment.treat' }
         ]
     },
     {
         name: '应收账款',
         items: [
-            { key: 'arMeituan', label: '美团团购' },
-            { key: 'arDouyin', label: '抖音团购' },
-            { key: 'arTotal', label: '应收合计' }
+            { key: 'arMeituan', label: '美团团购', path: 'payment.ar.meituan' },
+            { key: 'arDouyin', label: '抖音团购', path: 'payment.ar.douyin' },
+            { key: 'arTotal', label: '应收合计', path: 'payment.ar.total' }
         ]
     },
     {
         name: '外卖配送',
         items: [
-            { key: 'delMeituan', label: '美团外卖' },
-            { key: 'delTaobao', label: '淘宝闪购' },
-            { key: 'delJd', label: '京东外卖' },
-            { key: 'delTotal', label: '外卖合计' }
+            { key: 'delMeituan', label: '美团外卖', path: 'delivery.meituan' },
+            { key: 'delTaobao', label: '淘宝闪购', path: 'delivery.taobao' },
+            { key: 'delJd', label: '京东外卖', path: 'delivery.jd' },
+            { key: 'delTotal', label: '外卖合计', path: 'delivery.total' }
         ]
     }
 ];
+
+function selectedPaymentFields() {
+    return _paymentGroups.reduce(function(items, group) {
+        group.items.forEach(function(item) {
+            if (_dailyPaymentFilter[item.key]) items.push(item);
+        });
+        return items;
+    }, []);
+}
+
+function monthlyPaymentFieldTotal(reports, field) {
+    return reports.reduce(function(total, report) {
+        var value = field.path.split('.').reduce(function(current, key) {
+            return current && current[key] !== undefined ? current[key] : 0;
+        }, report);
+        return total + (Number(value) || 0);
+    }, 0);
+}
+
+function selectedPaymentTotal(fields) {
+    var keys = fields.map(function(field) { return field.key; });
+    return fields.reduce(function(total, field) {
+        if (field.key === 'arTotal' && (keys.indexOf('arMeituan') >= 0 || keys.indexOf('arDouyin') >= 0)) return total;
+        if (field.key === 'delTotal' && (keys.indexOf('delMeituan') >= 0 || keys.indexOf('delTaobao') >= 0 || keys.indexOf('delJd') >= 0)) return total;
+        return total + (Number(field.monthlyTotal) || 0);
+    }, 0);
+}
 
 function renderDHist() {
     var el = document.getElementById('dhArea');
@@ -160,31 +192,49 @@ function renderDHist() {
         h += '</div>';
     }
 
-    // ★ 第二：结算方式筛选器
-    h += '<div class="payment-filter" style="margin-bottom:14px;padding:10px;background:var(--card);border:1px solid var(--bd);border-radius:8px">';
-    h += '<div style="font-size:.78rem;font-weight:600;color:var(--tx);margin-bottom:8px">结算方式筛选</div>';
+    // ★ 第二：结算方式筛选器与本月筛选合计
+    var selectedFields = selectedPaymentFields();
+    selectedFields.forEach(function(field) {
+        field.monthlyTotal = monthlyPaymentFieldTotal(mr, field);
+    });
+    var selectedTotal = selectedPaymentTotal(selectedFields);
+    h += '<section class="payment-filter">';
+    h += '<button type="button" class="payment-filter-toggle" aria-expanded="' + _dailyPaymentFilterExpanded + '" onclick="togglePaymentFilterPanel()">';
+    h += '<span><strong>结算方式筛选统计</strong><small>已选 ' + selectedFields.length + ' 项 · ' + fmtC(selectedTotal) + '</small></span>';
+    h += '<span class="payment-filter-chevron' + (_dailyPaymentFilterExpanded ? ' open' : '') + '" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></button>';
 
-    _paymentGroups.forEach(function(group) {
-        h += '<div style="margin-bottom:8px">';
-        h += '<div style="font-size:.72rem;color:var(--tx-m);margin-bottom:4px;font-weight:500">' + group.name + '</div>';
-        h += '<div style="display:flex;flex-wrap:wrap;gap:8px">';
-
-        group.items.forEach(function(item) {
-            var checked = _dailyPaymentFilter[item.key] ? 'checked' : '';
-            h += '<label style="display:flex;align-items:center;gap:4px;font-size:.72rem;color:var(--tx);cursor:pointer">';
-            h += '<input type="checkbox" ' + checked + ' onchange="togglePaymentFilter(\'' + item.key + '\', this.checked)" style="accent-color:var(--ac)">';
-            h += item.label;
-            h += '</label>';
+    if (_dailyPaymentFilterExpanded) {
+        h += '<div class="payment-filter-body">';
+        if (selectedFields.length) {
+            h += '<div class="payment-filter-actions"><span>已选 ' + selectedFields.length + ' 项</span><button type="button" class="btn s" onclick="resetPaymentFilter()">清空</button></div>';
+        }
+        _paymentGroups.forEach(function(group, groupIndex) {
+            h += '<div class="payment-filter-group' + (groupIndex === _paymentGroups.length - 1 ? ' last' : '') + '"><div class="payment-filter-label">' + group.name + '</div>';
+            h += '<div class="payment-filter-options" role="group" aria-label="' + group.name + '">';
+            group.items.forEach(function(item) {
+                var checked = _dailyPaymentFilter[item.key];
+                h += '<button type="button" class="payment-filter-chip' + (checked ? ' active' : '') + '" aria-pressed="' + checked + '" onclick="togglePaymentFilter(\'' + item.key + '\',' + !checked + ')">' + item.label + '</button>';
+            });
+            h += '</div></div>';
         });
 
+        if (selectedFields.length) {
+            h += '<div class="payment-filter-summary">';
+            h += '<div class="payment-filter-summary-head"><strong>本月筛选合计</strong><span>按当前月份全部日报汇总</span></div>';
+            h += '<div class="payment-filter-summary-grid">';
+            selectedFields.forEach(function(field) {
+                h += '<div class="payment-filter-summary-item"><span>' + field.label + '</span><strong>' + fmtC(field.monthlyTotal) + '</strong></div>';
+            });
+            h += '</div>';
+            h += '<div class="payment-filter-summary-total"><span>已选项目合计</span><strong>' + fmtC(selectedTotal) + '</strong></div>';
+            h += '<p class="payment-filter-summary-note">合计自动排除与明细重复的“应收合计 / 外卖合计”。</p>';
+            h += '</div>';
+        } else {
+            h += '<div class="payment-filter-empty">勾选结算方式后，这里显示本月合计。</div>';
+        }
         h += '</div>';
-        h += '</div>';
-    });
-
-    h += '<div style="margin-top:8px">';
-    h += '<button class="btn s" onclick="resetPaymentFilter()" style="font-size:.72rem;padding:4px 8px">重置筛选</button>';
-    h += '</div>';
-    h += '</div>';
+    }
+    h += '</section>';
 
     // ★ 第三：日历
     h += '<div class="daily-calendar" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:14px">';
@@ -273,25 +323,27 @@ function resetPaymentFilter() {
     renderDHist();
 }
 
-// 切换日报标签页（粘贴/手动/明细）
-// 切到手动时初始化填写表单，切到明细时刷新历史列表
+// 切换日报主视图。旧参数 text/manual 统一映射到录入态。
 function switchDT(tab) {
-    $id('dText').style.display = tab === 'text' ? '' : 'none';
-    $id('dMan').style.display = tab === 'manual' ? '' : 'none';
-    $id('dHist').style.display = tab === 'hist' ? '' : 'none';
-    document.querySelectorAll('#dT .tab-btn').forEach(function(b, i) {
-        b.classList.toggle('active', (i === 0 && tab === 'text') || (i === 1 && tab === 'manual') || (i === 2 && tab === 'hist'));
+    if (!$id('dText') || !$id('dHist')) return;
+    var entry = tab !== 'hist';
+    $id('dText').style.display = entry ? '' : 'none';
+    $id('dMan').style.display = 'none';
+    $id('dHist').style.display = entry ? 'none' : '';
+    document.querySelectorAll('#dT .view-tab').forEach(function(button, index) {
+        var active = entry ? index === 0 : index === 1;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-selected', String(active));
     });
-    if (tab === 'manual') {
-        // 只初始化存在的区块
-        initFreeRows();
-        if ($id('dmTeaList')) initTeaBlock();
-        if ($id('dmCigList')) initCigBlock();
-        if ($id('dmAlcList')) initAlcBlock();
-        if ($id('dmOtherList')) initOtherBlock();
-        if ($id('dmRoomList')) initRoomBlock();
+    if (entry) {
+        renderDP();
     }
-    if (tab === 'hist') renderDHist();
+    if (!entry) renderDHist();
+}
+
+function togglePaymentFilterPanel() {
+    _dailyPaymentFilterExpanded = !_dailyPaymentFilterExpanded;
+    renderDHist();
 }
 
 // 日报自定义标签行
@@ -687,7 +739,9 @@ function parseDaily(text) {
         cigSales: {},
         alcSales: {},
         otherSales: {},
-        reporter: ''
+        customFields: {},
+        reporter: '',
+        pending: []
     };
 
     var dm = text.match(/(\d{4})\s*[年\-\/.]\s*(\d{1,2})\s*[月\-\/.]\s*(\d{1,2})/);
@@ -706,6 +760,7 @@ function parseDaily(text) {
         l = l.trim();
         if (!l) return;
         l = l.replace(/\*\*/g, '').replace(/\uFF1A/g, ':');
+        if (/^\d{4}\s*[年\-\/.]\s*\d{1,2}\s*[月\-\/.]\s*\d{1,2}\s*日?$/.test(l)) return;
         if (/月累计|本页合计|^品名/.test(l)) return;
 
         if (/实收/.test(l) && !/厨房|吧台/.test(l)) { r.revenue.netSales = extN(l); return; }
@@ -800,6 +855,20 @@ function parseDaily(text) {
             r.reporter = l.replace(/.*汇报人:?\s*/, '').trim();
             return;
         }
+
+        var pair = l.match(/^([^:：]{1,24})[:：]?\s*([-+]?\d[\d,]*(?:\.\d+)?)$/);
+        if (pair) {
+            var customField = dailyFieldByLabel(pair[1].trim());
+            if (customField && !customField.path) {
+                r.customFields[customField.id] = parseFloat(pair[2].replace(/,/g, '')) || 0;
+                return;
+            }
+            r.pending.push({
+                label: pair[1].trim(),
+                value: parseFloat(pair[2].replace(/,/g, '')) || 0,
+                raw: l
+            });
+        }
     });
 
     if (!r.delivery.total) r.delivery.total = (r.delivery.meituan || 0) + (r.delivery.taobao || 0) + (r.delivery.jd || 0);
@@ -807,12 +876,133 @@ function parseDaily(text) {
     return r;
 }
 
-// 解析日报文本并渲染预览
-function doParseDaily() {
+function resetDailyDraft() {
+    _pd = parseDaily('');
+    _dailyPendingParse = null;
+    _dailyPendingSave = null;
+    _dailySavedReport = null;
+    _dailySaveMode = '';
+    if ($id('dtInput')) $id('dtInput').value = '';
+    renderDP();
+    toast('已清空解析草稿');
+}
+
+function hasDailyDraftContent(report) {
+    if (!report) return false;
+    if (report.pending && report.pending.length) return true;
+    if (report.rooms && report.rooms.length) return true;
+    ['teaSales', 'cigSales', 'alcSales', 'otherSales', 'customFields'].some(function(key) {
+        var value = report[key] || {};
+        if (Object.keys(value).length) return true;
+        return false;
+    });
+    return dailyScalarPaths().some(function(path) {
+        var value = getDailyPath(report, path);
+        return path !== 'date' && Number(value) !== 0;
+    });
+}
+
+function requestDailyParse() {
     var text = $id('dtInput').value.trim();
     if (!text) { toast('请粘贴日报'); return; }
-    _pd = parseDaily(text);
-    fixCigParsed(text, _pd);
+    var parsed = parseDaily(text);
+    fixCigParsed(text, parsed);
+    _pd = parsed;
+    _dailyPendingParse = null;
+    _dailySavedReport = null;
+    _dailySaveMode = '';
+    closeModal();
+    renderDP();
+}
+
+function dailyScalarPaths() {
+    return [
+        'date', 'revenue.grossSales', 'revenue.discount', 'revenue.netSales',
+        'revenue.kitchenSales', 'revenue.barSales', 'revenue.cigarette.total',
+        'revenue.other', 'payment.pos', 'payment.ccbLife', 'payment.cash',
+        'payment.memberCard', 'payment.treat', 'payment.ar.total',
+        'payment.ar.meituan', 'payment.ar.douyin', 'delivery.total',
+        'delivery.meituan', 'delivery.taobao', 'delivery.jd', 'guest.count',
+        'guest.avgSpend', 'guest.premiumRoomsToday'
+    ];
+}
+
+function getDailyPath(target, path) {
+    return path.split('.').reduce(function(value, key) { return value ? value[key] : undefined; }, target);
+}
+
+function setDailyPath(target, path, value) {
+    var keys = path.split('.');
+    var last = keys.pop();
+    var cursor = target;
+    keys.forEach(function(key) { if (!cursor[key]) cursor[key] = {}; cursor = cursor[key]; });
+    cursor[last] = value;
+}
+
+function prepareDailyParse(mode) {
+    var text = $id('dtInput').value.trim();
+    var parsed = parseDaily(text);
+    fixCigParsed(text, parsed);
+    if (mode === 'merge' && _dailySavedReport) {
+        _pd = JSON.parse(JSON.stringify(_dailySavedReport));
+        delete _pd.pending;
+    }
+    if (mode === 'merge' && _pd) {
+        _dailyPendingParse = parsed;
+        var conflicts = dailyScalarPaths().map(function(path) {
+            return { path: path, current: getDailyPath(_pd, path), next: getDailyPath(parsed, path) };
+        }).filter(function(item) { return String(item.current) !== String(item.next); });
+        if (!conflicts.length) {
+            applyDailyMerge({});
+            return;
+        }
+        var h = '<h3>合并字段冲突</h3><p style="font-size:.76rem;color:var(--tx-m)">逐项选择要保留的值。未列出的字段直接使用新解析值补空。</p>';
+        conflicts.forEach(function(item, index) {
+            h += '<div class="hrow"><label>' + item.path + '</label><select class="inp" data-daily-conflict="' + item.path + '">';
+            h += '<option value="current">现有：' + item.current + '</option><option value="next">新解析：' + item.next + '</option></select></div>';
+        });
+        h += '<div class="brow"><button class="btn" onclick="closeModal()">取消</button><button class="btn p" onclick="applyDailyMerge()">应用合并</button></div>';
+        showModal(h, 620);
+        return;
+    }
+    _pd = parsed;
+    _dailySaveMode = _dailySavedReport ? mode : '';
+    closeModal();
+    renderDP();
+}
+
+function applyDailyMerge() {
+    if (!_pd || !_dailyPendingParse) return;
+    document.querySelectorAll('[data-daily-conflict]').forEach(function(select) {
+        var path = select.dataset.dailyConflict;
+        var value = select.value === 'next' ? getDailyPath(_dailyPendingParse, path) : getDailyPath(_pd, path);
+        setDailyPath(_pd, path, value);
+    });
+    Object.keys(_dailyPendingParse).forEach(function(key) {
+        if (dailyScalarPaths().indexOf(key) >= 0) return;
+        if (!_pd[key] && _dailyPendingParse[key]) _pd[key] = _dailyPendingParse[key];
+    });
+    _pd.pending = (_pd.pending || []).concat(_dailyPendingParse.pending || []);
+    _dailyPendingParse = null;
+    _dailySaveMode = _dailySavedReport ? 'merge' : '';
+    closeModal();
+    renderDP();
+    toast('已合并解析草稿');
+}
+
+function mapDailyPending(index) {
+    if (!_pd || !_pd.pending[index]) return;
+    var select = document.querySelector('[data-daily-pending="' + index + '"]');
+    if (!select || !select.value) return;
+    var item = _pd.pending[index];
+    setDailyPath(_pd, select.value, item.value);
+    _pd.pending.splice(index, 1);
+    renderDP();
+}
+
+function removeDailyPending(index) {
+    if (!_pd || !_pd.pending[index]) return;
+    _pd.pending.splice(index, 1);
     renderDP();
 }
 
@@ -845,6 +1035,77 @@ function fixCigParsed(text, result) {
     }
 }
 
+function dailyFieldGroups(fields) {
+    var groups = [];
+    fields.filter(function(field) { return field.visible; }).sort(function(a, b) { return a.order - b.order; }).forEach(function(field) {
+        var group = groups.find(function(item) { return item.name === field.group; });
+        if (!group) {
+            group = { name: field.group, fields: [] };
+            groups.push(group);
+        }
+        group.fields.push(field);
+    });
+    return groups;
+}
+
+function dailyFieldValue(report, field) {
+    if (field.path) return getDailyPath(report, field.path) || 0;
+    if (!report.customFields) report.customFields = {};
+    return report.customFields[field.id] || 0;
+}
+
+function dailyFieldByLabel(label) {
+    return (getAppConfig().dailyFieldDefinitions || []).find(function(field) {
+        return field.visible && field.label === String(label || '').trim();
+    }) || null;
+}
+
+function renderDailyConfiguredFields(report) {
+    var fields = (getAppConfig().dailyFieldDefinitions || []).slice();
+    var output = '';
+    dailyFieldGroups(fields).forEach(function(group) {
+        output += '<div class="pv-card"><h4>' + group.name + '</h4>';
+        group.fields.forEach(function(field) {
+            if (field.type === 'rooms') {
+                output += '<div id="dailyRoomsConfigured">';
+                if (report.rooms && report.rooms.length) {
+                    output += '<table style="width:100%;border-collapse:collapse;font-size:.78rem">';
+                    output += '<tr><th style="text-align:left;padding:6px 8px;background:var(--card-h);border-bottom:1px solid var(--bd)">姓名</th><th style="text-align:right;padding:6px 8px;background:var(--card-h);border-bottom:1px solid var(--bd)">今日</th><th style="text-align:right;padding:6px 8px;background:var(--card-h);border-bottom:1px solid var(--bd)">累计</th></tr>';
+                    report.rooms.forEach(function(room) {
+                        output += '<tr><td style="padding:6px 8px;border-bottom:1px solid var(--bd-l)">' + room.name + '</td>';
+                        output += '<td style="padding:6px 8px;border-bottom:1px solid var(--bd-l);text-align:right">' + room.today + '</td>';
+                        output += '<td style="padding:6px 8px;border-bottom:1px solid var(--bd-l);text-align:right">' + room.cum + '</td></tr>';
+                    });
+                    output += '</table>';
+                } else {
+                    output += '<div style="font-size:.75rem;color:var(--tx-m)">无包厢预定记录</div>';
+                }
+                output += '</div>';
+                return;
+            }
+            var value = dailyFieldValue(report, field);
+            var path = field.path || ('custom.' + field.id);
+            output += '<div class="pv-row"><span class="k">' + field.label + '</span>';
+            output += '<input class="ed-input" type="number" step="0.01" value="' + value + '"' + (field.readonly ? ' readonly style="background:var(--card-h)"' : '') + ' oninput="setDVal(\'' + path + '\',this.value)" aria-label="' + field.label + '"></div>';
+        });
+        output += '</div>';
+    });
+    return output;
+}
+
+function calculateDailyFieldStats(reports, fields) {
+    var totals = { revenue: 0, cost: 0, payment: 0, receivable: 0, delivery: 0, guest: 0, none: 0 };
+    (reports || []).forEach(function(report) {
+        (fields || []).forEach(function(field) {
+            if (field.type === 'rooms' || field.path) return;
+            var value = Number(dailyFieldValue(report, field)) || 0;
+            if (totals[field.statistic] === undefined) totals[field.statistic] = 0;
+            totals[field.statistic] += value;
+        });
+    });
+    return totals;
+}
+
 // 日报预览
 function renderDP() {
     var r = _pd;
@@ -857,21 +1118,29 @@ function renderDP() {
             ' oninput="setDVal(\'' + pa + '\',this.value)"></div>';
     };
 
+    var h = '';
+    if (r.pending && r.pending.length) {
+        h += '<div class="pv-card"><h4>待确认字段（' + r.pending.length + '）</h4>';
+        h += '<p style="font-size:.72rem;color:var(--tx-m)">映射或删除全部字段后才能保存。</p>';
+        r.pending.forEach(function(item, index) {
+            h += '<div class="pv-row"><span class="k">' + item.label + '：' + item.value + '</span><span>';
+            h += '<select class="inp" data-daily-pending="' + index + '" aria-label="映射待确认字段"><option value="">选择正式字段</option>';
+            h += '<option value="revenue.grossSales">流水</option><option value="revenue.netSales">实收</option>';
+            h += '<option value="revenue.other">其他收入</option><option value="guest.count">人数</option>';
+            h += '<option value="guest.avgSpend">人均</option></select> ';
+            h += '<button class="btn s" onclick="mapDailyPending(' + index + ')">映射</button> ';
+            h += '<button class="btn s d" onclick="removeDailyPending(' + index + ')">删除</button></span></div>';
+        });
+        h += '</div>';
+    }
+
     // 日期选择
-    var h = '<div class="pv-card"><h4>日期</h4>';
+    h += '<div class="pv-card"><h4>日期</h4>';
     h += '<div class="pv-row"><span class="k">日报日期</span>';
     h += '<input class="ed-input" id="dpDate" type="text" readonly value="' + r.date + '" onclick="_dpOpen(\'dpDate\')" onchange="setDVal(\'date\',this.value)" style="cursor:pointer;width:140px"></div>';
     h += '</div>';
 
-    h += '<div class="pv-card"><h4>营收</h4>';
-    h += inpRow('流水', r.revenue.grossSales, 'revenue.grossSales');
-    h += inpRow('折扣', r.revenue.discount, 'revenue.discount');
-    h += inpRow('实收', r.revenue.netSales, 'revenue.netSales');
-    h += inpRow('厨房', r.revenue.kitchenSales, 'revenue.kitchenSales');
-    h += inpRow('吧台', r.revenue.barSales, 'revenue.barSales');
-    h += inpRow('香烟', r.revenue.cigarette.total, 'revenue.cigarette.total');
-    h += inpRow('其他', r.revenue.other, 'revenue.other');
-    h += '</div>';
+    h += renderDailyConfiguredFields(r);
 
     // 茗茶销售
     h += '<div class="pv-card"><h4>茗茶销售</h4>';
@@ -985,55 +1254,8 @@ function renderDP() {
     });
     h += '</div>';
 
-    // 支付
-    h += '<div class="pv-card"><h4>支付</h4>';
-    h += inpRow('POS', r.payment.pos, 'payment.pos');
-    h += inpRow('建行', r.payment.ccbLife, 'payment.ccbLife');
-    h += inpRow('现金', r.payment.cash, 'payment.cash');
-    h += inpRow('会员', r.payment.memberCard, 'payment.memberCard');
-    h += inpRow('招待', r.payment.treat, 'payment.treat');
-    h += '</div>';
-
-    // 应收
-    h += '<div class="pv-card"><h4>应收</h4>';
-    h += inpRow('合计', r.payment.ar.total, 'payment.ar.total', true);
-    h += inpRow('美团团购', r.payment.ar.meituan, 'payment.ar.meituan');
-    h += inpRow('抖音团购', r.payment.ar.douyin, 'payment.ar.douyin');
-    h += '</div>';
-
-    // 外卖
-    h += '<div class="pv-card"><h4>外卖</h4>';
-    h += inpRow('合计', r.delivery.total, 'delivery.total', true);
-    h += inpRow('美团', r.delivery.meituan, 'delivery.meituan');
-    h += inpRow('淘宝', r.delivery.taobao, 'delivery.taobao');
-    h += inpRow('京东', r.delivery.jd, 'delivery.jd');
-    h += '</div>';
-
-    // 客情
-    h += '<div class="pv-card"><h4>客情</h4>';
-    h += inpRow('人数', r.guest.count, 'guest.count');
-    h += inpRow('人均', r.guest.avgSpend, 'guest.avgSpend');
-    h += inpRow('500+包厢', r.guest.premiumRoomsToday, 'guest.premiumRoomsToday');
-    h += '</div>';
-
-    // 包厢预定
-    if (r.rooms && r.rooms.length) {
-        h += '<div class="pv-card"><h4>包厢预定</h4>';
-        h += '<table style="width:100%;border-collapse:collapse;font-size:.78rem">';
-        h += '<tr><th style="text-align:left;padding:6px 8px;background:var(--card-h);border-bottom:1px solid var(--bd)">姓名</th>';
-        h += '<th style="text-align:right;padding:6px 8px;background:var(--card-h);border-bottom:1px solid var(--bd)">今日</th>';
-        h += '<th style="text-align:right;padding:6px 8px;background:var(--card-h);border-bottom:1px solid var(--bd)">累计</th></tr>';
-        r.rooms.forEach(function(room) {
-            h += '<tr><td style="padding:6px 8px;border-bottom:1px solid var(--bd-l)">' + room.name + '</td>';
-            h += '<td style="padding:6px 8px;border-bottom:1px solid var(--bd-l);text-align:right">' + room.today + '</td>';
-            h += '<td style="padding:6px 8px;border-bottom:1px solid var(--bd-l);text-align:right">' + room.cum + '</td></tr>';
-        });
-        h += '</table></div>';
-    }
-
     h += '<div class="brow" style="margin-top:12px;justify-content:flex-end;gap:10px">';
     h += '<button class="btn p" onclick="saveDaily()">保存</button>';
-    h += '<button class="btn" onclick="_pd=null;$id(\'dailyPreview\').innerHTML=\'\'">取消</button>';
     h += '</div>';
 
     $id('dailyPreview').innerHTML = h;
@@ -1041,6 +1263,11 @@ function renderDP() {
 
 // 日报预览输入框变化时更新数据
 function setDVal(pa, val) {
+    if (pa.indexOf('custom.') === 0) {
+        if (!_pd.customFields) _pd.customFields = {};
+        _pd.customFields[pa.slice(7)] = parseFloat(val) || 0;
+        return;
+    }
     var p = pa.split('.'), o = _pd;
     for (var i = 0; i < p.length - 1; i++) o = o[p[i]];
     // 日期字段特殊处理
@@ -1083,12 +1310,88 @@ function matchLabel(lb, v, r, f) {
 }
 
 // 保存日报
-function saveDaily() {
+function saveDaily(mode) {
     if (!_pd) return;
+    if (_pd.pending && _pd.pending.length) {
+        toast('请先处理全部待确认字段');
+        return;
+    }
+    var existingReport = (DB.dailyReports || []).find(function(report) { return report.date === _pd.date; });
+    if (!existingReport) {
+        finalizeDailySave('overwrite');
+        return;
+    }
+    if (!mode) {
+        var h = '<h3 style="margin-bottom:10px">' + _pd.date + ' 已有日报</h3>';
+        h += '<p style="margin:0 0 22px;color:var(--tx-s);font-size:.78rem;line-height:1.6">请选择本次草稿如何处理已经保存的日报。</p>';
+        h += '<div class="brow" style="justify-content:flex-end;flex-wrap:wrap;margin-top:24px;gap:10px">';
+        h += '<button class="btn p" onclick="saveDaily(\'merge\')">合并</button>';
+        h += '<button class="btn d" onclick="saveDaily(\'overwrite\')">覆盖</button>';
+        h += '<button class="btn" onclick="closeModal()">取消</button></div>';
+        showModal(h, 520);
+        return;
+    }
+    if (mode === 'merge') {
+        openDailySaveMerge(existingReport, _pd);
+        return;
+    }
+    _dailySavedReport = existingReport;
+    _dailySaveMode = 'overwrite';
+    closeModal();
+    finalizeDailySave('overwrite');
+}
+
+function openDailySaveMerge(existingReport, nextReport) {
+    _dailySavedReport = existingReport;
+    _dailyPendingSave = nextReport;
+    var conflicts = dailyScalarPaths().map(function(path) {
+        return { path: path, current: getDailyPath(existingReport, path), next: getDailyPath(nextReport, path) };
+    }).filter(function(item) { return String(item.current) !== String(item.next); });
+    if (!conflicts.length) {
+        applyDailySaveMerge();
+        return;
+    }
+    var h = '<h3>合并字段冲突</h3><p style="font-size:.76rem;color:var(--tx-m)">逐项选择保留已保存值或本次录入值。</p>';
+    conflicts.forEach(function(item) {
+        h += '<div class="hrow"><label>' + item.path + '</label><select class="inp" data-daily-save-conflict="' + item.path + '">';
+        h += '<option value="current">已保存：' + item.current + '</option><option value="next">本次录入：' + item.next + '</option></select></div>';
+    });
+    h += '<div class="brow"><button class="btn" onclick="closeModal()">取消</button><button class="btn p" onclick="applyDailySaveMerge()">应用合并</button></div>';
+    showModal(h, 620);
+}
+
+function applyDailySaveMerge() {
+    if (!_dailySavedReport || !_dailyPendingSave) return;
+    var merged = JSON.parse(JSON.stringify(_dailySavedReport));
+    document.querySelectorAll('[data-daily-save-conflict]').forEach(function(select) {
+        var path = select.dataset.dailySaveConflict;
+        var value = select.value === 'next' ? getDailyPath(_dailyPendingSave, path) : getDailyPath(_dailySavedReport, path);
+        setDailyPath(merged, path, value);
+    });
+    ['teaSales', 'cigSales', 'alcSales', 'otherSales', 'customFields', 'rooms'].forEach(function(key) {
+        var nextValue = _dailyPendingSave[key];
+        var hasValue = Array.isArray(nextValue) ? nextValue.length : nextValue && Object.keys(nextValue).length;
+        if (hasValue) merged[key] = JSON.parse(JSON.stringify(nextValue));
+    });
+    merged.pending = [];
+    _pd = merged;
+    _dailyPendingSave = null;
+    _dailySaveMode = 'merge';
+    closeModal();
+    finalizeDailySave('merge');
+}
+
+function finalizeDailySave(mode) {
+    if (!_pd) return;
+    if (_pd.pending && _pd.pending.length) {
+        toast('请先处理全部待确认字段');
+        return;
+    }
+    delete _pd.pending;
 
     // 检查是否已有该日期的数据
     var existingReport = DB.dailyReports.find(function(d) { return d.date === _pd.date; });
-    if (existingReport) {
+    if (existingReport && !_dailySaveMode) {
         if (!confirm('⚠️ ' + _pd.date + ' 已有日报数据，确定要覆盖吗？\n\n覆盖后原数据将被删除。')) {
             return;
         }
@@ -1221,6 +1524,8 @@ function saveDaily() {
 
     toast('已保存');
     _pd = null;
+    _dailySavedReport = null;
+    _dailySaveMode = '';
     rDaily();
 }
 
