@@ -47,6 +47,47 @@ async function sbLoad(force) {
     return null;
 }
 
+// 当本地业务数据较新时，整库同步会被时间戳保护而跳过。配置仍需要跨设备可用，
+// 因此单独读取并合并账号配置，不触碰本地的日报、采购等业务记录。
+function sbApplyRemoteAppConfig(remoteData) {
+    if (!remoteData || !remoteData.settings || typeof getConfigKey !== 'function') return false;
+    var key = getConfigKey();
+    var remoteConfig = remoteData.settings[key];
+    if (!remoteConfig || typeof remoteConfig !== 'object') return false;
+
+    if (!DB.settings) DB.settings = {};
+    DB.settings[key] = typeof copyAppConfigValue === 'function'
+        ? copyAppConfigValue(remoteConfig)
+        : JSON.parse(JSON.stringify(remoteConfig));
+
+    // getAppConfig 会根据“有实际内容优先、再按更新时间”的规则选择本地或云端快照。
+    // 这里只更新配置相关的本地缓存，不调用 sbScheduleSave，避免反向覆盖云端业务数据。
+    var config = getAppConfig();
+    localStorage.setItem(key, JSON.stringify(config));
+    DB.areaCats = typeof copyAppConfigValue === 'function'
+        ? copyAppConfigValue(config.purchaseCategories)
+        : JSON.parse(JSON.stringify(config.purchaseCategories || {}));
+    DB.whCats = typeof copyAppConfigValue === 'function'
+        ? copyAppConfigValue(config.warehouseCategories)
+        : JSON.parse(JSON.stringify(config.warehouseCategories || []));
+    if (typeof saveDB === 'function') saveDB(DB);
+    return true;
+}
+
+async function sbLoadAppConfig() {
+    if (!_sb.ready || !_sb.client) return false;
+    var dataId = _sbDataId();
+    if (!dataId) return false;
+    try {
+        var resp = await _sb.client.from('cafe_data').select('data').eq('id', dataId).single();
+        if (resp.error || !resp.data) return false;
+        return sbApplyRemoteAppConfig(resp.data.data);
+    } catch (e) {
+        console.error('Supabase 配置读取失败:', e);
+        return false;
+    }
+}
+
 // 上传当前用户的数据到云端（同时写入共享行供报表页读取）
 async function sbSave() {
     if (!_sb.ready || _sb.saving) { console.log('跳过保存: ready=' + _sb.ready + ', saving=' + _sb.saving); return; }
@@ -95,7 +136,11 @@ async function sbSyncOnStart() {
             DB = remote;
             saveDB(DB);
             migrateAreaCats();
+            sbApplyRemoteAppConfig(remote);
             toast('云端已加载');
+        } else {
+            // 即使整库因本地时间戳较新而不下载，也必须补拉账号配置。
+            await sbLoadAppConfig();
         }
         // 同步到共享行供报表页读取
         if (_sbDataId()) {
