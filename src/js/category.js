@@ -1,36 +1,28 @@
 
-// 获取分类列表
+// 采购区域和分类以账号配置为准；旧数据由 getAppConfig 的迁移逻辑读取。
+function getPurchaseSections() {
+    return (getAppConfig().purchaseSections || []).slice();
+}
+
 function getPurCats(area) {
-    // 如果还没有分类数据，初始化默认分类
-    if (!DB.areaCats) {
-        DB.areaCats = {
-            "厨房": ["调料/粮油", "食材", "茶叶/干货"],
-            "吧台": ["饮品", "耗材"],
-            "外场": ["清洁", "包装", "设备"]
-        };
-    }
+    var categories = getAppConfig().purchaseCategories || {};
+    // 指定区域却没有配置时保持为空，不能把其他区域的分类混进来。
+    if (area) return (categories[area] || []).slice();
 
-    // 传了区域参数，返回该区域的分类（slice复制一份，防止修改原数组）
-    if (area && DB.areaCats[area]) {
-        return DB.areaCats[area].slice();
-    }
-
-    // 没传参数，返回所有区域的分类（合并去重）
+    // 没传区域参数时，供跨区域搜索等场景使用合并后的分类列表。
     var all = [];
-    Object.keys(DB.areaCats).forEach(function(a) {
-        DB.areaCats[a].forEach(function(c) {
+    Object.keys(categories).forEach(function(a) {
+        categories[a].forEach(function(c) {
             if (all.indexOf(c) < 0) all.push(c);
         });
     });
-
-    // 如果完全没有分类，返回硬编码的默认值
-    return all.length ? all : ["调料/粮油", "食材", "茶叶/干货", "清洁", "耗材", "设备", "包装"];
+    return all;
 }
 
 // 根据区域重建分类下拉框
 function updateCatSelect(selEl, area) {
     // 获取该区域的分类列表
-    var cats = getPurCats(area);
+    var cats = area ? getPurCats(area) : [];
 
     // 重建下拉选项
     var html = '<option value="">-</option>';

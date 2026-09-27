@@ -80,4 +80,48 @@ describe('account configuration cloud hydration', () => {
       purchaseCategories: { 厨房: ['食材'] },
     });
   });
+
+  it('uploads a category change made while a previous save is still running', async () => {
+    let releaseFirstUpload!: () => void;
+    const firstUpload = new Promise<void>((resolve) => { releaseFirstUpload = resolve; });
+    const uploadedCategories: string[][] = [];
+    const client = {
+      from() {
+        return {
+          upsert(payload: any) {
+            if (payload.id === 'purchase-user') {
+              uploadedCategories.push([...payload.data.settings.category.purchaseCategories.厨房]);
+              if (uploadedCategories.length === 1) {
+                return firstUpload.then(() => ({ error: null }));
+              }
+            }
+            return Promise.resolve({ error: null });
+          },
+        };
+      },
+    };
+    const context: Record<string, any> = {
+      console,
+      DB: { settings: { category: { purchaseCategories: { 厨房: ['干调'] } } } },
+      _auth: { loggedIn: true, user: { id: 'purchase-user' } },
+      toast() {},
+      $id() { return null; },
+    };
+    context.window = context;
+    vm.createContext(context);
+    vm.runInContext(syncSource, context);
+    context._sb.ready = true;
+    context._sb.client = client;
+    let followupSave: Promise<void> | undefined;
+    context.sbScheduleSave = () => { followupSave = context.sbSave(); };
+
+    const runningSave = context.sbSave();
+    context.DB.settings.category.purchaseCategories.厨房.push('冻品类');
+    await context.sbSave();
+    releaseFirstUpload();
+    await runningSave;
+    await followupSave;
+
+    expect(uploadedCategories).toEqual([['干调'], ['干调', '冻品类']]);
+  });
 });

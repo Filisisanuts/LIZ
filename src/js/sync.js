@@ -1,5 +1,6 @@
 var _sb = { client: null, ready: false, saving: false };
 var _sbSyncing = false;
+var _sbPendingSave = false;
 
 // Supabase 配置（内置）
 var _SB_URL = 'https://aahvuwdifuqhwyanrvwj.supabase.co';
@@ -90,7 +91,11 @@ async function sbLoadAppConfig() {
 
 // 上传当前用户的数据到云端（同时写入共享行供报表页读取）
 async function sbSave() {
-    if (!_sb.ready || _sb.saving) { console.log('跳过保存: ready=' + _sb.ready + ', saving=' + _sb.saving); return; }
+    if (!_sb.ready) { console.log('跳过保存: Supabase未就绪'); return; }
+    if (_sb.saving) {
+        _sbPendingSave = true;
+        return;
+    }
     var dataId = _sbDataId();
     if (!dataId) { console.log('跳过保存: 未登录'); return; }
     _sb.saving = true;
@@ -113,9 +118,14 @@ async function sbSave() {
     } catch (e) {
         console.error('Supabase 保存异常:', e);
         toast('上传异常: ' + e.message);
+    } finally {
+        _sb.saving = false;
+        updSyncInd();
+        if (_sbPendingSave) {
+            _sbPendingSave = false;
+            sbScheduleSave();
+        }
     }
-    _sb.saving = false;
-    updSyncInd();
 }
 
 // 防抖保存（数据变更后2秒自动上传）

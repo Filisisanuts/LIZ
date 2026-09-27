@@ -387,7 +387,9 @@ function doAIParseGo(){
     closeModal();showAILoading();
     var base64=window._pendingMimoBase64,ep=window._pendingMimoEp,key=window._pendingMimoKey;
     if(!base64){window._mimoProcessing=false;mimoDiag('run_failed',{stage:'confirm_without_image'});hideAILoading(false);toast("图片已失效，请重新拍摄（可查看识别诊断）");return}
-    var prompt='请识别这张采购单/出库单图片，提取所有商品信息。图片中会标注区域信息（如厨房、吧台、外场），请将每个商品对应的区域填入section字段。请严格按以下JSON格式返回：\n\n{"date":"YYYY-MM-DD","source":"供应商名称","items":[{"name":"商品名称","qty":数字,"unit":"单位","unitPrice":单价,"total":金额,"section":"区域"}]}\n\n区域只能是：厨房、吧台、外场。无法判断则留空。只返回JSON。';
+    var purchaseSections = getPurchaseSections();
+    var regionRule = purchaseSections.length ? '区域只能是：' + purchaseSections.join('、') + '。' : '';
+    var prompt='请识别这张采购单/出库单图片，提取所有商品信息。图片中会标注区域信息，请将每个商品对应的区域填入section字段。请严格按以下JSON格式返回：\n\n{"date":"YYYY-MM-DD","source":"供应商名称","items":[{"name":"商品名称","qty":数字,"unit":"单位","unitPrice":单价,"total":金额,"section":"区域"}]}\n\n' + regionRule + '无法判断则留空。只返回JSON。';
     var body={model:localStorage.getItem('ax_mimo_model')||'mimo-v2.5',messages:[{role:'user',content:[{type:'text',text:prompt},{type:'image_url',image_url:{url:'data:image/jpeg;base64,'+base64}}]}],max_tokens:4096,temperature:.1};
     var xhr=new XMLHttpRequest();xhr.open('POST',ep,true);
     xhr.setRequestHeader('Content-Type','application/json');xhr.setRequestHeader('Authorization','Bearer '+key);xhr.timeout=120000;
@@ -546,12 +548,6 @@ function addHistoryMatches(items) {
                 item.name = match.item.name;
             }
             
-            if (match.item.section && !item.section) {
-                item.section = match.item.section;
-            }
-            if (match.item.category && !item.category) {
-                item.category = match.item.category;
-            }
         }
     });
     

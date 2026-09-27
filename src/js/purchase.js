@@ -92,7 +92,7 @@ function findPrevPrice(name, currentDate) {
 
 // 粘贴解析核心：解析采购单/出库单文字，提取商品信息
 // 支持 Tab分隔、Markdown表格、空格分隔 三种格式
-// 自动检测区域标题（厨房/吧台/外场）
+// 自动检测已配置的区域标题
 function parsePurchase(text) {
     var dm = text.match(/(\d{4})[-\/.年]\s*(\d{1,2})[-\/.月]\s*(\d{1,2})/);
 
@@ -106,6 +106,12 @@ function parsePurchase(text) {
 
     var skipRe = /合计|本页|当日|区域汇总|以下是|好的|已删除|不录入/;
     var curSection = '';
+    var configuredSections = getPurchaseSections();
+    var sectionHeadings = configuredSections.slice();
+    ['厨房', '吧台', '外场'].forEach(function(section) {
+        if (sectionHeadings.indexOf(section) < 0) sectionHeadings.push(section);
+    });
+    sectionHeadings.sort(function(a, b) { return b.length - a.length; });
 
     // 解析每一行
     text.split('\n').forEach(function(raw) {
@@ -118,9 +124,16 @@ function parsePurchase(text) {
         l = l.replace(/^📌\s*/, '');
         l = l.replace(/^>\s*/g, '');
 
-        // 检测区域标题（厨房/吧台/外场）
-        var secMatch = l.match(/^(?:#{1,3}\s*)?(厨房|吧台|外场)(?:\s*[·•\-]|$)/);
-        if (secMatch) { curSection = secMatch[1]; return; }
+        // 未配置的区域标题也要截断上一组，避免把后续物品归到前一个区域。
+        var heading = l.replace(/^#{1,3}\s*/, '');
+        var section = sectionHeadings.find(function(candidate) {
+            if (heading === candidate) return true;
+            return heading.indexOf(candidate) === 0 && /^\s*[·•\-:：]/.test(heading.slice(candidate.length));
+        });
+        if (section) {
+            curSection = !configuredSections.length || configuredSections.indexOf(section) >= 0 ? section : '';
+            return;
+        }
 
         // 跳过非数据行
         if (skipRe.test(l)) return;
@@ -284,10 +297,7 @@ function doParsePur() {
 // 采购主页：三个标签页（粘贴/手动/明细）
 function rPurchase() {
     migratePurchaseReturns();
-    var cats = getPurCats();
-    var secs = (getAppConfig().purchaseSections || []).slice();
-    if (!secs.length) secs = Object.keys(DB.areaCats || {});
-    if (!secs.length) secs = ['厨房', '吧台', '外场'];
+    var secs = getPurchaseSections();
     var h = '';
 
     // 主视图标签固定排在最上方
@@ -421,14 +431,16 @@ function pmSecChanged(sel) {
     if (area === '__custom') {
         customInput.style.display = '';
         sel.style.display = 'none';
+        catSel.innerHTML = '<option value="">请选择</option><option value="__custom">自定义</option>';
+        $id('pmCatC').style.display = 'none';
         return;
     }
 
     customInput.style.display = 'none';
-    var cats = getPurCats(area);
-    var html = '<option value="">请选择</option>';
+    var cats = area ? getPurCats(area) : [];
+    var html = '<option value="">' + (area ? '请选择' : '请先选区域') + '</option>';
     cats.forEach(function(c) { html += '<option>' + c + '</option>'; });
-    html += '<option value="__custom">自定义</option>';
+    if (area) html += '<option value="__custom">自定义</option>';
     catSel.innerHTML = html;
     $id('pmCatC').style.display = 'none';
 }
@@ -1041,8 +1053,8 @@ function addPurItem() {
 
 // 重建表格行中的下拉框（区域或分类）
 // 自动选中当前值，不在预设中则追加选中项
-function rebuildSel(sel, field, value) {
-    var presets = field === 'section' ? ['厨房', '吧台', '外场'] : getPurCats();
+function rebuildSel(sel, field, value, area) {
+    var presets = field === 'section' ? getPurchaseSections() : (area ? getPurCats(area) : []);
     var html = '<option value="">-</option>';
     presets.forEach(function(o) { html += '<option' + (o === value ? ' selected' : '') + '>' + o + '</option>'; });
     if (value && presets.indexOf(value) < 0) html += '<option selected>' + value + '</option>';
@@ -1055,7 +1067,9 @@ function renderPML() {
     var el = $id('pmList');
     if (!el) return;
 
-    var secs = DB.areaCats ? Object.keys(DB.areaCats) : ['厨房', '吧台', '外场'];
+    var config = getAppConfig();
+    var secs = (config.purchaseSections || []).slice();
+    var categories = config.purchaseCategories || {};
     var srcs = getPurchaseSources();
     if (srcs.length === 0) srcs = ['岸香贸易', '外购']; // 兼容旧用户
     var h = '';
@@ -1089,7 +1103,9 @@ function renderPML() {
         h += '<tr><th>品名</th><th>来源</th><th>区域</th><th>分类</th><th>数量</th><th>单位</th><th>单价</th><th>总价</th><th></th></tr>';
 
         _pmItems.forEach(function(i, idx) {
-            var itemCats = getPurCats(i.section);
+            var itemSecs = secs.slice();
+            if (i.section && itemSecs.indexOf(i.section) < 0) itemSecs.push(i.section);
+            var itemCats = i.section ? (categories[i.section] || []) : [];
 
             h += '<tr>';
 
@@ -1107,13 +1123,14 @@ function renderPML() {
             // 区域
             h += '<td><select class="pm-edit" style="width:65px" onchange="purAreaChanged(this,' + idx + ')">';
             h += '<option value="">-</option>';
-            secs.forEach(function(s) { h += '<option' + (i.section === s ? ' selected' : '') + '>' + s + '</option>'; });
+            itemSecs.forEach(function(s) { h += '<option' + (i.section === s ? ' selected' : '') + '>' + s + '</option>'; });
             h += '</select></td>';
 
             // 分类
             h += '<td><select class="pm-edit" style="width:85px" onchange="pmEditSel(' + idx + ',\'category\',this.value)">';
             h += '<option value="">-</option>';
             itemCats.forEach(function(c) { h += '<option' + (i.category === c ? ' selected' : '') + '>' + c + '</option>'; });
+            if (i.category && itemCats.indexOf(i.category) < 0) h += '<option value="' + axEscapeHtml(i.category) + '" selected>' + axEscapeHtml(i.category) + '（原分类，请核对）</option>';
             h += '<option value="__custom">自定义</option><option value="__clear">清除</option></select></td>';
 
             // 数量
@@ -1168,7 +1185,7 @@ function pmEditSel(idx, field, val) {
             var row = document.querySelectorAll('#pmList .tw table tr')[idx + 1];
             if (row) {
                 var sels = row.querySelectorAll('select');
-                var si = field === 'section' ? 0 : 1;
+                var si = field === 'section' ? 1 : 2;
                 if (sels[si]) {
                     var found = false;
                     for (var i = 0; i < sels[si].options.length; i++) {
@@ -1192,12 +1209,14 @@ function pmEditSel(idx, field, val) {
 
 // 弹窗管理各区域的分类
 function manageCats() {
-    var areas = ['厨房', '吧台', '外场'];
+    var areas = getPurchaseSections();
     var h = '<h3>管理分类</h3>';
     h += '<div class="hrow" style="margin-bottom:10px"><label>选择区域</label>';
-    h += '<select class="inp" id="macArea" style="max-width:120px" onchange="renderAreaCatsList()">';
+    h += '<select class="inp" id="macArea" data-ax-enhanced="true" style="max-width:120px" onchange="renderAreaCatsList()">';
+    if (!areas.length) h += '<option value="">请先配置区域</option>';
     areas.forEach(function(a) { h += '<option>' + a + '</option>'; });
     h += '</select></div>';
+    if (!areas.length) h += '<p style="color:var(--tx-m);font-size:.74rem">请先到设置中的分类配置添加采购区域。</p>';
     h += '<div class="hrow" style="margin-bottom:10px">';
     h += '<input class="inp" id="newAreaCat" placeholder="输入新分类名称" style="flex:2">';
     h += '<button class="btn p" onclick="addAreaCat()">添加</button></div>';
@@ -1210,7 +1229,7 @@ function manageCats() {
 // 渲染当前区域的分类列表
 function renderAreaCatsList() {
     var area = $id('macArea').value;
-    var cats = DB.areaCats[area] || [];
+    var cats = area ? getPurCats(area) : [];
     var h = '';
     if (!cats.length) {
         h += '<div style="text-align:center;padding:20px;color:var(--tx-m)">该区域暂无分类</div>';
@@ -1235,31 +1254,49 @@ function renderAreaCatsList() {
 function addAreaCat() {
     var area = $id('macArea').value;
     var name = $id('newAreaCat').value.trim();
+    if (!area) { toast('请先配置采购区域'); return; }
     if (!name) { toast('输入分类名称'); return; }
-    if (!DB.areaCats[area]) DB.areaCats[area] = [];
-    if (DB.areaCats[area].indexOf(name) >= 0) { toast('该区域已有此分类'); return; }
-    DB.areaCats[area].push(name);
-    saveDB(DB);
-    if (typeof sbScheduleSave === 'function') sbScheduleSave();
+    var config = getAppConfig();
+    if (!config.purchaseCategories[area]) config.purchaseCategories[area] = [];
+    if (config.purchaseCategories[area].indexOf(name) >= 0) { toast('该区域已有此分类'); return; }
+    config.purchaseCategories[area].push(name);
+    storeAppConfig(config);
     $id('newAreaCat').value = '';
     toast('已添加 ' + name);
     renderAreaCatsList();
+    refreshPurchaseCategoryInput(area);
+    renderPML();
 }
 
 // 删除指定区域的分类（同时清空采购记录中的该分类）
 function delAreaCat(name) {
     var area = $id('macArea').value;
+    if (!area) return;
     if (!confirm('彻底删除"' + area + '"下的"' + name + '"？\n已使用该分类的采购记录中的分类会被清空')) return;
-    DB.areaCats[area] = (DB.areaCats[area] || []).filter(function(c) { return c !== name; });
+    var config = getAppConfig();
+    config.purchaseCategories[area] = (config.purchaseCategories[area] || []).filter(function(c) { return c !== name; });
     DB.purchases.forEach(function(p) {
         p.items.forEach(function(i) {
             if ((i.section || '') === area && i.category === name) i.category = '';
         });
     });
-    saveDB(DB);
-    if (typeof sbScheduleSave === 'function') sbScheduleSave();
+    storeAppConfig(config);
     toast('已删除');
     renderAreaCatsList();
+    refreshPurchaseCategoryInput(area);
+    _pmItems.forEach(function(item) {
+        if (item.section === area && item.category === name) item.category = '';
+    });
+    renderPML();
+}
+
+function refreshPurchaseCategoryInput(area) {
+    var sectionSelect = $id('pmSec');
+    var categorySelect = $id('pmCat');
+    if (!sectionSelect || !categorySelect || sectionSelect.value !== area) return;
+    var selected = categorySelect.value;
+    pmSecChanged(sectionSelect);
+    if (getPurCats(area).indexOf(selected) >= 0) categorySelect.value = selected;
 }
 
 // ------ 识别结果确认弹窗 ------
@@ -1286,6 +1323,7 @@ function batchFill(field, source) {
     var rows = document.getElementById('parseTbl').querySelectorAll('tr');
     r.items.forEach(function(item, idx) {
         item[field] = val;
+        if (field === 'section') item.category = '';
 
         var row = rows[idx + 1];
         if (!row) return;
@@ -1304,6 +1342,7 @@ function batchFill(field, source) {
             targetSel.insertBefore(opt, targetSel.querySelector('[value="__custom"]'));
         }
         targetSel.value = val;
+        if (field === 'section' && sels[1]) rebuildSel(sels[1], 'category', '', val);
     });
 
     toast('已填充 ' + r.items.length + ' 项');
@@ -1328,19 +1367,36 @@ function parseResFieldChange(idx, field, val) {
     var sel = sels[si];
     if (!sel) return;
 
-    if (val === '__clear') { r.items[idx][field] = ''; rebuildSel(sel, field, ''); return; }
+    var area = field === 'category' ? r.items[idx].section : '';
+    if (val === '__clear') {
+        r.items[idx][field] = '';
+        rebuildSel(sel, field, '', area);
+        if (field === 'section' && sels[1]) {
+            r.items[idx].category = '';
+            rebuildSel(sels[1], 'category', '', '');
+        }
+        return;
+    }
     if (val === '__custom') {
         var prev = r.items[idx][field] || '';
-        rebuildSel(sel, field, prev);
+        rebuildSel(sel, field, prev, area);
         setTimeout(function() {
             var v = prompt('输入' + (field === 'section' ? '区域' : '分类'));
             if (!v || !v.trim()) return;
             r.items[idx][field] = v.trim();
-            rebuildSel(sel, field, v.trim());
+            rebuildSel(sel, field, v.trim(), area);
+            if (field === 'section' && sels[1]) {
+                r.items[idx].category = '';
+                rebuildSel(sels[1], 'category', '', v.trim());
+            }
         }, 50);
         return;
     }
     r.items[idx][field] = val;
+    if (field === 'section' && sels[1]) {
+        r.items[idx].category = '';
+        rebuildSel(sels[1], 'category', '', val);
+    }
 }
 
 // 确认AI识别结果并导入手动录入表单
@@ -1588,8 +1644,10 @@ function editPurByDate(date, name) {
     }
     if (!found) return;
 
-    var secs = DB.areaCats ? Object.keys(DB.areaCats) : ['厨房', '吧台', '外场'];
-    var cats = getPurCats(found.section);
+    var secs = getPurchaseSections();
+    if (found.section && secs.indexOf(found.section) < 0) secs.push(found.section);
+    var cats = found.section ? getPurCats(found.section) : [];
+    if (found.category && cats.indexOf(found.category) < 0) cats.push(found.category);
     var sources = getPurchaseSources();
     if (sources.length === 0) sources = ['外购']; // 兼容旧用户
     var curSource = found.source || foundP.source || '';
@@ -1622,7 +1680,7 @@ function editPurByDate(date, name) {
 // 编辑弹窗：区域变化时更新分类下拉
 function epiSecChanged(sel) {
     var catSel = $id('epi_cat');
-    var cats = getPurCats(sel.value);
+    var cats = sel.value ? getPurCats(sel.value) : [];
     var html = '<option value="">-</option>';
     cats.forEach(function(c) { html += '<option>' + c + '</option>'; });
     catSel.innerHTML = html;
@@ -2571,8 +2629,8 @@ function editPurByIdx(pid, idx) {
     if (!p || !p.items[idx]) return;
     var item = p.items[idx];
 
-    var secs = ['厨房', '吧台', '外场'];
-    var cats = getPurCats(item.section);
+    var secs = getPurchaseSections();
+    var cats = item.section ? getPurCats(item.section) : [];
 
     // 当前值不在预设列表中则插入
     if (item.section && secs.indexOf(item.section) < 0) secs.unshift(item.section);
