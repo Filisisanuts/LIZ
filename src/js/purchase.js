@@ -284,8 +284,10 @@ function doParsePur() {
 // 采购主页：三个标签页（粘贴/手动/明细）
 function rPurchase() {
     migratePurchaseReturns();
-    var secs = ['厨房', '吧台', '外场'];
     var cats = getPurCats();
+    var secs = (getAppConfig().purchaseSections || []).slice();
+    if (!secs.length) secs = Object.keys(DB.areaCats || {});
+    if (!secs.length) secs = ['厨房', '吧台', '外场'];
     var h = '';
 
     // 主视图标签固定排在最上方

@@ -1993,38 +1993,6 @@ function switchNav(btn) {
     btn.classList.add('active');
 }
 
-// 更新悬浮导航栏的子标签
-function updateFnavTabs(page) {
-  var tabs = {
-    home:     ['概览', '日报', '采购'],
-    tea:      ['库存', '明细'],
-    cig:      ['库存', '明细'],
-    alc:      ['库存', '明细'],
-    report:   ['利润表', '营收', '成本', '毛利']
-  };
-
-  var tabList = tabs[page];
-  var el = $id('fnavTabs');
-  if (!tabList || !tabList.length) { el.innerHTML = ''; return; }
-
-  el.innerHTML = tabList.map(function(t, i) {
-    return '<button type="button" class="view-tab' + (i === 0 ? ' active' : '') + '" role="tab" aria-selected="' + (i === 0) + '" onclick="fnavTabClick(this,\'' + page + '\',' + i + ')">' + t + '</button>';
-  }).join('');
-}
-
-function fnavTabClick(btn, page, idx) {
-  $id('fnavTabs').querySelectorAll('.view-tab').forEach(function(t) {
-    t.classList.remove('active');
-    t.setAttribute('aria-selected', 'false');
-  });
-  btn.classList.add('active');
-  btn.setAttribute('aria-selected', 'true');
-
-  // 如果页面内有子标签栏，同步切换
-  var tabBtns = $id('mainContent').querySelectorAll('.view-tabs .view-tab');
-  if (tabBtns[idx]) tabBtns[idx].click();
-}
-
 // 切换侧边栏展开/收起
 function toggleToolbar() {
     var toolbar = $id('toolbar');

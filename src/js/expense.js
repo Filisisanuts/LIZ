@@ -25,7 +25,7 @@ function rExpense() {
     h += '<div id="expInput">';
     h += '<div class="section-label">录入费用</div>';
     h += '<div class="hrow"><label>日期</label><input class="inp" id="expDate" type="text" readonly placeholder="选择日期" value="' + td() + '" onclick="_dpOpen(\'expDate\')" style="max-width:150px;cursor:pointer">';
-    h += '<label>分类</label><select class="inp" id="expCatSel" style="max-width:120px" onchange="toggleCustomInput(this,\'expCatC\')">';
+    h += '<label>分类</label><select class="inp" id="expCatSel" data-ax-enhanced="true" style="max-width:120px" onchange="toggleCustomInput(this,\'expCatC\')">';
     h += '<option value="">请选择</option>';
     cats.forEach(function(c) { h += '<option>' + c + '</option>'; });
     h += '<option value="__custom">自定义</option></select>';

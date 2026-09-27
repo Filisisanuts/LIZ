@@ -6,6 +6,32 @@ function axEscapeHtml(value) {
     });
 }
 
+function axIsSheetViewport() {
+    return window.matchMedia('(max-width: 600px)').matches;
+}
+
+function axSyncVisualViewport() {
+    var viewport = window.visualViewport;
+    var bottomGap = viewport
+        ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
+        : 0;
+    document.querySelectorAll('.ax-select.ax-select-sheet.open .ax-select-menu').forEach(function(menu) {
+        menu.style.setProperty('--ax-select-viewport-gap', Math.round(bottomGap) + 'px');
+    });
+}
+
+function axSyncSelectModes() {
+    var useSheet = axIsSheetViewport();
+    var wrappers = Array.prototype.slice.call(document.querySelectorAll('.ax-select'));
+    var modeChanged = wrappers.some(function(wrapper) {
+        return wrapper.classList.contains('ax-select-sheet') !== useSheet;
+    });
+    if (modeChanged) axCloseSelects();
+    wrappers.forEach(function(wrapper) {
+        wrapper.classList.toggle('ax-select-sheet', useSheet);
+    });
+}
+
 function axDispatchChange(element) {
     if (!element) return;
     element.dispatchEvent(new Event('change', { bubbles: true }));
@@ -35,6 +61,7 @@ function axCloseSelects(except) {
             menu.hidden = true;
             menu.style.transform = '';
             menu.style.transition = '';
+            menu.style.removeProperty('--ax-select-viewport-gap');
         }
         var trigger = select.querySelector('.ax-select-trigger');
         if (trigger) trigger.setAttribute('aria-expanded', 'false');
@@ -85,7 +112,7 @@ function axCreateEnhancedSelect(native) {
     var search = null;
     var customRow = null;
 
-    wrapper.className = 'ax-select' + (window.matchMedia('(max-width: 768px)').matches ? ' ax-select-sheet' : '');
+    wrapper.className = 'ax-select' + (axIsSheetViewport() ? ' ax-select-sheet' : '');
     wrapper.dataset.mode = mode;
     trigger.type = 'button';
     trigger.className = 'ax-select-trigger';
@@ -125,6 +152,7 @@ function axCreateEnhancedSelect(native) {
     }
 
     function renderOptions(filter) {
+        options = Array.prototype.slice.call(native.options);
         Array.prototype.slice.call(menu.querySelectorAll('.ax-select-option')).forEach(function(option) {
             option.remove();
         });
@@ -156,21 +184,22 @@ function axCreateEnhancedSelect(native) {
         });
     }
 
-    trigger.addEventListener('click', function() {
+    trigger.addEventListener('click', function(event) {
         var opening = menu.hidden;
         axCloseSelects(wrapper);
         menu.hidden = !opening;
         wrapper.classList.toggle('open', opening);
         trigger.setAttribute('aria-expanded', String(opening));
         if (opening) {
-            if (window.matchMedia('(max-width: 768px)').matches) axSheetBackdrop(true);
+            if (axIsSheetViewport()) axSheetBackdrop(true);
             renderOptions(search ? search.value : '');
-            if (search) {
+            if (search && event.detail === 0) {
                 search.focus();
-            } else {
+            } else if (!search) {
                 var first = menu.querySelector('.ax-select-option');
                 if (first) first.focus();
             }
+            axSyncVisualViewport();
         }
     });
 
@@ -237,6 +266,14 @@ function axCreateEnhancedSelect(native) {
         refreshTrigger();
         renderOptions(search ? search.value : '');
     });
+    if (window.MutationObserver) {
+        var optionsObserver = new MutationObserver(function() {
+            options = Array.prototype.slice.call(native.options);
+            refreshTrigger();
+            renderOptions(search ? search.value : '');
+        });
+        optionsObserver.observe(native, { childList: true, subtree: true });
+    }
     refreshTrigger();
     renderOptions('');
     axBindSheetDrag(wrapper, menu);
@@ -337,6 +374,15 @@ document.addEventListener('click', function(event) {
 document.addEventListener('keydown', function(event) {
     if (event.key === 'Escape') axCloseSelects();
 });
+
+window.addEventListener('resize', function() {
+    axSyncSelectModes();
+    axSyncVisualViewport();
+});
+if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', axSyncVisualViewport);
+    window.visualViewport.addEventListener('scroll', axSyncVisualViewport);
+}
 
 if (window.MutationObserver) {
     var axSelectObserver = new MutationObserver(function() {
