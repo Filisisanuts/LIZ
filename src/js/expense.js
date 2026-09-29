@@ -32,7 +32,11 @@ function rExpense() {
     h += '<input class="inp" id="expCatC" style="display:none;max-width:120px" placeholder="输入分类">';
     h += '<label>金额</label><input class="inp" id="expAmt" type="number" step="0.01" style="max-width:100px">元</div>';
     h += '<div class="hrow"><label>备注</label><input class="inp" id="expNote"></div>';
-    h += '<div class="hrow"><label>凭证</label><input type="file" id="expPhoto" accept="image/*" onchange="handleExpPhoto(event)"></div>';
+    h += '<div class="hrow expense-voucher-row"><label for="expPhoto">凭证</label><div class="expense-upload-control">';
+    h += '<input class="expense-upload-input" type="file" id="expPhoto" accept="image/*" onchange="handleExpPhoto(event)">';
+    h += '<label class="expense-upload-button" for="expPhoto"><span class="expense-upload-icon" aria-hidden="true">↑</span>上传凭证</label>';
+    h += '<span class="expense-upload-status" id="expPhotoStatus" aria-live="polite">未添加凭证</span>';
+    h += '<button type="button" class="expense-upload-clear" id="expPhotoClear" aria-label="移除已选凭证" title="移除图片" hidden>×</button></div></div>';
     h += '<div class="brow"><button class="btn p" onclick="addExp()">添加</button></div>';
     h += '</div>';
 
@@ -42,6 +46,8 @@ function rExpense() {
     h += '</div>';
 
     setMain('费用', h);
+    var clearPhotoButton = $id('expPhotoClear');
+    if (clearPhotoButton) clearPhotoButton.addEventListener('click', clearExpPhoto);
 }
 
 // ------ 添加费用记录 ------
@@ -65,6 +71,18 @@ function addExp() {
     _expPhotoData = null;
     toast('已添加');
     rExpense();
+}
+
+// 清除当前待保存的凭证图片，不影响本次已填写的其他费用信息。
+function clearExpPhoto() {
+    _expPhotoSelectionVersion++;
+    _expPhotoData = null;
+    var input = $id('expPhoto');
+    if (input) input.value = '';
+    var status = $id('expPhotoStatus');
+    var clear = $id('expPhotoClear');
+    if (status) { status.textContent = '未添加凭证'; status.className = 'expense-upload-status'; }
+    if (clear) clear.hidden = true;
 }
 
 // 处理费用凭证照片的输入事件，读取文件并存储Base64数据

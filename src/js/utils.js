@@ -189,7 +189,26 @@ function syncLegacyDailyLabels(){
 
 // 图片压缩
 function processImage(file,mw,cb){var reader=new FileReader();reader.onload=function(e){var img=new Image();img.onload=function(){var c=document.createElement('canvas');var w=img.width,h=img.height;if(w>mw){h=h*mw/w;w=mw}c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);cb(c.toDataURL('image/jpeg',.85))};img.src=e.target.result};reader.readAsDataURL(file)}
-function handleExpPhoto(e){var f=e.target.files[0];if(!f)return;processImage(f,800,function(d){_expPhotoData=d;toast('已选择照片')})}
+var _expPhotoSelectionVersion=0;
+function handleExpPhoto(e){
+    var f=e.target.files[0];
+    var status=$id('expPhotoStatus');
+    var clear=$id('expPhotoClear');
+    if(!f){
+        clearExpPhoto();
+        return;
+    }
+    var selectionVersion=++_expPhotoSelectionVersion;
+    if(status){status.textContent='正在读取：'+f.name;status.className='expense-upload-status';}
+    if(clear)clear.hidden=true;
+    processImage(f,800,function(d){
+        if(selectionVersion!==_expPhotoSelectionVersion)return;
+        _expPhotoData=d;
+        if(status){status.textContent='✓ 已添加：'+f.name;status.className='expense-upload-status is-selected';}
+        if(clear)clear.hidden=false;
+        toast('已选择照片');
+    })
+}
 function handleDmgPhoto(e){var f=e.target.files[0];if(!f)return;processImage(f,800,function(d){_dmgPhotoData=d;toast('已选择照片')})}
 
 // ---- AI加载动画（供采购单识别使用）----

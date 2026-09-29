@@ -12,6 +12,7 @@ import './styles/tokens.css';
 import './styles/base.css';
 import './styles/layout.css';
 import './styles/utilities.css';
+import './styles/features/expense.css';
 
 // 应用壳
 import { createAppShell, renderSidebarNav } from './app/app-shell';

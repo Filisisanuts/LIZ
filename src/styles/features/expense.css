@@ -1,0 +1,160 @@
+/* 费用页：凭证上传控件 */
+.expense-voucher-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.expense-voucher-label {
+  flex: 0 0 auto;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.expense-upload-control {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.expense-upload-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.expense-upload-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 2.4rem;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 62%, var(--color-border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-bg-card));
+  color: var(--color-primary-dark);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
+}
+
+.expense-upload-button:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.expense-upload-button:active {
+  transform: translateY(1px);
+}
+
+.expense-upload-input:focus-visible + .expense-upload-button {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.expense-upload-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.expense-upload-status {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 9.5rem;
+  padding: 0.25rem 0.5rem;
+  overflow: hidden;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.expense-upload-status.is-selected {
+  border-color: color-mix(in srgb, var(--color-success) 26%, var(--color-border));
+  background: color-mix(in srgb, var(--color-success) 10%, var(--color-bg-card));
+  color: var(--color-success);
+}
+
+.expense-upload-status.is-error {
+  border-color: color-mix(in srgb, var(--color-error) 26%, var(--color-border));
+  background: color-mix(in srgb, var(--color-error) 10%, var(--color-bg-card));
+  color: var(--color-error);
+}
+
+.expense-upload-status.is-selected:not(:last-child) {
+  padding-right: 0.5rem;
+  border-right: 1px solid color-mix(in srgb, var(--color-success) 26%, var(--color-border));
+  border-radius: var(--radius-full);
+}
+
+.expense-upload-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  min-width: 1.4rem;
+  height: 1.4rem;
+  min-height: 1.4rem;
+  padding: 0;
+  margin-left: calc(-0.5 * var(--space-2));
+  border: 1px solid color-mix(in srgb, var(--color-success) 26%, var(--color-border));
+  border-radius: 50%;
+  background: var(--color-bg-card);
+  color: var(--color-success);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  transition: background-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
+}
+
+.expense-upload-clear[hidden] {
+  display: none;
+}
+
+.expense-upload-clear:hover {
+  background: var(--color-success);
+  color: #fff;
+}
+
+.expense-upload-clear:active {
+  transform: translateY(1px);
+}
+
+.expense-upload-clear:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+@media (max-width: 480px) {
+  .expense-voucher-row {
+    align-items: center;
+  }
+
+  .expense-upload-control {
+    flex-wrap: nowrap;
+  }
+
+  .expense-voucher-label {
+    min-height: 2.4rem;
+    display: inline-flex;
+    align-items: center;
+  }
+
+}

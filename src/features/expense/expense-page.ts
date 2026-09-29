@@ -16,6 +16,7 @@ import {
 // ===== 状态 =====
 
 let photoData: string | null = null;
+let photoSelectionVersion = 0;
 
 // ===== 组件函数 =====
 
@@ -69,9 +70,17 @@ export function renderExpense(container: HTMLElement): void {
 
   // 凭证
   html += `
-    <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem; align-items: center;">
-      <label style="font-size: 0.85rem; color: var(--color-text-secondary);">凭证</label>
-      <input type="file" id="expPhoto" accept="image/*" onchange="handleExpPhoto(event)">
+    <div class="expense-voucher-row">
+      <label class="expense-voucher-label" for="expPhoto">凭证</label>
+      <div class="expense-upload-control">
+        <input class="expense-upload-input" type="file" id="expPhoto" accept="image/*">
+        <label class="expense-upload-button" for="expPhoto">
+          <span class="expense-upload-icon" aria-hidden="true">↑</span>
+          上传凭证
+        </label>
+        <span class="expense-upload-status" id="expPhotoStatus" aria-live="polite">未添加凭证</span>
+        <button type="button" class="expense-upload-clear" id="expPhotoClear" aria-label="移除已选凭证" title="移除图片" hidden>×</button>
+      </div>
     </div>
   `;
 
@@ -129,6 +138,7 @@ export function renderExpense(container: HTMLElement): void {
 
   // 绑定日期选择器
   initDatePickers();
+  initPhotoPicker();
 }
 
 /**
@@ -145,6 +155,72 @@ function initDatePickers(): void {
       }
     });
   }
+}
+
+/**
+ * 绑定费用凭证选择器，并同步显示用户可见的文件状态。
+ */
+function initPhotoPicker(): void {
+  const photoInput = document.getElementById('expPhoto') as HTMLInputElement | null;
+  if (!photoInput) return;
+
+  photoInput.addEventListener('change', () => {
+    handleExpensePhotoSelection(photoInput);
+  });
+
+  document.getElementById('expPhotoClear')?.addEventListener('click', clearExpensePhoto);
+}
+
+function handleExpensePhotoSelection(input: HTMLInputElement): void {
+  const file = input.files?.[0];
+  const status = document.getElementById('expPhotoStatus');
+  const clearButton = document.getElementById('expPhotoClear') as HTMLButtonElement | null;
+
+  if (!file) {
+    clearExpensePhoto();
+    return;
+  }
+
+  const selectionVersion = ++photoSelectionVersion;
+  updatePhotoStatus(status, `正在读取：${file.name}`);
+  if (clearButton) clearButton.hidden = true;
+
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    if (selectionVersion !== photoSelectionVersion) return;
+    photoData = event.target?.result as string;
+    updatePhotoStatus(status, `已添加：${file.name}`, true);
+    if (clearButton) clearButton.hidden = false;
+  };
+  reader.onerror = () => {
+    if (selectionVersion !== photoSelectionVersion) return;
+    photoData = null;
+    updatePhotoStatus(status, '图片读取失败，请重新选择', false, true);
+    if (clearButton) clearButton.hidden = true;
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearExpensePhoto(): void {
+  photoSelectionVersion++;
+  photoData = null;
+  const input = document.getElementById('expPhoto') as HTMLInputElement | null;
+  const clearButton = document.getElementById('expPhotoClear') as HTMLButtonElement | null;
+  if (input) input.value = '';
+  if (clearButton) clearButton.hidden = true;
+  updatePhotoStatus(document.getElementById('expPhotoStatus'), '未添加凭证');
+}
+
+function updatePhotoStatus(
+  status: HTMLElement | null,
+  message: string,
+  selected = false,
+  failed = false,
+): void {
+  if (!status) return;
+  status.textContent = selected ? `✓ ${message}` : message;
+  status.classList.toggle('is-selected', selected);
+  status.classList.toggle('is-error', failed);
 }
 
 // ===== 全局函数绑定 =====
@@ -180,15 +256,9 @@ export function initExpenseGlobals(): void {
   // 照片处理
   (window as any).handleExpPhoto = (event: Event) => {
     const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      photoData = e.target?.result as string;
-    };
-    reader.readAsDataURL(file);
+    handleExpensePhotoSelection(input);
   };
+  (window as any).clearExpPhoto = clearExpensePhoto;
 
   // 添加费用
   (window as any).addExp = () => {
