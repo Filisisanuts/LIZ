@@ -14,6 +14,7 @@ import {
   getTrendData,
 } from './dashboard-service';
 import { initDashboardChart } from './dashboard-charts';
+import { renderIcon, type IconName } from '@/shared/ui/icon-bridge';
 
 // ===== 类型 =====
 
@@ -40,8 +41,8 @@ function createCard({ label, value, className = '' }: CardOptions): string {
 /**
  * 创建区块标题
  */
-function createSectionTitle(icon: string, title: string): string {
-  return `<h3 style="margin: 1.5rem 0 0.75rem; font-size: 0.9rem; font-weight: 600;">${icon} ${title}</h3>`;
+function createSectionTitle(icon: IconName, title: string): string {
+  return `<h3 style="margin: 1.5rem 0 0.75rem; font-size: 0.9rem; font-weight: 600;"><span class="section-icon">${renderIcon(icon)}</span>${title}</h3>`;
 }
 
 /**
@@ -65,14 +66,14 @@ export function renderDashboard(container: HTMLElement): void {
   if (alerts.length > 0) {
     html += `
       <div style="background: #fff3e0; border: 1px solid #ffb74d; border-radius: var(--radius-lg); padding: 0.75rem 1rem; margin-bottom: 1rem; font-size: 0.8rem;">
-        <strong style="color: #e65100;">⚠️ 补货：</strong>
+        <strong style="color: #e65100;"><span class="alert-icon">${renderIcon('alert')}</span>补货：</strong>
         ${alerts.map((a) => `<span style="background: #ff9800; color: white; padding: 2px 8px; border-radius: 12px; margin-left: 4px; font-size: 0.75rem;">${a.name} ${a.stock}${a.unit}</span>`).join(' ')}
       </div>
     `;
   }
 
   // 昨日日报
-  html += createSectionTitle('📅', `${yesterday?.date || '昨日'} 日报`);
+  html += createSectionTitle('calendar', `${yesterday?.date || '昨日'} 日报`);
   if (yesterday) {
     html += '<div class="card-grid">';
     html += createCard({ label: '实收', value: formatCurrencyValue(yesterday.netSales), className: 'positive' });
@@ -88,7 +89,7 @@ export function renderDashboard(container: HTMLElement): void {
 
   // 本月营业数据
   const currentMonth = new Date().getMonth() + 1;
-  html += createSectionTitle('📊', `营业数据 · ${currentMonth}月累计`);
+  html += createSectionTitle('chart', `营业数据 · ${currentMonth}月累计`);
   html += '<div class="card-grid">';
   html += createCard({ label: '实收', value: formatCurrencyValue(monthly.netSales), className: 'positive' });
   html += createCard({ label: '厨房', value: formatCurrencyValue(monthly.kitchenSales) });
@@ -100,7 +101,7 @@ export function renderDashboard(container: HTMLElement): void {
   html += '</div>';
 
   // 采购成本
-  html += createSectionTitle('🛒', '采购成本');
+  html += createSectionTitle('basket', '采购成本');
   html += '<div class="card-grid">';
   html += createCard({ label: '本月采购', value: formatCurrencyValue(purchases.total), className: 'positive' });
   html += createCard({ label: '本月退货', value: formatCurrencyValue(purchases.returns), className: 'negative' });
@@ -109,7 +110,7 @@ export function renderDashboard(container: HTMLElement): void {
   html += '</div>';
 
   // 贵重物品经营
-  html += createSectionTitle('📦', '贵重物品经营');
+  html += createSectionTitle('gem', '贵重物品经营');
   html += '<div class="card-grid">';
   html += createCard({ label: '茗茶实收', value: formatCurrencyValue(inventory.tea.revenue) });
   html += createCard({ label: '茗茶毛利', value: formatCurrencyValue(inventory.tea.profit), className: 'positive' });
@@ -120,7 +121,7 @@ export function renderDashboard(container: HTMLElement): void {
   html += '</div>';
 
   // 近7日趋势图
-  html += createSectionTitle('📈', '近7日趋势');
+  html += createSectionTitle('trend', '近7日趋势');
   html += `
     <div style="background: var(--color-bg-card); border: 1px solid var(--color-border-light); border-radius: var(--radius-lg); padding: 1rem;">
       <canvas id="dashChart" height="120"></canvas>

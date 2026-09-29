@@ -10,15 +10,15 @@ function rGen() {
     h += '<div class="sec">选择报告周期</div>';
     h += '<div class="cards" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px">';
     h += '<div class="card" style="cursor:pointer;text-align:center" onclick="doGen(\'first\')">';
-    h += '<div style="font-size:1.2rem;margin-bottom:4px">📅</div>';
+    h += '<div class="period-card-icon">' + axIcon('calendar') + '</div>';
     h += '<div class="card-v" style="font-size:.84rem">上半月</div>';
     h += '<div class="card-l">1-15日</div></div>';
     h += '<div class="card" style="cursor:pointer;text-align:center" onclick="doGen(\'second\')">';
-    h += '<div style="font-size:1.2rem;margin-bottom:4px">📅</div>';
+    h += '<div class="period-card-icon">' + axIcon('calendarRange') + '</div>';
     h += '<div class="card-v" style="font-size:.84rem">下半月</div>';
     h += '<div class="card-l">16-月末</div></div>';
     h += '<div class="card" style="cursor:pointer;text-align:center" onclick="doGen(\'month\')">';
-    h += '<div style="font-size:1.2rem;margin-bottom:4px">📊</div>';
+    h += '<div class="period-card-icon">' + axIcon('chart') + '</div>';
     h += '<div class="card-v" style="font-size:.84rem">月度</div>';
     h += '<div class="card-l">全月汇总</div></div>';
     h += '</div>';

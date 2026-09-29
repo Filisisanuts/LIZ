@@ -14,6 +14,7 @@
 <!-- SheetJS (Excel 解析) -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <link rel="stylesheet" href="src/css/style.css?v=2">
+<link rel="stylesheet" href="src/styles/components/icons.css">
 </head>
 <body>
 <!-- 加载遮罩层 -->
@@ -57,14 +58,14 @@
   <div class="toolbar-divider"></div>
   <div class="toolbar-group">
     <button class="toolbar-btn" data-page="settings" onclick="goPage('settings')" title="设置">
-      <span class="ticon">⚙️</span><span class="tlabel">设置</span>
+      <span class="ticon" data-ax-icon="sliders"></span><span class="tlabel">设置</span>
     </button>
   </div>
   </div>
 </div>
 <!-- 悬浮毛玻璃导航栏 -->
 <div class="floating-nav" id="fnav">
-  <button class="hamburger" id="hamburger" onclick="toggleToolbar()" aria-label="打开导航菜单">☰</button>
+  <button class="hamburger" id="hamburger" onclick="toggleToolbar()" aria-label="打开导航菜单"><span class="hamburger-icon" data-ax-icon="menu"></span></button>
   <div class="fnav-title" id="fnavTitle">
     <span class="page-icon">☕</span>
     <span id="fnavLabel">经营管理</span>
@@ -73,7 +74,7 @@
     <div class="search-wrap"><input type="text" class="fnav-search" placeholder="搜索..." aria-label="搜索功能"></div>
     <span id="syncInd" onclick="goPage('settings')" style="display:flex;align-items:center;gap:5px;cursor:pointer;padding:4px 10px;border-radius:8px;transition:background .15s" onmouseenter="this.style.background='var(--bg-tertiary)'" onmouseleave="this.style.background='transparent'" title="数据同步">
       <span class="sync-dot" id="syncDot" style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#9AA0A6;transition:background .3s"></span>
-      <span id="syncLabel" class="sync-label">本地</span>
+      <span class="fnav-status-icon" data-ax-icon="cloudCheck"></span><span id="syncLabel" class="sync-label">本地</span>
     </span>
     <span id="headerDate" style="font-size:.72rem;color:var(--text-muted);white-space:nowrap"></span>
     <span id="authBadge"></span>
@@ -94,6 +95,7 @@
 
 <!-- 基础模块 -->
 <script src="src/js/ui-components.js"></script>
+<script src="src/js/icon-registry.js"></script>
 <script src="src/js/config-store.js"></script>
 <script src="src/js/config.js"></script>
 <script>

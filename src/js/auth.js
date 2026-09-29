@@ -187,6 +187,6 @@ function updateAuthUI() {
             el.innerHTML = '<div onclick="goPage(\'settings\')" style="width:28px;height:28px;border-radius:50%;background:var(--ac);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;cursor:pointer" title="' + display + '">' + initial + '</div>';
         }
     } else {
-        el.innerHTML = '<button onclick="showLoginModal()" class="fnav-icon-btn" title="登录" style="font-size:.82rem">👤</button>';
+        el.innerHTML = '<button onclick="showLoginModal()" class="fnav-icon-btn" title="登录" aria-label="登录">' + axIcon('user') + '</button>';
     }
 }

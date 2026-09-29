@@ -1,0 +1,13 @@
+/* 功能图标统一样式：尺寸、线宽和颜色不在业务页面内重复定义。 */
+.ax-icon{display:block;width:1em;height:1em;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.ticon{display:inline-flex;align-items:center;justify-content:center;line-height:1}.ticon .ax-icon{width:19px;height:19px}
+.toolbar-btn:hover .ticon .ax-icon{transform:scale(1.08)}.toolbar-btn.active .ticon .ax-icon{stroke-width:2}
+.hamburger-icon{display:inline-flex;align-items:center;justify-content:center}.hamburger-icon .ax-icon{width:19px;height:19px}
+.fnav-status-icon{display:inline-flex;align-items:center;justify-content:center;color:var(--tx-m)}.fnav-status-icon .ax-icon{width:14px;height:14px;stroke-width:1.8}
+.fnav-icon-btn .ax-icon{width:17px;height:17px}
+.sidebar-nav-icon{display:inline-flex;align-items:center;justify-content:center}.sidebar-nav-icon .ax-icon{width:18px;height:18px}
+.section-icon{display:inline-flex;align-items:center;justify-content:center;vertical-align:-.18em;margin-right:6px}.section-icon .ax-icon{width:18px;height:18px}
+.alert-icon{display:inline-flex;align-items:center;justify-content:center;vertical-align:-.16em;margin-right:5px}.alert-icon .ax-icon{width:18px;height:18px}
+.button-icon{display:inline-flex;align-items:center;justify-content:center;vertical-align:-.16em;margin-right:4px}.button-icon .ax-icon{width:16px;height:16px}
+.period-card-icon{display:flex;align-items:center;justify-content:center;height:24px;margin-bottom:4px;color:var(--ac)}.period-card-icon .ax-icon{width:21px;height:21px}
+@media(max-width:768px){.toolbar-btn .ticon .ax-icon{width:18px;height:18px}}

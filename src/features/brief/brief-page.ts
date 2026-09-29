@@ -6,6 +6,7 @@
  */
 
 import legacyBridge from '@/legacy/legacy-bridge';
+import { renderIcon, type IconName } from '@/shared/ui/icon-bridge';
 
 // ===== 类型 =====
 
@@ -13,7 +14,7 @@ type PeriodType = 'first' | 'second' | 'month' | 'custom';
 
 interface PeriodOption {
   type: PeriodType;
-  icon: string;
+  icon: IconName;
   label: string;
   description: string;
 }
@@ -21,9 +22,9 @@ interface PeriodOption {
 // ===== 常量 =====
 
 const PERIOD_OPTIONS: PeriodOption[] = [
-  { type: 'first', icon: '📅', label: '上半月', description: '1-15日' },
-  { type: 'second', icon: '📅', label: '下半月', description: '16-月末' },
-  { type: 'month', icon: '📊', label: '月度', description: '全月汇总' },
+  { type: 'first', icon: 'calendar', label: '上半月', description: '1-15日' },
+  { type: 'second', icon: 'calendarRange', label: '下半月', description: '16-月末' },
+  { type: 'month', icon: 'chart', label: '月度', description: '全月汇总' },
 ];
 
 // ===== 组件函数 =====
@@ -64,7 +65,7 @@ export function renderBrief(container: HTMLElement): void {
         style="cursor: pointer; text-align: center;"
         onclick="doGen('${option.type}')"
       >
-        <div style="font-size: 1.2rem; margin-bottom: 0.25rem;">${option.icon}</div>
+        <div class="period-card-icon">${renderIcon(option.icon)}</div>
         <div class="stat-card-value" style="font-size: 0.85rem;">${option.label}</div>
         <div class="stat-card-label">${option.description}</div>
       </div>

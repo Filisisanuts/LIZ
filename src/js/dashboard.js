@@ -93,13 +93,13 @@ function rDash() {
 
     // 预警条
     if (alerts.length) {
-        h += '<div class="alert-bar"><b style="color:var(--og)">⚠️ 补货：</b>';
+        h += '<div class="alert-bar"><b style="color:var(--og)"><span class="alert-icon">' + axIcon('alert') + '</span>补货：</b>';
         h += alerts.map(function(a) { return '<span class="badge og">' + a + '</span>'; }).join(' ');
         h += '</div>';
     }
 
     // 昨日日报
-    h += '<div class="sec">📅 ' + yd + ' 日报</div>';
+    h += '<div class="sec"><span class="section-icon">' + axIcon('calendar') + '</span>' + yd + ' 日报</div>';
     if (ydr) {
         h += '<div class="cards">';
         h += card('实收', fmtC(ydr.revenue.netSales), 'ac');
@@ -114,7 +114,7 @@ function rDash() {
     }
 
     // 本月营业数据
-    h += '<div class="sec">📊 营业数据 · ' + (today.getMonth() + 1) + '月累计</div>';
+    h += '<div class="sec"><span class="section-icon">' + axIcon('chart') + '</span>营业数据 · ' + (today.getMonth() + 1) + '月累计</div>';
     h += '<div class="cards">';
     h += card('实收', fmtC(mNet), 'ac');
     h += card('厨房', fmtC(mKit));
@@ -126,7 +126,7 @@ function rDash() {
     h += '</div>';
 
     // 采购成本
-    h += '<div class="sec">🛒 采购成本</div>';
+    h += '<div class="sec"><span class="section-icon">' + axIcon('basket') + '</span>采购成本</div>';
     h += '<div class="cards">';
     h += card('本月采购', fmtC(purTotal), 'ac');
     h += card('本月退货', fmtC(retTotal), 'rd');
@@ -135,7 +135,7 @@ function rDash() {
     h += '</div>';
 
     // 贵重物品经营
-    h += '<div class="sec">📦 贵重物品经营</div>';
+    h += '<div class="sec"><span class="section-icon">' + axIcon('gem') + '</span>贵重物品经营</div>';
     h += '<div class="cards">';
     h += card('茗茶实收', fmtC(mTea));
     h += card('茗茶毛利', fmtC(mTeaP), 'gn');
@@ -146,7 +146,7 @@ function rDash() {
     h += '</div>';
 
     // 近7日趋势
-    h += '<div class="sec">📈 近7日趋势</div>';
+    h += '<div class="sec"><span class="section-icon">' + axIcon('trend') + '</span>近7日趋势</div>';
     h += '<div style="background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:14px">';
     h += '<canvas id="dashChart" height="120"></canvas>';
     h += '</div>';

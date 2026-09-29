@@ -138,7 +138,7 @@ function initToolbar() {
     if (!el) return;
     el.innerHTML = groups[containerId].map(function(p) {
       return '<button class="toolbar-btn" data-page="' + p.id + '" onclick="goPage(\'' + p.id + '\')" title="' + p.label + '">' +
-        '<span class="ticon">' + p.icon + '</span>' +
+        '<span class="ticon">' + axIcon(p.icon, 'ax-icon--nav') + '</span>' +
         '<span class="tlabel">' + p.label + '</span>' +
         (p.badge ? '<span class="badge-dot"></span>' : '') +
         '</button>';

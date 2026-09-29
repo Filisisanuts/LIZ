@@ -1882,7 +1882,7 @@ function renderPHist() {
     // 涨幅预警显示
     if (alertItems.length > 0) {
         h += '<div style="margin-bottom:14px">';
-        h += '<div style="font-size:.78rem;font-weight:600;color:var(--tx-s);margin-bottom:8px">⚠️ 价格涨幅预警</div>';
+        h += '<div style="font-size:.78rem;font-weight:600;color:var(--tx-s);margin-bottom:8px"><span class="alert-icon">' + axIcon('alert') + '</span>价格涨幅预警</div>';
         h += '<div style="display:flex;flex-wrap:wrap;gap:8px" id="alertList">';
         var showCount = Math.min(3, alertItems.length);
         for (var ai = 0; ai < alertItems.length; ai++) {

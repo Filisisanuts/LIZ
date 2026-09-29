@@ -11,21 +11,21 @@ var INV = {
 
 // 导航配置
 var NAV = [
-    { id: 'dash',label: '总览',icon: '📊'},
-    { id: 'daily',label: '日报',icon: '📝'},
-    { id: 'purchase',label: '采购',icon: '🛒'},
-    { id: 'expense',label: '费用',icon: '💰'},
+    { id: 'dash',label: '总览',icon: 'dashboard'},
+    { id: 'daily',label: '日报',icon: 'notebook'},
+    { id: 'purchase',label: '采购',icon: 'basket'},
+    { id: 'expense',label: '费用',icon: 'receipt'},
     { sep: true },
-    { id: 'tea',label: '茗茶',icon: '🍵'},
-    { id: 'cig',label: '香烟',icon: '🚬'},
-    { id: 'alc',label: '酒类',icon: '🍺'},
-    { id: 'other',label: '贵重',icon: '💎'},
+    { id: 'tea',label: '茗茶',icon: 'leaf'},
+    { id: 'cig',label: '香烟',icon: 'package'},
+    { id: 'alc',label: '酒类',icon: 'wine'},
+    { id: 'other',label: '贵重',icon: 'gem'},
     { sep: true },
-    { id: 'wh',label: '仓库',icon: '📦'},
-    { id: 'damage',label: '报损',icon: '⚠️'},
+    { id: 'wh',label: '仓库',icon: 'warehouse'},
+    { id: 'damage',label: '报损',icon: 'alert'},
     { sep: true },
-    { id: 'report',label: '报表',icon: '📈'},
-    { id: 'gen',label: '汇报',icon: '📄'}
+    { id: 'report',label: '报表',icon: 'chart'},
+    { id: 'gen',label: '汇报',icon: 'send'}
 ];
 
 // 数据库初始化模板

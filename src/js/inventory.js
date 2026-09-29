@@ -188,7 +188,7 @@ function rInv(type, customCategory) {
             // 按分类显示
             Object.keys(categories).forEach(function(cat) {
                 // 分类标题行
-                h += '<tr style="background:var(--card-h)"><td colspan="6" style="font-weight:600;color:var(--ac);padding:8px 0;font-size:.82rem">📋 ' + cat + '</td></tr>';
+                h += '<tr style="background:var(--card-h)"><td colspan="6" style="font-weight:600;color:var(--ac);padding:8px 0;font-size:.82rem"><span class="section-icon">' + axIcon('tag') + '</span>' + cat + '</td></tr>';
 
                 // 该分类下的商品
                 categories[cat].forEach(function(st) {

@@ -1,3 +1,5 @@
+import { renderIcon, type IconName } from '@/shared/ui/icon-bridge';
+
 /**
  * App Shell - 应用壳组件
  *
@@ -83,7 +85,7 @@ export function renderSidebarNav(items: NavItem[]): void {
       }
       return `
         <button class="sidebar-nav-item" data-page="${item.id}">
-          <span class="sidebar-nav-icon">${item.icon}</span>
+          <span class="sidebar-nav-icon">${item.icon ? renderIcon(item.icon) : ''}</span>
           <span class="sidebar-nav-label">${item.label}</span>
         </button>
       `;
@@ -94,7 +96,7 @@ export function renderSidebarNav(items: NavItem[]): void {
 export interface NavItem {
   id?: string;
   label?: string;
-  icon?: string;
+  icon?: IconName;
   separator?: boolean;
 }
 

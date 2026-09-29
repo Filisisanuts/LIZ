@@ -12,10 +12,11 @@ import './styles/tokens.css';
 import './styles/base.css';
 import './styles/layout.css';
 import './styles/utilities.css';
+import './styles/components/icons.css';
 import './styles/features/expense.css';
 
 // 应用壳
-import { createAppShell, renderSidebarNav } from './app/app-shell';
+import { createAppShell, renderSidebarNav, type NavItem } from './app/app-shell';
 import { router } from './app/router';
 import { initAppState } from './app/app-state';
 
@@ -40,22 +41,22 @@ import { renderInventory } from './features/inventory/inventory-page';
 
 // 导航配置
 const NAV_ITEMS = [
-  { id: 'dash', label: '总览', icon: '📊' },
-  { id: 'daily', label: '日报', icon: '📝' },
-  { id: 'purchase', label: '采购', icon: '🛒' },
-  { id: 'expense', label: '费用', icon: '💰' },
+  { id: 'dash', label: '总览', icon: 'dashboard' },
+  { id: 'daily', label: '日报', icon: 'notebook' },
+  { id: 'purchase', label: '采购', icon: 'basket' },
+  { id: 'expense', label: '费用', icon: 'receipt' },
   { separator: true },
-  { id: 'tea', label: '茗茶', icon: '🍵' },
-  { id: 'cig', label: '香烟', icon: '🚬' },
-  { id: 'alc', label: '酒类', icon: '🍺' },
-  { id: 'other', label: '贵重', icon: '💎' },
+  { id: 'tea', label: '茗茶', icon: 'leaf' },
+  { id: 'cig', label: '香烟', icon: 'package' },
+  { id: 'alc', label: '酒类', icon: 'wine' },
+  { id: 'other', label: '贵重', icon: 'gem' },
   { separator: true },
-  { id: 'wh', label: '仓库', icon: '📦' },
-  { id: 'damage', label: '报损', icon: '⚠️' },
+  { id: 'wh', label: '仓库', icon: 'warehouse' },
+  { id: 'damage', label: '报损', icon: 'alert' },
   { separator: true },
-  { id: 'report', label: '报表', icon: '📈' },
-  { id: 'gen', label: '汇报', icon: '📄' },
-];
+  { id: 'report', label: '报表', icon: 'chart' },
+  { id: 'gen', label: '汇报', icon: 'send' },
+] satisfies NavItem[];
 
 // 已迁移的页面路由
 const MIGRATED_ROUTES: Record<string, () => void> = {

@@ -415,7 +415,7 @@ function renderCostSection(purBySec, netPur, kitC, barC, outC, teaC, cigC, alcC,
 
     // 1. 采购成本（按来源-区域-分类）
     h += '<div class="tw" style="margin-bottom:0">';
-    h += '<table><tr><th colspan="3">📦 采购成本（净采购） <span style="font-weight:normal;color:var(--tx-m)">¥' + fmtC(netPur) + '</span></th></tr>';
+    h += '<table><tr><th colspan="3"><span class="section-icon">' + axIcon('basket') + '</span>采购成本（净采购） <span style="font-weight:normal;color:var(--tx-m)">¥' + fmtC(netPur) + '</span></th></tr>';
     h += '<tr><th>来源/区域</th><th>分类</th><th class="nr">金额</th></tr>';
 
     // 按来源分组
@@ -459,7 +459,7 @@ function renderCostSection(purBySec, netPur, kitC, barC, outC, teaC, cigC, alcC,
 
     // 2. 贵重物品已售成本：经营观察，不参与本页或利润表的再次加总。
     h += '<div class="tw" style="margin-bottom:0">';
-    h += '<table><tr><th colspan="2">🏷️ 贵重物品本月已售对应成本 <span style="font-weight:normal;color:var(--tx-m)">¥' + fmtC(saleCostTotal) + '</span></th></tr>';
+    h += '<table><tr><th colspan="2"><span class="section-icon">' + axIcon('tag') + '</span>贵重物品本月已售对应成本 <span style="font-weight:normal;color:var(--tx-m)">¥' + fmtC(saleCostTotal) + '</span></th></tr>';
     h += '<tr><th>类别（经营观察，不重复计入）</th><th class="nr">金额</th></tr>';
     if (saleCostByType) {
         Object.keys(saleCostByType).sort(function(a, b) { return saleCostByType[b] - saleCostByType[a]; }).forEach(function(type) {
@@ -474,7 +474,7 @@ function renderCostSection(purBySec, netPur, kitC, barC, outC, teaC, cigC, alcC,
 
     // 3. 期间费用（与利润表的营业费用口径一致，含工资）
     h += '<div class="tw" style="margin-bottom:0">';
-    h += '<table><tr><th colspan="2">📋 期间费用（含工资） <span style="font-weight:normal;color:var(--tx-m)">¥' + fmtC(periodCostTotal) + '</span></th></tr>';
+    h += '<table><tr><th colspan="2"><span class="section-icon">' + axIcon('receipt') + '</span>期间费用（含工资） <span style="font-weight:normal;color:var(--tx-m)">¥' + fmtC(periodCostTotal) + '</span></th></tr>';
     h += '<tr><th>费用分类</th><th class="nr">金额</th></tr>';
     Object.keys(expByCat).sort(function(a, b) { return expByCat[b] - expByCat[a]; }).forEach(function(cat) {
         h += '<tr><td>' + cat + '</td><td class="nr">' + fmtC(expByCat[cat]) + '</td></tr>';

@@ -23,12 +23,6 @@ function goPage(name) {
         document.body.style.overflow = '';
     }
 
-    var icons = {
-        dash: '📊', daily: '📝', purchase: '🛒', expense: '💰',
-        damage: '📦', tea: '🍵', cig: '🚬', alc: '🍺', other: '💎', wh: '🏪',
-        report: '📈', gen: '📤',  settings: '⚙️'
-    };
-
     // 处理自定义贵重物品类型（custom_xxx 格式）
     if (name.startsWith('custom_')) {
         var customType = name.replace('custom_', '');
@@ -1925,37 +1919,37 @@ function isInventoryTypeEnabled(typeId) {
 function renderNav() {
     // 日常经营（总览始终显示）
     var mainPages = [
-        { id: 'dash',     icon: '📊', label: '总览' }
+        { id: 'dash',     icon: 'dashboard', label: '总览' }
     ];
-    if (isModuleEnabled('daily')) mainPages.push({ id: 'daily', icon: '📝', label: '日报' });
-    if (isModuleEnabled('purchase')) mainPages.push({ id: 'purchase', icon: '🛒', label: '采购' });
-    if (isModuleEnabled('expense')) mainPages.push({ id: 'expense', icon: '💰', label: '费用' });
-    if (isModuleEnabled('salary')) mainPages.push({ id: 'salary', icon: '👤', label: '工资' });
+    if (isModuleEnabled('daily')) mainPages.push({ id: 'daily', icon: 'notebook', label: '日报' });
+    if (isModuleEnabled('purchase')) mainPages.push({ id: 'purchase', icon: 'basket', label: '采购' });
+    if (isModuleEnabled('expense')) mainPages.push({ id: 'expense', icon: 'receipt', label: '费用' });
+    if (isModuleEnabled('salary')) mainPages.push({ id: 'salary', icon: 'wallet', label: '工资' });
 
     // 贵重物品（根据配置显示）
     var invPages = [];
-    if (isInventoryTypeEnabled('tea')) invPages.push({ id: 'tea', icon: '🍵', label: '茗茶' });
-    if (isInventoryTypeEnabled('cig')) invPages.push({ id: 'cig', icon: '🚬', label: '香烟' });
-    if (isInventoryTypeEnabled('alc')) invPages.push({ id: 'alc', icon: '🍺', label: '酒类' });
-    if (isInventoryTypeEnabled('other')) invPages.push({ id: 'other', icon: '💎', label: '贵重' });
+    if (isInventoryTypeEnabled('tea')) invPages.push({ id: 'tea', icon: 'leaf', label: '茗茶' });
+    if (isInventoryTypeEnabled('cig')) invPages.push({ id: 'cig', icon: 'package', label: '香烟' });
+    if (isInventoryTypeEnabled('alc')) invPages.push({ id: 'alc', icon: 'wine', label: '酒类' });
+    if (isInventoryTypeEnabled('other')) invPages.push({ id: 'other', icon: 'gem', label: '贵重' });
 
     // 添加自定义贵重物品类型
     var config = getAppConfig();
     if (config && config.customInventoryTypes && config.customInventoryTypes.length > 0) {
         config.customInventoryTypes.forEach(function(type) {
-            invPages.push({ id: 'custom_' + type, icon: '💎', label: type, isCustom: true });
+            invPages.push({ id: 'custom_' + type, icon: 'gem', label: type, isCustom: true });
         });
     }
 
     // 仓库管理
     var whPages = [];
-    if (isModuleEnabled('warehouse')) whPages.push({ id: 'wh', icon: '🏪', label: '仓库' });
-    if (isModuleEnabled('damage')) whPages.push({ id: 'damage', icon: '⚠️', label: '报损' });
+    if (isModuleEnabled('warehouse')) whPages.push({ id: 'wh', icon: 'warehouse', label: '仓库' });
+    if (isModuleEnabled('damage')) whPages.push({ id: 'damage', icon: 'alert', label: '报损' });
 
     // 数据分析
     var reportPages = [];
-    if (isModuleEnabled('report')) reportPages.push({ id: 'report', icon: '📈', label: '报表' });
-    if (isModuleEnabled('brief')) reportPages.push({ id: 'gen', icon: '📤', label: '汇报' });
+    if (isModuleEnabled('report')) reportPages.push({ id: 'report', icon: 'chart', label: '报表' });
+    if (isModuleEnabled('brief')) reportPages.push({ id: 'gen', icon: 'send', label: '汇报' });
 
     function renderGroup(pages, containerId) {
         var el = $id(containerId);
@@ -1968,7 +1962,7 @@ function renderNav() {
         el.style.display = '';
         el.innerHTML = pages.map(function(p) {
             return '<button class="toolbar-btn" data-page="' + p.id + '" onclick="goPage(\'' + p.id + '\')" title="' + p.label + '">' +
-                '<span class="ticon">' + p.icon + '</span>' +
+                '<span class="ticon">' + axIcon(p.icon, 'ax-icon--nav') + '</span>' +
                 '<span class="tlabel">' + p.label + '</span>' +
                 '</button>';
         }).join('');
