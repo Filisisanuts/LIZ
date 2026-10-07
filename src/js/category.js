@@ -36,6 +36,7 @@ function updateCatSelect(selEl, area) {
 
     // 替换原来的选项
     selEl.innerHTML = html;
+    selEl.disabled = !area;
 }
 
 // 采购行区域下拉变化时触发
@@ -55,6 +56,7 @@ function purAreaChanged(areaEl, idx) {
             updateCatSelect(selects[2], area);
         }
     }
+    refreshPMAiReviewStatus(idx);
 }
 
 // 切换自定义输入框的显示/隐藏，当下拉选择"自定义"时显示输入框供用户手动输入

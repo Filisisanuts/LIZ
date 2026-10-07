@@ -1,5 +1,47 @@
 // 主题感知业务控件。现有 select 保留原值和 change 事件，增强层负责展示与交互。
 
+var axSelectInstanceId = 0;
+
+function axGetSelectLabel(native) {
+    var labelledBy = native.getAttribute('aria-labelledby');
+    if (labelledBy) return { attribute: 'aria-labelledby', value: labelledBy };
+    var explicitLabel = native.getAttribute('aria-label');
+    if (explicitLabel && native.dataset.axA11yAutoLabel !== 'true') return { attribute: 'aria-label', value: explicitLabel };
+    var labels = native.labels ? Array.prototype.slice.call(native.labels) : [];
+    var labelText = labels.map(function(label) {
+        var clone = label.cloneNode(true);
+        clone.querySelectorAll('select,input,textarea,button').forEach(function(control) { control.remove(); });
+        return (clone.textContent || '').trim();
+    }).filter(Boolean).join(' ');
+    var labelBoundary = native.closest && native.closest('.ax-select') || native;
+    var previousLabel = labelBoundary.previousElementSibling && labelBoundary.previousElementSibling.tagName === 'LABEL'
+        ? labelBoundary.previousElementSibling
+        : null;
+    if (!labelText && previousLabel) {
+        labelText = (previousLabel.textContent || '').trim();
+    }
+    if (!labelText) {
+        var wrappingLabel = native.closest ? native.closest('label') : null;
+        if (wrappingLabel) {
+            var clone = wrappingLabel.cloneNode(true);
+            clone.querySelectorAll('select,input,textarea,button').forEach(function(control) { control.remove(); });
+            labelText = (clone.textContent || '').trim();
+        }
+    }
+    return labelText
+        ? { attribute: 'aria-label', value: labelText }
+        : explicitLabel ? { attribute: 'aria-label', value: explicitLabel }
+            : native.id ? { attribute: 'aria-label', value: native.id } : null;
+}
+
+function axSyncSelectTriggerLabel(native) {
+    if (!native || native.tagName !== 'SELECT' || !native.closest) return;
+    var wrapper = native.closest('.ax-select');
+    var trigger = wrapper && wrapper.querySelector('.ax-select-trigger');
+    var label = trigger && axGetSelectLabel(native);
+    if (label) trigger.setAttribute(label.attribute, label.value);
+}
+
 function axEscapeHtml(value) {
     return String(value == null ? '' : value).replace(/[&<>'"]/g, function(char) {
         return { '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char];
@@ -15,8 +57,49 @@ function axSyncVisualViewport() {
     var bottomGap = viewport
         ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
         : 0;
-    document.querySelectorAll('.ax-select.ax-select-sheet.open .ax-select-menu').forEach(function(menu) {
+    document.querySelectorAll('.ax-select-menu.ax-select-sheet:not([hidden])').forEach(function(menu) {
         menu.style.setProperty('--ax-select-viewport-gap', Math.round(bottomGap) + 'px');
+    });
+}
+
+function axGetSelectMenu(wrapper) {
+    return wrapper && wrapper.dataset.menuId
+        ? document.getElementById(wrapper.dataset.menuId)
+        : wrapper && wrapper.querySelector('.ax-select-menu');
+}
+
+function axPositionSelectMenu(wrapper, menu) {
+    if (!wrapper || !menu || wrapper.classList.contains('ax-select-sheet')) return;
+    var trigger = wrapper.querySelector('.ax-select-trigger');
+    if (!trigger) return;
+    var rect = trigger.getBoundingClientRect();
+    var viewportWidth = document.documentElement.clientWidth;
+    var viewportHeight = window.innerHeight;
+    var maxWidth = Math.max(0, viewportWidth - 20);
+    var width = Math.min(Math.max(rect.width, 180), maxWidth);
+    var desiredHeight = Math.min(menu.scrollHeight || 280, 280);
+    var below = Math.max(0, viewportHeight - rect.bottom - 16);
+    var above = Math.max(0, rect.top - 16);
+    menu.classList.add('ax-select-portaled');
+    menu.style.position = 'fixed';
+    menu.style.width = width + 'px';
+    menu.style.left = Math.max(10, Math.min(rect.left, viewportWidth - width - 10)) + 'px';
+    if (below > 0 && (below >= Math.min(desiredHeight, 120) || below >= above)) {
+        menu.style.top = (rect.bottom + 6) + 'px';
+        menu.style.bottom = 'auto';
+        menu.style.maxHeight = Math.max(96, Math.min(280, below)) + 'px';
+    } else {
+        menu.style.top = 'auto';
+        menu.style.bottom = (viewportHeight - rect.top + 6) + 'px';
+        menu.style.maxHeight = Math.max(96, Math.min(280, above)) + 'px';
+    }
+}
+
+function axRepositionOpenSelects() {
+    document.querySelectorAll('.ax-select.open').forEach(function(wrapper) {
+        var menu = axGetSelectMenu(wrapper);
+        if (wrapper.classList.contains('ax-select-sheet')) axSyncVisualViewport();
+        else axPositionSelectMenu(wrapper, menu);
     });
 }
 
@@ -56,12 +139,20 @@ function axCloseSelects(except) {
     document.querySelectorAll('.ax-select.open').forEach(function(select) {
         if (select === except) return;
         select.classList.remove('open');
-        var menu = select.querySelector('.ax-select-menu');
+        var menu = axGetSelectMenu(select);
         if (menu) {
             menu.hidden = true;
             menu.style.transform = '';
             menu.style.transition = '';
+            menu.style.position = '';
+            menu.style.left = '';
+            menu.style.top = '';
+            menu.style.bottom = '';
+            menu.style.width = '';
+            menu.style.maxHeight = '';
             menu.style.removeProperty('--ax-select-viewport-gap');
+            menu.classList.remove('ax-select-portaled', 'ax-select-sheet');
+            if (menu.parentNode !== select) select.appendChild(menu);
         }
         var trigger = select.querySelector('.ax-select-trigger');
         if (trigger) trigger.setAttribute('aria-expanded', 'false');
@@ -112,12 +203,27 @@ function axCreateEnhancedSelect(native) {
     var search = null;
     var customRow = null;
 
-    wrapper.className = 'ax-select' + (axIsSheetViewport() ? ' ax-select-sheet' : '');
+    var fitClass = native.classList.contains('pm-choice-fit') ? ' pm-choice-fit' : '';
+    var editChoiceClass = native.classList.contains('pm-edit-choice') ? ' pm-edit-choice' : '';
+    var batchChoiceClass = native.classList.contains('pm-batch-choice') ? ' pm-batch-choice' : '';
+    wrapper.className = 'ax-select' + fitClass + editChoiceClass + batchChoiceClass + (axIsSheetViewport() ? ' ax-select-sheet' : '');
+    if (native.style.cssText) wrapper.style.cssText = native.style.cssText;
     wrapper.dataset.mode = mode;
     trigger.type = 'button';
     trigger.className = 'ax-select-trigger';
+    var nativeTypography = window.getComputedStyle(native);
+    ['fontFamily', 'fontSize', 'fontStyle', 'fontVariant', 'fontWeight', 'lineHeight', 'letterSpacing'].forEach(function(property) {
+        if (nativeTypography[property]) trigger.style[property] = nativeTypography[property];
+    });
     trigger.setAttribute('aria-haspopup', 'listbox');
     trigger.setAttribute('aria-expanded', 'false');
+    menu.id = 'ax-select-menu-' + (++axSelectInstanceId);
+    wrapper.dataset.menuId = menu.id;
+    menu.setAttribute('role', 'listbox');
+    if (mode === 'multi') menu.setAttribute('aria-multiselectable', 'true');
+    trigger.setAttribute('aria-controls', menu.id);
+    var selectLabel = axGetSelectLabel(native);
+    if (selectLabel) trigger.setAttribute(selectLabel.attribute, selectLabel.value);
     menu.className = 'ax-select-menu';
     menu.hidden = true;
 
@@ -146,9 +252,18 @@ function axCreateEnhancedSelect(native) {
                 ? selected.map(function(option) { return option.textContent; }).join('、')
                 : '已选 ' + selected.length + ' 个';
         } else {
-            text = selected.length ? selected[0].textContent : (native.getAttribute('data-placeholder') || '请选择');
+            var placeholderOption = Array.prototype.slice.call(native.selectedOptions || []).find(function(option) {
+                return option.value === '';
+            });
+            text = selected.length ? selected[0].textContent
+                : placeholderOption ? placeholderOption.textContent
+                    : (native.getAttribute('data-placeholder') || '请选择');
         }
         trigger.innerHTML = '<span>' + axEscapeHtml(text) + '</span><span class="ax-select-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>';
+        trigger.disabled = native.disabled;
+        trigger.setAttribute('aria-disabled', String(native.disabled));
+        wrapper.classList.toggle('is-disabled', native.disabled);
+        if (native.disabled && wrapper.classList.contains('open')) axCloseSelects();
     }
 
     function renderOptions(filter) {
@@ -165,8 +280,12 @@ function axCreateEnhancedSelect(native) {
             button.className = 'ax-select-option';
             button.setAttribute('role', 'option');
             button.setAttribute('aria-selected', option.selected ? 'true' : 'false');
+            button.setAttribute('aria-disabled', String(option.disabled || (option.parentElement && option.parentElement.tagName === 'OPTGROUP' && option.parentElement.disabled)));
+            button.disabled = option.disabled || !!(option.parentElement && option.parentElement.tagName === 'OPTGROUP' && option.parentElement.disabled);
+            button.dataset.value = option.value;
             button.textContent = option.textContent;
             button.addEventListener('click', function() {
+                if (button.disabled || native.disabled) return;
                 if (mode === 'multi') {
                     option.selected = !option.selected;
                 } else {
@@ -178,33 +297,74 @@ function axCreateEnhancedSelect(native) {
                 axDispatchChange(native);
                 refreshTrigger();
                 renderOptions(search ? search.value : '');
+                if (mode === 'multi') {
+                    var updated = Array.prototype.slice.call(menu.querySelectorAll('.ax-select-option')).find(function(item) {
+                        return item.dataset.value === option.value;
+                    });
+                    if (updated) updated.focus();
+                }
             });
             if (customRow) menu.insertBefore(button, customRow);
             else menu.appendChild(button);
         });
     }
 
+    menu.addEventListener('keydown', function(event) {
+        var available = Array.prototype.slice.call(menu.querySelectorAll('.ax-select-option')).filter(function(option) {
+            return !option.disabled;
+        });
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            axCloseSelects();
+            trigger.focus();
+            return;
+        }
+        if (event.key === 'Tab') {
+            axCloseSelects();
+            return;
+        }
+        if (!available.length || !['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        var current = available.indexOf(document.activeElement);
+        var next = current;
+        if (event.key === 'Home') next = 0;
+        else if (event.key === 'End') next = available.length - 1;
+        else if (event.key === 'ArrowDown') next = current < 0 ? 0 : (current + 1) % available.length;
+        else next = current < 0 ? available.length - 1 : (current - 1 + available.length) % available.length;
+        available[next].focus();
+    });
+
     trigger.addEventListener('click', function(event) {
+        if (trigger.disabled) return;
         var opening = menu.hidden;
-        axCloseSelects(wrapper);
+        if (opening) axCloseSelects(wrapper);
+        else axCloseSelects();
         menu.hidden = !opening;
         wrapper.classList.toggle('open', opening);
         trigger.setAttribute('aria-expanded', String(opening));
         if (opening) {
-            if (axIsSheetViewport()) axSheetBackdrop(true);
             renderOptions(search ? search.value : '');
+            document.body.appendChild(menu);
+            if (axIsSheetViewport()) {
+                menu.classList.add('ax-select-sheet');
+                axSheetBackdrop(true);
+            } else {
+                axPositionSelectMenu(wrapper, menu);
+            }
             if (search && event.detail === 0) {
                 search.focus();
             } else if (!search) {
-                var first = menu.querySelector('.ax-select-option');
-                if (first) first.focus();
+                var focusTarget = Array.prototype.slice.call(menu.querySelectorAll('.ax-select-option')).find(function(option) {
+                    return option.getAttribute('aria-selected') === 'true' && !option.disabled;
+                }) || menu.querySelector('.ax-select-option:not(:disabled)');
+                if (focusTarget) focusTarget.focus();
             }
             axSyncVisualViewport();
         }
     });
 
     trigger.addEventListener('keydown', function(event) {
-        if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
             trigger.click();
         }
@@ -271,8 +431,11 @@ function axCreateEnhancedSelect(native) {
             options = Array.prototype.slice.call(native.options);
             refreshTrigger();
             renderOptions(search ? search.value : '');
+            if (wrapper.classList.contains('open') && !wrapper.classList.contains('ax-select-sheet')) {
+                axPositionSelectMenu(wrapper, menu);
+            }
         });
-        optionsObserver.observe(native, { childList: true, subtree: true });
+        optionsObserver.observe(native, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled'] });
     }
     refreshTrigger();
     renderOptions('');
@@ -283,16 +446,6 @@ function initAxSelects(root) {
     var scope = root && root.querySelectorAll ? root : document;
     scope.querySelectorAll('select:not([data-ax-ready])').forEach(function(select) {
         select.dataset.axReady = 'true';
-        var optionCount = select.options.length;
-        var simple = !select.multiple
-            && optionCount <= 6
-            && select.getAttribute('data-ax-enhanced') !== 'true'
-            && select.getAttribute('data-allow-custom') !== 'true'
-            && select.getAttribute('data-searchable') !== 'true';
-        if (simple) {
-            select.classList.add('ax-select-simple');
-            return;
-        }
         axCreateEnhancedSelect(select);
     });
 }
@@ -308,12 +461,24 @@ function initA11yEnhancements(root) {
     });
 
     scope.querySelectorAll('input,select,textarea').forEach(function(control) {
-        if (control.getAttribute('aria-label') || control.getAttribute('aria-labelledby')) return;
-        if (control.labels && control.labels.length) return;
+        if (control.getAttribute('aria-label') || control.getAttribute('aria-labelledby')) {
+            axSyncSelectTriggerLabel(control);
+            return;
+        }
+        if (control.labels && control.labels.length) {
+            axSyncSelectTriggerLabel(control);
+            return;
+        }
+        var labelBoundary = control.tagName === 'SELECT' && control.closest('.ax-select') || control;
+        var adjacentLabel = labelBoundary.previousElementSibling && labelBoundary.previousElementSibling.tagName === 'LABEL'
+            ? labelBoundary.previousElementSibling
+            : null;
         var wrapper = control.closest('.hrow,.field,label');
-        var label = wrapper ? wrapper.querySelector('label') : null;
+        var label = adjacentLabel || (wrapper ? wrapper.querySelector('label') : null);
         var text = label ? (label.textContent || '').trim() : '';
         control.setAttribute('aria-label', text || control.getAttribute('placeholder') || control.id || '表单控件');
+        control.dataset.axA11yAutoLabel = 'true';
+        axSyncSelectTriggerLabel(control);
     });
 
     scope.querySelectorAll('[onclick]').forEach(function(element) {
@@ -368,7 +533,7 @@ window.axUI = {
 };
 
 document.addEventListener('click', function(event) {
-    if (!event.target.closest || !event.target.closest('.ax-select')) axCloseSelects();
+    if (!event.target.closest || (!event.target.closest('.ax-select') && !event.target.closest('.ax-select-menu'))) axCloseSelects();
 });
 
 document.addEventListener('keydown', function(event) {
@@ -378,10 +543,12 @@ document.addEventListener('keydown', function(event) {
 window.addEventListener('resize', function() {
     axSyncSelectModes();
     axSyncVisualViewport();
+    axRepositionOpenSelects();
 });
+window.addEventListener('scroll', axRepositionOpenSelects, true);
 if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', axSyncVisualViewport);
-    window.visualViewport.addEventListener('scroll', axSyncVisualViewport);
+    window.visualViewport.addEventListener('resize', axRepositionOpenSelects);
+    window.visualViewport.addEventListener('scroll', axRepositionOpenSelects);
 }
 
 if (window.MutationObserver) {

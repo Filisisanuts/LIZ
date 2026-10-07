@@ -419,14 +419,14 @@ function renderCostSection(purBySec, netPur, kitC, barC, outC, teaC, cigC, alcC,
     h += '<tr><th>来源/区域</th><th>分类</th><th class="nr">金额</th></tr>';
 
     // 按来源分组
-    var purBySrc = {};
+    var purBySrc = Object.create(null);
     DB.purchases.filter(function(p) { return p.date.startsWith(m); }).forEach(function(p) {
         (p.items || []).forEach(function(item) {
             var src = item.source || p.source || '外购';
             var sec = item.section || '未分区';
             var cat = item.category || '未分类';
-            if (!purBySrc[src]) purBySrc[src] = {};
-            if (!purBySrc[src][sec]) purBySrc[src][sec] = {};
+            if (!purBySrc[src]) purBySrc[src] = Object.create(null);
+            if (!purBySrc[src][sec]) purBySrc[src][sec] = Object.create(null);
             if (!purBySrc[src][sec][cat]) purBySrc[src][sec][cat] = 0;
             purBySrc[src][sec][cat] += reportPurchaseAmount(item, p);
         });
@@ -438,7 +438,7 @@ function renderCostSection(purBySec, netPur, kitC, barC, outC, teaC, cigC, alcC,
         return totalB - totalA;
     }).forEach(function(src) {
         var srcTotal = Object.values(purBySrc[src]).reduce(function(s, sec) { return Object.values(sec).reduce(function(s2, v) { return s2 + v; }, 0) + s; }, 0);
-        h += '<tr style="background:var(--card-h)"><td style="font-weight:700" colspan="2">' + src + '</td><td class="nr" style="font-weight:700">' + fmtC(srcTotal) + '</td></tr>';
+        h += '<tr style="background:var(--card-h)"><td style="font-weight:700" colspan="2">' + axEscapeHtml(src) + '</td><td class="nr" style="font-weight:700">' + fmtC(srcTotal) + '</td></tr>';
 
         Object.keys(purBySrc[src]).sort(function(a, b) {
             var totalA = Object.values(purBySrc[src][a]).reduce(function(s, v) { return s + v; }, 0);
@@ -446,10 +446,10 @@ function renderCostSection(purBySec, netPur, kitC, barC, outC, teaC, cigC, alcC,
             return totalB - totalA;
         }).forEach(function(sec) {
             var secTotal = Object.values(purBySrc[src][sec]).reduce(function(s, v) { return s + v; }, 0);
-            h += '<tr style="background:var(--card)"><td style="font-weight:600;padding-left:12px">' + sec + '</td><td></td><td class="nr">' + fmtC(secTotal) + '</td></tr>';
+            h += '<tr style="background:var(--card)"><td style="font-weight:600;padding-left:12px">' + axEscapeHtml(sec) + '</td><td></td><td class="nr">' + fmtC(secTotal) + '</td></tr>';
 
             Object.keys(purBySrc[src][sec]).sort(function(a, b) { return purBySrc[src][sec][b] - purBySrc[src][sec][a]; }).forEach(function(cat) {
-                h += '<tr><td style="padding-left:24px;color:var(--tx-s)">' + cat + '</td><td></td><td class="nr" style="color:var(--tx-m)">' + fmtC(purBySrc[src][sec][cat]) + '</td></tr>';
+                h += '<tr><td style="padding-left:24px;color:var(--tx-s)">' + axEscapeHtml(cat) + '</td><td></td><td class="nr" style="color:var(--tx-m)">' + fmtC(purBySrc[src][sec][cat]) + '</td></tr>';
             });
         });
     });
@@ -891,7 +891,7 @@ function renderPurchaseSection(ym) {
     var todayDay = parseInt(todayStr.split('-')[2]);
     var isThisMonth = todayStr.startsWith(ym);
 
-    var dayTotals = {}, grandTotal = 0, srcTotals = {}, srcSecTotals = {};
+    var dayTotals = {}, grandTotal = 0, srcTotals = Object.create(null), srcSecTotals = Object.create(null);
     DB.purchases.filter(function(p) { return p.date.startsWith(ym); }).forEach(function(p) {
         (p.items || []).forEach(function(item) {
             var day = parseInt(p.date.substring(8, 10));
@@ -903,7 +903,7 @@ function renderPurchaseSection(ym) {
             var sec = item.section || '未分区';
             if (!srcTotals[src]) srcTotals[src] = 0;
             srcTotals[src] += amount;
-            if (!srcSecTotals[src]) srcSecTotals[src] = {};
+            if (!srcSecTotals[src]) srcSecTotals[src] = Object.create(null);
             if (!srcSecTotals[src][sec]) srcSecTotals[src][sec] = 0;
             srcSecTotals[src][sec] += amount;
         });
@@ -994,7 +994,7 @@ function showPurSourceDetail(source, ym) {
 
     var h = '<div style="max-width:500px;height:70vh;display:flex;flex-direction:column;font-family:\'Noto Sans SC\',sans-serif">';
     h += '<div style="flex-shrink:0;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
-    h += '<h3 style="margin:0;font-size:.95rem;font-weight:700;color:var(--ac)">' + dateLabel + ' ' + source + ' 采购明细</h3>';
+        h += '<h3 style="margin:0;font-size:.95rem;font-weight:700;color:var(--ac)">' + dateLabel + ' ' + axEscapeHtml(source) + ' 采购明细</h3>';
     h += '<span style="font-family:var(--fm);font-size:1rem;font-weight:700;color:var(--ac)">¥' + fmtC(total) + '</span>';
     h += '</div>';
 
@@ -1132,7 +1132,7 @@ if (document.getElementById('mainContent')) {
     h += '</div>';
 
     // 按来源分组
-    var srcGroups = {};
+    var srcGroups = Object.create(null);
     allItems.forEach(function(item) {
         var src = item.source;
         if (!srcGroups[src]) srcGroups[src] = [];
@@ -1151,7 +1151,7 @@ if (document.getElementById('mainContent')) {
         var srcTotal = srcGroups[src].reduce(function(s, i) { return s + i.total; }, 0);
         h += '<div style="margin-bottom:12px">';
         h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--card-h);border:1px solid var(--bd);border-radius:8px;margin-bottom:6px;cursor:pointer" onclick="toggleSection(\'' + srcId + '\')">';
-        h += '<span style="font-size:.88rem;font-weight:700;color:var(--ac)">▾ ' + src + '</span>';
+        h += '<span style="font-size:.88rem;font-weight:700;color:var(--ac)">▾ ' + axEscapeHtml(src) + '</span>';
         h += '<span style="font-family:var(--fm);font-size:.88rem;font-weight:600">¥' + fmtC(srcTotal) + '</span>';
         h += '</div>';
         h += '<div id="' + srcId + '">';

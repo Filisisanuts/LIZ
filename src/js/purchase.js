@@ -3,6 +3,8 @@
 var _pmItems = [];
 // 当前编辑的采购单 ID（null 表示新建）
 var _editPurId = null;
+// 当前日期详情中安全映射到的来源编辑上下文，不把来源文本拼入内联事件。
+var _purSrcEditEntries = [];
 // 百度OCR配置（与MiMo视觉API互为备选）
 var _baiduToken = '', _baiduTokenTime = 0;
 var _baiduAK = localStorage.getItem('ax_baidu_ak') || '';
@@ -265,6 +267,7 @@ function doParsePur() {
     if (!result.items.length) { toast('未识别到物品，请检查文字格式'); return; }
 
     // 转换为统一格式
+    window._pmAiReviewState = null;
     _pmItems = result.items.map(function(item) {
         var qty = parseFloat(item.qty) || 0;
         var total = parseFloat(item.total) || 0;
@@ -322,27 +325,33 @@ function rPurchase() {
     // 日期和来源
     h += '<div class="hrow">';
     h += '<label>日期</label><input class="inp" id="pmDate" type="text" readonly placeholder="选择日期" value="' + td() + '" onclick="_dpOpen(\'pmDate\')" style="max-width:150px;cursor:pointer">';
-    h += '<label>来源</label><select class="inp" id="pmSrc" data-ax-enhanced="true" style="max-width:120px" onchange="pmSrcChanged()">';
+    h += '<label>来源</label><select class="inp pm-choice-fit" id="pmSrc" data-ax-enhanced="true" onchange="pmSrcChanged()">';
     var sources = getPurchaseSources();
+    var aiReviewState = window._pmAiReviewState && window._pmAiReviewState.active ? window._pmAiReviewState : null;
+    var selectedSource = aiReviewState ? aiReviewState.source : '';
+    h += '<option value=""' + (aiReviewState ? (selectedSource ? '' : ' selected') : '') + '>' + (aiReviewState ? '请选择已配置来源' : '请选择来源') + '</option>';
     if (sources.length > 0) {
-        sources.forEach(function(s) { h += '<option>' + s + '</option>'; });
-    } else {
+        sources.forEach(function(s, idx) {
+            var selected = aiReviewState ? selectedSource === s : idx === 0;
+            h += '<option value="' + axEscapeHtml(s) + '"' + (selected ? ' selected' : '') + '>' + axEscapeHtml(s) + '</option>';
+        });
+    } else if (!aiReviewState) {
         // 兼容旧用户（没有配置的情况）
-        h += '<option>外购</option>';
+        h += '<option value="外购" selected>外购</option>';
     }
     h += '</select></div>';
 
     // 区域和分类
     h += '<div class="hrow">';
     h += '<label>区域</label>';
-    h += '<select class="inp" id="pmSec" data-ax-enhanced="true" data-allow-custom="true" data-custom-target="pmSecC" style="max-width:110px" onchange="pmSecChanged(this)">';
+    h += '<select class="inp pm-choice-fit" id="pmSec" data-ax-enhanced="true" data-allow-custom="true" data-custom-target="pmSecC" onchange="pmSecChanged(this)">';
     h += '<option value="">请选择</option>';
     secs.forEach(function(s) { h += '<option>' + s + '</option>'; });
     h += '<option value="__custom">自定义</option>';
     h += '</select>';
     h += '<input class="inp" id="pmSecC" style="display:none;max-width:110px" placeholder="输入区域">';
     h += '<label>分类</label>';
-    h += '<select class="inp" id="pmCat" data-ax-enhanced="true" data-allow-custom="true" data-custom-target="pmCatC" style="max-width:130px" onchange="toggleCustomInput(this,\'pmCatC\')">';
+    h += '<select class="inp pm-choice-fit" id="pmCat" data-ax-enhanced="true" data-allow-custom="true" data-custom-target="pmCatC" onchange="toggleCustomInput(this,\'pmCatC\')">';
     h += '<option value="">请先选区域</option>';
     h += '</select>';
     h += '<input class="inp" id="pmCatC" style="display:none;max-width:130px" placeholder="输入分类">';
@@ -439,7 +448,7 @@ function pmSecChanged(sel) {
     customInput.style.display = 'none';
     var cats = area ? getPurCats(area) : [];
     var html = '<option value="">' + (area ? '请选择' : '请先选区域') + '</option>';
-    cats.forEach(function(c) { html += '<option>' + c + '</option>'; });
+    cats.forEach(function(c) { html += '<option value="' + axEscapeHtml(c) + '">' + axEscapeHtml(c) + '</option>'; });
     if (area) html += '<option value="__custom">自定义</option>';
     catSel.innerHTML = html;
     $id('pmCatC').style.display = 'none';
@@ -458,7 +467,7 @@ function batchSecChanged(sel) {
 
     var cats = getPurCats(area);
     var html = '<option value="">不填充</option>';
-    cats.forEach(function(c) { html += '<option>' + c + '</option>'; });
+    cats.forEach(function(c) { html += '<option value="' + axEscapeHtml(c) + '">' + axEscapeHtml(c) + '</option>'; });
     catSel.innerHTML = html;
 }
 
@@ -470,12 +479,22 @@ function batchFillAll() {
     if (!src && !sec && !cat) { toast('请选择要填充的值'); return; }
 
     _pmItems.forEach(function(item) {
-        if (src) item.source = src;
-        if (sec) item.section = sec;
-        if (cat) item.category = cat;
+        if (sec) {
+            item.section = sec;
+            if (item.category && getPurCats(sec).indexOf(item.category) < 0) item.category = '';
+        }
+        if (cat && getPurCats(item.section).indexOf(cat) >= 0) item.category = cat;
     });
 
-    renderPML();
+    if (src && $id('pmSrc')) {
+        ensurePurchaseSourceOption($id('pmSrc'), src);
+        $id('pmSrc').value = src;
+        pmSrcChanged();
+    } else {
+        if (src) _pmItems.forEach(function(item) { item.source = src; });
+        renderPML();
+    }
+
     toast('已填充全部');
 }
 
@@ -489,7 +508,17 @@ function batchSetField(field, value) {
 
 // 来源选择变化：显示/隐藏关联原采购字段
 function pmSrcChanged() {
-    var src = $id('pmSrc').value;
+    var src = normalizePurchaseSource($id('pmSrc').value, '');
+    _pmItems.forEach(function(item) { item.source = src; });
+    if (window._pmAiReviewState && window._pmAiReviewState.active) {
+        var state = window._pmAiReviewState;
+        var configuredSources = getPurchaseSources().map(function(value) { return normalizePurchaseSource(value, ''); });
+        var previousSource = state.source;
+        var wasResolved = state.sourceResolved;
+        state.sourceResolved = configuredSources.indexOf(src) >= 0;
+        state.source = state.sourceResolved ? src : '';
+        state.sourceManuallySelected = !!(state.sourceResolved && (!wasResolved || src !== previousSource));
+    }
     var relDiv = $id('pmRelDiv');
     if (relDiv) {
         relDiv.style.display = src === '退货' ? '' : 'none';
@@ -500,6 +529,7 @@ function pmSrcChanged() {
             if (relBtn) relBtn.textContent = '选择关联采购物品';
         }
     }
+    renderPML();
 }
 
 // 打开关联原采购选择弹窗
@@ -739,10 +769,10 @@ function renderPurchaseReturn() {
     var selected = window._selectedRelPur;
     if (selected) {
         var remaining = remainingReturnQty(selected.purchaseId, selected.itemId);
-        summary.innerHTML = '<div class="pv-card"><h4>' + selected.name + '</h4>' +
-            '<div class="pv-row"><span class="k">原来源</span><strong>' + selected.source + '</strong></div>' +
-            '<div class="pv-row"><span class="k">区域 / 分类</span><strong>' + (selected.section || '-') + ' / ' + (selected.category || '-') + '</strong></div>' +
-            '<div class="pv-row"><span class="k">可退数量</span><strong>' + remaining + (selected.unit || '') + '</strong></div></div>';
+        summary.innerHTML = '<div class="pv-card"><h4>' + axEscapeHtml(selected.name) + '</h4>' +
+            '<div class="pv-row"><span class="k">原来源</span><strong>' + axEscapeHtml(selected.source) + '</strong></div>' +
+            '<div class="pv-row"><span class="k">区域 / 分类</span><strong>' + axEscapeHtml(selected.section || '-') + ' / ' + axEscapeHtml(selected.category || '-') + '</strong></div>' +
+            '<div class="pv-row"><span class="k">可退数量</span><strong>' + remaining + axEscapeHtml(selected.unit || '') + '</strong></div></div>';
     } else {
         summary.innerHTML = '<div class="alert-bar">请先选择原采购物品。</div>';
     }
@@ -1056,10 +1086,21 @@ function addPurItem() {
 function rebuildSel(sel, field, value, area) {
     var presets = field === 'section' ? getPurchaseSections() : (area ? getPurCats(area) : []);
     var html = '<option value="">-</option>';
-    presets.forEach(function(o) { html += '<option' + (o === value ? ' selected' : '') + '>' + o + '</option>'; });
-    if (value && presets.indexOf(value) < 0) html += '<option selected>' + value + '</option>';
+    presets.forEach(function(o) { html += '<option value="' + axEscapeHtml(o) + '"' + (o === value ? ' selected' : '') + '>' + axEscapeHtml(o) + '</option>'; });
+    if (value && presets.indexOf(value) < 0) html += '<option value="' + axEscapeHtml(value) + '" selected>' + axEscapeHtml(value) + '</option>';
     html += '<option value="__custom">自定义</option><option value="__clear">清除</option>';
     sel.innerHTML = html;
+}
+
+/**
+ * 同步品名输入框的隐藏测量文本，使表格列宽跟随用户正在编辑的名称。
+ * @param {HTMLInputElement} input 品名输入框。
+ * @returns {void}
+ */
+function pmSyncNameSizer(input) {
+    if (!input || !input.parentNode) return;
+    var sizer = input.parentNode.querySelector('.pm-name-sizer');
+    if (sizer) sizer.textContent = input.value || '';
 }
 
 // 渲染采购物品列表表格：批量填充区域 + 可编辑物品行 + 合计
@@ -1070,9 +1111,33 @@ function renderPML() {
     var config = getAppConfig();
     var secs = (config.purchaseSections || []).slice();
     var categories = config.purchaseCategories || {};
+    var aiReviewState = window._pmAiReviewState && window._pmAiReviewState.active ? window._pmAiReviewState : null;
     var srcs = getPurchaseSources();
-    if (srcs.length === 0) srcs = ['岸香贸易', '外购']; // 兼容旧用户
+    if (srcs.length === 0 && !aiReviewState) srcs = ['岸香贸易', '外购']; // 兼容旧用户
+    // 当前识别/编辑会话中的临时来源仅加入本次渲染，不回写账号配置。
+    _pmItems.forEach(function(item) {
+        var source = normalizePurchaseSource(item.source, '');
+        if (source && srcs.indexOf(source) < 0) srcs.push(source);
+    });
     var h = '';
+
+    if (aiReviewState) {
+        var matchedCount = _pmItems.filter(function(item) { return !!item.historyMatch && !item.historyMatchAmbiguous; }).length;
+        var needsReviewCount = _pmItems.filter(function(item) {
+            return item.historyMatchAmbiguous || !item.section || !item.category;
+        }).length;
+        h += '<div class="pm-ai-summary" role="status" aria-live="polite">';
+        h += '<strong>AI识图</strong>';
+        h += '<span>名称匹配 ' + matchedCount + ' 项</span>';
+        h += '<span>待核对 ' + needsReviewCount + ' 项</span>';
+        if (aiReviewState.sourceSuggestion && !aiReviewState.sourceResolved) {
+            var sourceMessage = aiReviewState.sourceMatchStatus === 'ambiguous'
+                ? '识别来源“' + axEscapeHtml(aiReviewState.sourceSuggestion) + '”对应多个已配置来源'
+                : '识别来源“' + axEscapeHtml(aiReviewState.sourceSuggestion) + '”未匹配到已配置来源';
+            h += '<span class="pm-ai-summary-source">' + sourceMessage + '，请在上方来源中选择。</span>';
+        }
+        h += '</div>';
+    }
 
     // 批量填充区域
     if (_pmItems.length > 0) {
@@ -1080,16 +1145,16 @@ function renderPML() {
         h += '<div style="font-size:.7rem;color:var(--ac);margin-bottom:6px">批量填充:</div>';
 
         h += '<div class="hrow"><label>来源</label>';
-        h += '<select class="inp" id="pmBatchSrc" style="max-width:110px"><option value="">不填充</option>';
-        srcs.forEach(function(s) { h += '<option>' + s + '</option>'; });
+        h += '<select class="inp pm-batch-choice" id="pmBatchSrc"><option value="">不填充</option>';
+        srcs.forEach(function(s) { h += '<option value="' + axEscapeHtml(s) + '">' + axEscapeHtml(s) + '</option>'; });
         h += '</select></div>';
 
         h += '<div class="hrow"><label>区域</label>';
-        h += '<select class="inp" id="pmBatchSec" style="max-width:110px" onchange="batchSecChanged(this)"><option value="">不填充</option>';
-        secs.forEach(function(s) { h += '<option>' + s + '</option>'; });
+        h += '<select class="inp pm-batch-choice" id="pmBatchSec" onchange="batchSecChanged(this)"><option value="">不填充</option>';
+        secs.forEach(function(s) { h += '<option value="' + axEscapeHtml(s) + '">' + axEscapeHtml(s) + '</option>'; });
         h += '</select>';
         h += '<label>分类</label>';
-        h += '<select class="inp" id="pmBatchCat" style="max-width:130px"><option value="">请先选区域</option></select>';
+        h += '<select class="inp pm-batch-choice" id="pmBatchCat"><option value="">请先选区域</option></select>';
         h += '<button class="btn s" onclick="batchFillAll()">全部应用</button>';
         h += '</div>';
         h += '</div>';
@@ -1099,7 +1164,7 @@ function renderPML() {
     if (!_pmItems.length) {
         h += '<div style="font-size:.74rem;color:var(--tx-m);padding:8px 0">无物品</div>';
     } else {
-        h += '<div class="tw"><table>';
+        h += '<div class="tw"><table class="pm-ai-table">';
         h += '<tr><th>品名</th><th>来源</th><th>区域</th><th>分类</th><th>数量</th><th>单位</th><th>单价</th><th>总价</th><th></th></tr>';
 
         _pmItems.forEach(function(i, idx) {
@@ -1110,26 +1175,30 @@ function renderPML() {
             h += '<tr>';
 
             // 品名
-            h += '<td><div style="display:flex;flex-direction:column;gap:2px"><input class="pm-edit" style="min-width:110px" value="' + i.name.replace(/"/g, '&quot;') + '" onchange="pmEdit(' + idx + ',\'name\',this.value)">';
+            h += '<td class="pm-name-cell"><div class="pm-name-wrap"><span class="pm-name-sizer" aria-hidden="true">' + axEscapeHtml(i.name) + '</span>';
+            h += '<input class="pm-edit pm-name-input" value="' + axEscapeHtml(i.name) + '" oninput="pmSyncNameSizer(this)" onchange="pmEdit(' + idx + ',\'name\',this.value)">';
             h += getMatchSuggestionHTML(i);
             h += '</div></td>';
 
-            // 来源
-            h += '<td><select class="pm-edit" style="width:80px" onchange="pmEdit(' + idx + ',\'source\',this.value)">';
+            // 记录级来源为本采购单权威值；将未配置 AI 来源并入行内选项供核对。
+            var itemSource = normalizePurchaseSource(i.source, '');
+            var itemSources = srcs.slice();
+            if (itemSource && itemSources.indexOf(itemSource) < 0) itemSources.push(itemSource);
+            h += '<td><select class="pm-edit pm-edit-choice" onchange="pmEdit(' + idx + ',\'source\',this.value)">';
             h += '<option value="">-</option>';
-            srcs.forEach(function(s) { h += '<option' + ((i.source || '') === s ? ' selected' : '') + '>' + s + '</option>'; });
+            itemSources.forEach(function(s) { h += '<option value="' + axEscapeHtml(s) + '"' + (itemSource === s ? ' selected' : '') + '>' + axEscapeHtml(s) + '</option>'; });
             h += '</select></td>';
 
             // 区域
-            h += '<td><select class="pm-edit" style="width:65px" onchange="purAreaChanged(this,' + idx + ')">';
+            h += '<td class="pm-location-cell"><select class="pm-edit pm-edit-choice" onchange="purAreaChanged(this,' + idx + ')">';
             h += '<option value="">-</option>';
-            itemSecs.forEach(function(s) { h += '<option' + (i.section === s ? ' selected' : '') + '>' + s + '</option>'; });
+            itemSecs.forEach(function(s) { h += '<option value="' + axEscapeHtml(s) + '"' + (i.section === s ? ' selected' : '') + '>' + axEscapeHtml(s) + '</option>'; });
             h += '</select></td>';
 
             // 分类
-            h += '<td><select class="pm-edit" style="width:85px" onchange="pmEditSel(' + idx + ',\'category\',this.value)">';
-            h += '<option value="">-</option>';
-            itemCats.forEach(function(c) { h += '<option' + (i.category === c ? ' selected' : '') + '>' + c + '</option>'; });
+            h += '<td class="pm-location-cell"><select class="pm-edit pm-edit-choice" onchange="pmEditSel(' + idx + ',\'category\',this.value,this)"' + (!i.section ? ' disabled' : '') + '>';
+            h += '<option value="">' + (i.section ? '请选择分类' : '先选区域') + '</option>';
+            itemCats.forEach(function(c) { h += '<option value="' + axEscapeHtml(c) + '"' + (i.category === c ? ' selected' : '') + '>' + axEscapeHtml(c) + '</option>'; });
             if (i.category && itemCats.indexOf(i.category) < 0) h += '<option value="' + axEscapeHtml(i.category) + '" selected>' + axEscapeHtml(i.category) + '（原分类，请核对）</option>';
             h += '<option value="__custom">自定义</option><option value="__clear">清除</option></select></td>';
 
@@ -1137,7 +1206,7 @@ function renderPML() {
             h += '<td><input class="pm-edit nr" type="number" step="any" style="width:50px" value="' + i.qty + '" onchange="pmEdit(' + idx + ',\'qty\',this.value)"></td>';
 
             // 单位
-            h += '<td><input class="pm-edit" style="width:40px" value="' + (i.unit || '') + '" onchange="pmEdit(' + idx + ',\'unit\',this.value)"></td>';
+            h += '<td><input class="pm-edit" style="width:40px" value="' + axEscapeHtml(i.unit || '') + '" onchange="pmEdit(' + idx + ',\'unit\',this.value)"></td>';
 
             // 单价
             h += '<td><input class="pm-edit nr" type="number" step="0.01" style="width:70px" value="' + (i.unitPrice || 0) + '" onchange="pmEdit(' + idx + ',\'unitPrice\',this.value)"></td>';
@@ -1166,6 +1235,25 @@ function renderPML() {
 // 表格单元格编辑：更新 _pmItems 中指定行的字段
 function pmEdit(idx, field, val) {
     if (!_pmItems[idx]) return;
+    if (field === 'source') {
+        var select = $id('pmSrc');
+        if (select) {
+            ensurePurchaseSourceOption(select, val);
+            select.value = normalizePurchaseSource(val, '');
+            pmSrcChanged();
+            return;
+        }
+    }
+    if (field === 'name' && _pmItems[idx].aiHistoryReview) {
+        _pmItems[idx].name = val;
+        delete _pmItems[idx].historyMatch;
+        delete _pmItems[idx].historyMatchAmbiguous;
+        delete _pmItems[idx].originalName;
+        _pmItems[idx].section = '';
+        _pmItems[idx].category = '';
+        renderPML();
+        return;
+    }
     if (field === 'qty' || field === 'total' || field === 'unitPrice') {
         _pmItems[idx][field] = parseFloat(val) || 0;
     } else {
@@ -1173,36 +1261,94 @@ function pmEdit(idx, field, val) {
     }
 }
 
+/**
+ * Updates one purchase row's AI review badge and summary after a location edit.
+ * @param {number} idx Index of the changed item in `_pmItems`.
+ * @returns {void}
+ */
+function refreshPMAiReviewStatus(idx) {
+    var item = _pmItems[idx];
+    if (!item) return;
+
+    var rows = document.querySelectorAll('#pmList .tw table tr');
+    var row = rows[idx + 1];
+    var nameCell = row && row.querySelector('.pm-name-cell');
+    if (nameCell) {
+        var nameWrap = nameCell.querySelector('.pm-name-wrap');
+        var currentSuggestion = nameCell.querySelector('.pm-ai-suggestion');
+        if (currentSuggestion) currentSuggestion.remove();
+        var suggestionHTML = getMatchSuggestionHTML(item);
+        if (suggestionHTML && nameWrap) nameWrap.insertAdjacentHTML('beforeend', suggestionHTML);
+    }
+
+    var summary = document.querySelector('#pmList .pm-ai-summary');
+    if (!summary) return;
+    var countSpans = Array.prototype.filter.call(summary.children, function(child) {
+        return child.tagName === 'SPAN' && !child.classList.contains('pm-ai-summary-source');
+    });
+    if (countSpans.length < 2) return;
+
+    var matchedCount = _pmItems.filter(function(current) {
+        return !!current.historyMatch && !current.historyMatchAmbiguous;
+    }).length;
+    var needsReviewCount = _pmItems.filter(function(current) {
+        return current.historyMatchAmbiguous || !current.section || !current.category;
+    }).length;
+    countSpans[0].textContent = '名称匹配 ' + matchedCount + ' 项';
+    countSpans[1].textContent = '待核对 ' + needsReviewCount + ' 项';
+}
+
 // 处理分类/区域下拉框的特殊值：__custom（弹窗输入）、__clear（清空）
-function pmEditSel(idx, field, val) {
-    if (val === '__clear') { _pmItems[idx][field] = ''; renderPML(); return; }
+function pmEditSel(idx, field, val, selectEl) {
+    if (!_pmItems[idx]) return;
+    if (val === '__clear') {
+        _pmItems[idx][field] = '';
+        if (selectEl) {
+            selectEl.value = '';
+            selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+            refreshPMAiReviewStatus(idx);
+        } else {
+            renderPML();
+        }
+        return;
+    }
     if (val === '__custom') {
+        var previousValue = _pmItems[idx][field] || '';
         setTimeout(function() {
             var v = prompt('输入' + (field === 'section' ? '区域' : '分类'));
-            if (!v || !v.trim()) { renderPML(); return; }
+            if (!v || !v.trim()) {
+                if (selectEl) {
+                    selectEl.value = previousValue;
+                    selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+                    refreshPMAiReviewStatus(idx);
+                } else {
+                    renderPML();
+                }
+                return;
+            }
             v = v.trim();
             _pmItems[idx][field] = v;
-            var row = document.querySelectorAll('#pmList .tw table tr')[idx + 1];
-            if (row) {
-                var sels = row.querySelectorAll('select');
-                var si = field === 'section' ? 1 : 2;
-                if (sels[si]) {
-                    var found = false;
-                    for (var i = 0; i < sels[si].options.length; i++) {
-                        if (sels[si].options[i].value === v) { found = true; break; }
-                    }
-                    if (!found) {
-                        var opt = document.createElement('option');
-                        opt.text = v;
-                        sels[si].insertBefore(opt, sels[si].querySelector('[value="__custom"]'));
-                    }
-                    sels[si].value = v;
+            if (selectEl) {
+                var existingOption = Array.prototype.find.call(selectEl.options, function(option) {
+                    return option.value === v;
+                });
+                if (!existingOption) {
+                    var opt = document.createElement('option');
+                    opt.value = v;
+                    opt.textContent = v;
+                    selectEl.insertBefore(opt, selectEl.querySelector('[value="__custom"]'));
                 }
+                selectEl.value = v;
+                selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+                refreshPMAiReviewStatus(idx);
+            } else {
+                renderPML();
             }
         }, 50);
         return;
     }
     _pmItems[idx][field] = val;
+    refreshPMAiReviewStatus(idx);
 }
 
 // ------ 分类管理 ------
@@ -1403,16 +1549,34 @@ function parseResFieldChange(idx, field, val) {
 function doMimoConfirm() {
     var r = window._mimoResult;
     if (!r) return;
-    var src = $id('pResSrc').value || '';
-    r.items.forEach(function(item) { item.source = src; });
-    _pmItems = JSON.parse(JSON.stringify(r.items));
+    var sourceControl = $id('pResSrc');
+    var sourceSuggestion = normalizePurchaseSource(sourceControl ? sourceControl.value : r.source, '');
+    var sourceMatch = matchConfiguredPurchaseSource(sourceSuggestion, getPurchaseSources());
+    var src = sourceMatch.source;
+    var items = (r.items || []).map(function(item) {
+        return {
+            name: String(item.name || ''), section: '', category: '',
+            aiSectionSuggestion: normalizePurchaseSource(item.section, ''),
+            aiCategorySuggestion: normalizePurchaseSource(item.category, ''),
+            qty: item.qty || 0, unit: item.unit || '', unitPrice: item.unitPrice || 0,
+            total: item.total || 0, source: src
+        };
+    });
+    items = addHistoryMatches(items);
+    window._pmAiReviewState = {
+        active: true, source: src, sourceResolved: !!src,
+        sourceSuggestion: src ? '' : sourceSuggestion, sourceMatchStatus: sourceMatch.status, sourceManuallySelected: false,
+        sourceMatchCandidates: sourceMatch.candidates
+    };
+    r.source = src;
+    _pmItems = items;
     _editPurId = null;
     closeModal();
     $id('pmDate').value = r.date;
-    $id('pmSrc').value = src;
+    if ($id('pmSrc')) $id('pmSrc').value = src;
     switchPT('entry');
     renderPML();
-    toast('已导入 ' + _pmItems.length + ' 项，请检查后保存');
+    toast('已导入 ' + _pmItems.length + ' 项，请核对未匹配项目和来源');
 }
 
 // ------ 保存采购单 ------
@@ -1422,7 +1586,17 @@ function saveMPur() {
     if (!_pmItems.length) { toast('无物品'); return; }
 
     var savedDate = $id('pmDate').value || td();
-    var savedSrc = $id('pmSrc').value || '外购';
+    var aiReviewState = window._pmAiReviewState && window._pmAiReviewState.active ? window._pmAiReviewState : null;
+    var savedSrc = normalizePurchaseSource($id('pmSrc').value, '');
+    if (aiReviewState) {
+        var configuredSources = getPurchaseSources().map(function(value) { return normalizePurchaseSource(value, ''); });
+        if (!savedSrc || configuredSources.indexOf(savedSrc) < 0 || !aiReviewState.sourceResolved) {
+            toast('请选择账号已配置的采购来源');
+            return;
+        }
+    } else {
+        savedSrc = savedSrc || '外购';
+    }
 
     // 获取关联原采购信息
     var relatedTo = null;
@@ -1471,6 +1645,7 @@ function saveMPur() {
     }
 
     _pmItems = [];
+    window._pmAiReviewState = null;
     window._selectedRelPur = null;
     checkPurInvLink(savedItems, savedDate);
 }
@@ -1607,11 +1782,14 @@ function doPurInvLink() {
 function editPur(id) {
     var p = DB.purchases.find(function(item) { return item.id == id; });
     if (!p) return;
+    window._pmAiReviewState = null;
     _pmItems = JSON.parse(JSON.stringify(p.items));
     _editPurId = id;
     switchPT('entry');
     $id('pmDate').value = p.date;
-    $id('pmSrc').value = p.source || '外购';
+    var source = normalizePurchaseSource(p.source, '外购');
+    ensurePurchaseSourceOption($id('pmSrc'), source);
+    $id('pmSrc').value = source;
     pmSrcChanged();
     renderPML();
     window.scrollTo(0, 0);
@@ -1650,13 +1828,14 @@ function editPurByDate(date, name) {
     if (found.category && cats.indexOf(found.category) < 0) cats.push(found.category);
     var sources = getPurchaseSources();
     if (sources.length === 0) sources = ['外购']; // 兼容旧用户
-    var curSource = found.source || foundP.source || '';
+    var curSource = normalizePurchaseSource(found.source || foundP.source, '');
+    if (curSource && sources.indexOf(curSource) < 0) sources.push(curSource);
 
     var h = '<h3>编辑物品</h3>';
     h += '<div class="hrow"><label>日期</label><input class="inp" id="epi_date" type="text" readonly placeholder="选择日期" value="' + foundP.date + '" onclick="_dpOpen(\'epi_date\')" style="max-width:160px;cursor:pointer"></div>';
     h += '<div class="hrow"><label>品名</label><input class="inp" id="epi_name" style="flex:2" value="' + found.name.replace(/"/g, '&quot;') + '"></div>';
     h += '<div class="hrow"><label>来源</label><select class="inp" id="epi_source" style="max-width:140px">';
-    sources.forEach(function(s) { h += '<option' + (curSource === s ? ' selected' : '') + '>' + s + '</option>'; });
+    sources.forEach(function(s) { h += '<option value="' + axEscapeHtml(s) + '"' + (curSource === s ? ' selected' : '') + '>' + axEscapeHtml(s) + '</option>'; });
     h += '</select></div>';
     h += '<div class="hrow"><label>区域</label><select class="inp" id="epi_sec" style="max-width:110px" onchange="epiSecChanged(this)">';
     h += '<option value="">-</option>';
@@ -1772,7 +1951,7 @@ function renderPHist() {
     var todayDay = parseInt(todayStr.split('-')[2]);
     var isThisMonth = todayStr.startsWith(ym);
 
-    var dayTotals = {}, grandTotal = 0, srcTotals = {}, srcReturnTotals = {};
+    var dayTotals = {}, grandTotal = 0, srcTotals = Object.create(null), srcReturnTotals = Object.create(null);
     DB.purchases.filter(function(p) { return p.date.startsWith(ym); }).forEach(function(p) {
         p.items.forEach(function(item) {
             var day = parseInt(p.date.substring(8, 10));
@@ -1829,12 +2008,12 @@ function renderPHist() {
         var tuihuo = srcTotals['退货'] || 0;
 
         // 按来源→区域分组统计
-        var srcSecTotals = {};
+        var srcSecTotals = Object.create(null);
         DB.purchases.filter(function(p) { return p.date.startsWith(ym); }).forEach(function(p) {
             p.items.forEach(function(item) {
                 var src = item.source || p.source || '外购';
                 var sec = item.section || '未分区';
-                if (!srcSecTotals[src]) srcSecTotals[src] = {};
+                if (!srcSecTotals[src]) srcSecTotals[src] = Object.create(null);
                 if (!srcSecTotals[src][sec]) srcSecTotals[src][sec] = 0;
                 srcSecTotals[src][sec] += item.total;
             });
@@ -1852,7 +2031,7 @@ function renderPHist() {
             var srcReturn = srcReturnTotals[src] || 0;
             if (srcTotal <= 0 && srcReturn <= 0) return;
             var secs = srcSecTotals[src] || {};
-            h += '<div class="card"><div class="card-l">' + src + '</div>';
+        h += '<div class="card"><div class="card-l">' + axEscapeHtml(src) + '</div>';
 
             if (src === '退货') {
                 // 退货分组特殊处理：显示退货总额（负数）
@@ -1868,7 +2047,7 @@ function renderPHist() {
 
             h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;margin-top:4px">';
             Object.keys(secs).sort(function(a, b) { return secs[b] - secs[a]; }).forEach(function(sec) {
-                h += '<div style="font-size:.65rem;color:var(--tx-m)">' + sec + '</div>';
+                h += '<div style="font-size:.65rem;color:var(--tx-m)">' + axEscapeHtml(sec) + '</div>';
                 var secVal = secs[sec];
                 var secColor = secVal < 0 ? 'var(--rd)' : 'var(--fm)';
                 h += '<div style="font-size:.65rem;text-align:right;font-family:var(--fm);color:' + secColor + '">' + (secVal < 0 ? '-' : '') + fmtC(Math.abs(secVal)) + '</div>';
@@ -1973,18 +2152,19 @@ function showPurDayModal(date) {
     h += '<button class="btn s d" onclick="delPurDay(\'' + date + '\')">删除当日</button></div></div>';
 
     // 按来源 → 区域 → 分类 三层分组
-    var srcGroups = {};
+    _purSrcEditEntries = [];
+    var srcGroups = Object.create(null);
     allItems.forEach(function(item) {
         var src = item.source;
-        if (!srcGroups[src]) srcGroups[src] = {};
-        if (!srcGroups[src][item.section]) srcGroups[src][item.section] = {};
+        if (!srcGroups[src]) srcGroups[src] = Object.create(null);
+        if (!srcGroups[src][item.section]) srcGroups[src][item.section] = Object.create(null);
         if (!srcGroups[src][item.section][item.category]) srcGroups[src][item.section][item.category] = { items: [], total: 0 };
         srcGroups[src][item.section][item.category].items.push(item);
         srcGroups[src][item.section][item.category].total += item.total;
     });
 
     // 来源小计
-    var srcTotals = {};
+    var srcTotals = Object.create(null);
     Object.keys(srcGroups).forEach(function(src) {
         srcTotals[src] = 0;
         Object.keys(srcGroups[src]).forEach(function(sec) {
@@ -2007,26 +2187,28 @@ function showPurDayModal(date) {
     srcKeys.forEach(function(src) {
         si++;
         var srcId = 'srcBody' + si;
+        var sourceEditIndex = _purSrcEditEntries.length;
+        _purSrcEditEntries.push({ date: date, source: src });
 
         // 来源层
         h += '<div style="margin-bottom:12px">';
         h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--card-h);border:1px solid var(--bd);border-radius:8px;margin-bottom:6px;cursor:pointer" onclick="toggleSec(\'' + srcId + '\')">';
-        h += '<span class="pur-toggle-title"><span class="pur-toggle-arrow open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span><span style="font-size:.88rem;font-weight:700;color:var(--ac)">' + src + '</span></span>';
+        h += '<span class="pur-toggle-title"><span class="pur-toggle-arrow open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span><span style="font-size:.88rem;font-weight:700;color:var(--ac)">' + axEscapeHtml(src) + '</span></span>';
         h += '<div style="display:flex;align-items:center;gap:6px">';
         h += '<span style="font-family:var(--fm);font-size:.88rem;font-weight:600">¥' + fmtC(srcTotals[src]) + '</span>';
-        h += '<button class="btn s" style="font-size:.65rem;padding:2px 6px" onclick="event.stopPropagation();editPurSrc(\'' + date + '\',\'' + src.replace(/'/g, "\\'") + '\')">编</button>';
+        h += '<button class="btn s" style="font-size:.65rem;padding:2px 6px" onclick="event.stopPropagation();editPurSrcByIndex(' + sourceEditIndex + ')">编</button>';
         h += '</div></div>';
 
         h += '<div id="' + srcId + '">';
 
         // 区域列表
         var secGroups = srcGroups[src];
-        var secTotals = {};
+        var secTotals = Object.create(null);
         Object.keys(secGroups).forEach(function(sec) {
             secTotals[sec] = 0;
             Object.keys(secGroups[sec]).forEach(function(cat) { secTotals[sec] += secGroups[sec][cat].total; });
         });
-        var secOrder = { '厨房': 1, '吧台': 2, '外场': 3, '未分区': 98 };
+        var secOrder = Object.assign(Object.create(null), { '厨房': 1, '吧台': 2, '外场': 3, '未分区': 98 });
         var secKeys = Object.keys(secGroups).sort(function(a, b) {
             var oa = secOrder[a] || 50, ob = secOrder[b] || 50;
             return oa !== ob ? oa - ob : secTotals[b] - secTotals[a];
@@ -2050,7 +2232,7 @@ function showPurDayModal(date) {
             // 区域层
             h += '<div style="margin-left:8px;margin-bottom:6px">';
             h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;background:var(--card);border:1px solid var(--bd-l);border-radius:6px;margin-bottom:4px;cursor:pointer" onclick="toggleSec(\'' + secId + '\')">';
-            h += '<span class="pur-toggle-title"><span class="pur-toggle-arrow open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span><span style="font-size:.82rem;font-weight:700;color:var(--tx)">' + sec + '</span></span>';
+            h += '<span class="pur-toggle-title"><span class="pur-toggle-arrow open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span><span style="font-size:.82rem;font-weight:700;color:var(--tx)">' + axEscapeHtml(sec) + '</span></span>';
             h += '<div style="display:flex;align-items:center;gap:6px">';
             h += '<span style="font-family:var(--fm);font-size:.82rem;font-weight:600">¥' + fmtC(Math.abs(secTotals[sec])) + '</span>';
             // 显示退货总额（如果有）
@@ -2082,7 +2264,7 @@ function showPurDayModal(date) {
 
                 h += '<div style="margin-left:8px;margin-bottom:4px">';
                 h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;margin-bottom:3px;cursor:pointer" onclick="toggleSec(\'' + catId + '\')">';
-                h += '<span class="pur-toggle-title"><span class="pur-toggle-arrow open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span><span style="font-size:.75rem;font-weight:600;color:var(--tx-m)">' + cat + '</span></span>';
+                h += '<span class="pur-toggle-title"><span class="pur-toggle-arrow open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span><span style="font-size:.75rem;font-weight:600;color:var(--tx-m)">' + axEscapeHtml(cat) + '</span></span>';
                 h += '<div style="display:flex;align-items:center;gap:4px">';
                 h += '<span style="font-family:var(--fm);font-size:.75rem;color:var(--tx-m)">¥' + fmtC(Math.abs(group.total)) + '</span>';
                 // 显示退货总额（如果有）
@@ -2103,8 +2285,8 @@ function showPurDayModal(date) {
 
                     h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;margin-bottom:2px;background:var(--card-h);border:1px solid var(--bd-l);border-radius:5px">';
                     h += '<div style="flex:1;min-width:0">';
-                    h += '<div style="font-size:.78rem;font-weight:600">' + item.name + alertBadge + '</div>';
-                    h += '<div style="font-size:.65rem;color:var(--tx-s)">' + item.qty + (item.unit || '') + ' × ¥' + fmtC(item.unitPrice) + (item.note ? ' · ' + item.note : '') + '</div>';
+                    h += '<div style="font-size:.78rem;font-weight:600">' + axEscapeHtml(item.name) + alertBadge + '</div>';
+                    h += '<div style="font-size:.65rem;color:var(--tx-s)">' + item.qty + axEscapeHtml(item.unit || '') + ' × ¥' + fmtC(item.unitPrice) + (item.note ? ' · ' + axEscapeHtml(item.note) : '') + '</div>';
                     h += '</div>';
                     h += '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;margin-left:6px">';
                     h += '<span style="font-size:.82rem;font-weight:700;color:' + (item.total < 0 ? 'var(--rd)' : 'var(--ac)') + '">' + (item.total < 0 ? '-' : '') + '¥' + fmtC(Math.abs(item.total)) + '</span>';
@@ -2321,7 +2503,7 @@ function returnPurItem(date, name) {
     if (!orig) { toast('未找到原采购记录'); return; }
 
     var h = '<h3>退货 · ' + name + '</h3>';
-    h += '<div class="pv-row"><span class="k">来源</span><span>' + (foundP.source || '外购') + '</span></div>';
+    h += '<div class="pv-row"><span class="k">来源</span><span>' + axEscapeHtml(foundP.source || '外购') + '</span></div>';
     h += '<div class="pv-row"><span class="k">原采购</span><span>' + fmtC(orig.total) + '</span></div>';
     h += '<div class="pv-row"><span class="k">数量</span><span>' + orig.qty + (orig.unit || '') + '</span></div>';
     h += '<div class="pv-row"><span class="k">单价</span><span>' + fmtC(orig.unitPrice || 0) + '</span></div>';
@@ -2431,18 +2613,20 @@ function _doReturnExec(date, name, retDate, retQty, retTotal, retReason, retRela
     var purchases = DB.purchases.filter(function(pp) { return pp.date === date; });
     var orig = null;
     var origPurchase = null;
+    var origItemIndex = -1;
     for (var i = 0; i < purchases.length; i++) {
         for (var k = 0; k < purchases[i].items.length; k++) {
             if (purchases[i].items[k].name === name && !isPurchaseReturnItem(purchases[i].items[k]) && !isPurchaseReturnRecord(purchases[i])) {
                 orig = purchases[i].items[k];
                 origPurchase = purchases[i];
+                origItemIndex = k;
                 break;
             }
         }
         if (orig) break;
     }
     if (!orig) return;
-    var origItemId = orig.id || (origPurchase.id + '_' + purchases.indexOf(origPurchase));
+    var origItemId = orig.id || (origPurchase.id + '_' + origItemIndex);
     var remaining = remainingReturnQty(origPurchase.id, origItemId);
     if (retQty > remaining) {
         toast('累计退货数量不能超过原采购数量');
@@ -2537,7 +2721,16 @@ function delPurDaySrc(date, src) {
     showPurDay(date);
 }
 
-// 编辑某天某来源的日期和来源（从日详情弹窗调用）
+/**
+ * 按当前来源编辑列表索引打开对应日期和来源的批量编辑弹窗。
+ * @param {number} index 当前来源编辑列表中的索引。
+ * @returns {void}
+ */
+function editPurSrcByIndex(index) {
+    var entry = _purSrcEditEntries[index];
+    if (entry) editPurSrc(entry.date, entry.source);
+}
+
 function editPurSrc(date, src) {
     // 收集该来源下所有物品
     var items = [];
@@ -2550,6 +2743,7 @@ function editPurSrc(date, src) {
         });
     });
     if (!items.length) { toast('该来源下无物品'); return; }
+    window._purSourceEditContext = { date: date, source: src };
 
     var sources = getPurchaseSources();
     if (sources.length === 0) sources = ['外购'];
@@ -2560,18 +2754,26 @@ function editPurSrc(date, src) {
     if (sources.indexOf(src) < 0) sources.unshift(src);
 
     var h = '<h3>批量修改来源</h3>';
-    h += '<p style="font-size:.74rem;color:var(--tx-s);margin-bottom:12px">修改 <strong>' + src + '</strong> 下 ' + items.length + ' 项物品的日期和来源</p>';
-    h += '<div class="hrow"><label>日期</label><input class="inp" id="editSrcDate" type="text" readonly placeholder="选择日期" style="max-width:160px;cursor:pointer" value="' + date + '" onclick="_dpOpen(\'editSrcDate\')"></div>';
+    h += '<p style="font-size:.74rem;color:var(--tx-s);margin-bottom:12px">修改 <strong>' + axEscapeHtml(src) + '</strong> 下 ' + items.length + ' 项物品的日期和来源</p>';
+    h += '<div class="hrow"><label>日期</label><input class="inp" id="editSrcDate" type="text" readonly placeholder="选择日期" style="max-width:160px;cursor:pointer" value="' + axEscapeHtml(date) + '" onclick="_dpOpen(\'editSrcDate\')"></div>';
     h += '<div class="hrow"><label>来源</label><select class="inp" id="editSrcName" style="max-width:140px">';
-    sources.forEach(function(s) { h += '<option' + (src === s ? ' selected' : '') + '>' + s + '</option>'; });
+    sources.forEach(function(s) { h += '<option value="' + axEscapeHtml(s) + '"' + (src === s ? ' selected' : '') + '>' + axEscapeHtml(s) + '</option>'; });
     h += '</select></div>';
     h += '<div class="brow" style="margin-top:14px;justify-content:flex-end">';
     h += '<button class="btn" onclick="backToPurDetail(\'' + date + '\')">取消</button>';
-    h += '<button class="btn p" onclick="doEditPurSrc(\'' + date + '\',\'' + src.replace(/'/g, "\\'") + '\')">保存</button></div>';
+    h += '<button class="btn p" onclick="doEditPurSrc()">保存</button></div>';
     showModal(h, 400);
 }
 
-function doEditPurSrc(oldDate, oldSrc) {
+/**
+ * 校验编辑表单并批量更新所选来源下物品的日期和来源。
+ * @returns {void}
+ */
+function doEditPurSrc() {
+    var editContext = window._purSourceEditContext;
+    if (!editContext) return;
+    var oldDate = editContext.date;
+    var oldSrc = editContext.source;
     var newDate = $id('editSrcDate').value;
     var newSrc = $id('editSrcName').value;
     if (!newDate) { toast('请选择日期'); return; }
@@ -2618,6 +2820,7 @@ function doEditPurSrc(oldDate, oldSrc) {
         }
     });
     closeModal();
+    window._purSourceEditContext = null;
     toast('已修改 ' + changed + ' 项物品');
     setTimeout(function() { showPurDayModal(newDate); }, 250);
     renderPHist();

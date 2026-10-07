@@ -104,11 +104,11 @@ function rData() {
     h += '<div class="hrow"><label>API地址</label><input class="inp" id="mimoEndpoint" style="flex:2" placeholder="https://token-plan-cn.xiaomimimo.com/v1/chat/completions" value="' + (localStorage.getItem('ax_mimo_ep') || '') + '"></div>';
     h += '<div class="hrow"><label>API Key</label><div style="flex:2;position:relative;display:flex;align-items:center"><input class="inp" id="mimoKey" type="password" style="width:100%;padding-right:30px" placeholder="sk-xxxx" value="' + (localStorage.getItem('ax_mimo_key') || '') + '"><span onclick="toggleKeyVisibility()" style="position:absolute;right:8px;cursor:pointer;opacity:0.5" id="keyEye"><i data-feather="eye"></i></span></div></div>';
     h += '<div class="hrow"><label>模型</label>';
-    h += '<select class="inp" id="mimoModel" style="max-width:200px">';
-    ['mimo-v2.5', 'mimo-v2.5-pro', 'mimo-v2.5-tts-voiceclone', 'mimo-v2.5-tts-voicedesign', 'mimo-v2.5-tts', 'mimo-v2-pro', 'mimo-v2-omni', 'mimo-v2-tts'].forEach(function(m) {
-        h += '<option' + ((localStorage.getItem('ax_mimo_model') || 'mimo-v2.5') === m ? ' selected' : '') + '>' + m + '</option>';
-    });
-    h += '</select></div>';
+    var savedModel = localStorage.getItem('ax_mimo_model') || 'mimo-v2.5';
+    h += '<input class="inp" id="mimoModel" list="mimoModelOptions" style="max-width:240px" value="' + savedModel.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '">';
+    h += '<datalist id="mimoModelOptions"><option value="' + savedModel.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '"></datalist>';
+    h += '<button class="btn" onclick="loadMimoModels()">加载模型</button></div>';
+    h += '<div id="mimoModelStatus" role="status" style="font-size:.7rem;color:var(--tx-m);margin:4px 0 8px"></div>';
     h += '<div class="brow" style="margin-top:8px"><button class="btn p" onclick="saveMimoCfg()">保存配置</button></div>';
     h += '</div>';
 
@@ -867,6 +867,8 @@ function removeDailyLabelFromConfig(label) {
 }
 
 // 采购来源配置
+var _purchaseSourceConfigEntries = [];
+
 function showPurchaseSourceConfig() {
     var config = getAppConfig();
     var sources = config.purchaseSources || [];
@@ -887,16 +889,27 @@ function showPurchaseSourceConfig() {
     h += '</div></div>';
 
     // 已选来源
+    _purchaseSourceConfigEntries = sources.slice();
     h += '<div><label style="font-size:.72rem;color:var(--tx-m);display:block;margin-bottom:6px">已选来源</label>';
     h += '<div id="purchaseSourcesList" style="display:flex;flex-wrap:wrap;gap:6px">';
-    sources.forEach(function(s) {
-        h += '<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--card-h);border-radius:6px;font-size:.76rem">' + s;
-        h += '<button onclick="removePurchaseSourceFromConfig(\'' + s + '\')" style="background:none;border:none;color:var(--tx-m);cursor:pointer">×</button></span>';
+    sources.forEach(function(s, index) {
+        h += '<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--card-h);border-radius:6px;font-size:.76rem">' + axEscapeHtml(s);
+        h += '<button onclick="removePurchaseSourceFromConfigByIndex(' + index + ')" style="background:none;border:none;color:var(--tx-m);cursor:pointer">×</button></span>';
     });
     h += '</div></div>';
 
     h += '<div class="brow" style="margin-top:16px;justify-content:flex-end"><button class="btn" onclick="closeModal()">完成</button></div>';
     showModal(h);
+}
+
+/**
+ * 按配置弹窗中捕获的索引移除对应采购来源。
+ * @param {number} index 当前来源配置列表中的索引。
+ * @returns {void}
+ */
+function removePurchaseSourceFromConfigByIndex(index) {
+    var source = _purchaseSourceConfigEntries[index];
+    if (source !== undefined) removePurchaseSourceFromConfig(source);
 }
 
 function addPurchaseSourceFromConfig(source) {

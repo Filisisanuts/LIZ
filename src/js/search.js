@@ -89,7 +89,7 @@ function doSearch() {
         purUnique.slice(0, 8).forEach(function(p) {
             h += '<div class="item-card" style="cursor:pointer" onclick="goPage(\'purchase\')">';
             h += '<span class="name">' + p.date + '</span>';
-            h += '<div class="nums"><span>' + (p.items || []).length + '项 · ' + (p.source || '外购') + '</span></div>';
+            h += '<div class="nums"><span>' + (p.items || []).length + '项 · ' + axEscapeHtml(p.source || '外购') + '</span></div>';
             h += '</div>';
         });
     }

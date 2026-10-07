@@ -408,7 +408,7 @@ function doAIParseGo(){
     if(!base64){window._mimoProcessing=false;mimoDiag('run_failed',{stage:'confirm_without_image'});hideAILoading(false);toast("图片已失效，请重新拍摄（可查看识别诊断）");return}
     var purchaseSections = getPurchaseSections();
     var regionRule = purchaseSections.length ? '区域只能是：' + purchaseSections.join('、') + '。' : '';
-    var prompt='请识别这张采购单/出库单图片，提取所有商品信息。图片中会标注区域信息，请将每个商品对应的区域填入section字段。请严格按以下JSON格式返回：\n\n{"date":"YYYY-MM-DD","source":"供应商名称","items":[{"name":"商品名称","qty":数字,"unit":"单位","unitPrice":单价,"total":金额,"section":"区域"}]}\n\n' + regionRule + '无法判断则留空。只返回JSON。';
+    var prompt='请识别这张采购单/出库单图片，提取日期、供应商名称和商品信息。每项商品的区域只作为识图候选，不代表已确认；不要根据历史记录推断区域或分类，也不要返回category。请严格按以下JSON格式返回：\n\n{"date":"YYYY-MM-DD","source":"供应商名称","items":[{"name":"商品名称","qty":数字,"unit":"单位","unitPrice":单价,"total":金额,"section":"区域候选"}]}\n\n' + regionRule + '无法判断则留空。只返回JSON。';
     var body={model:localStorage.getItem('ax_mimo_model')||'mimo-v2.5',messages:[{role:'user',content:[{type:'text',text:prompt},{type:'image_url',image_url:{url:'data:image/jpeg;base64,'+base64}}]}],max_tokens:4096,temperature:.1};
     var xhr=new XMLHttpRequest();xhr.open('POST',ep,true);
     xhr.setRequestHeader('Content-Type','application/json');xhr.setRequestHeader('Authorization','Bearer '+key);xhr.timeout=120000;
@@ -425,22 +425,26 @@ function doAIParseGo(){
             var m=reply.match(/\{[\s\S]*\}/);if(!m){mimoDiag('run_failed',{stage:'missing_json',contentLength:reply.length});hideAILoading(false);toast('AI未返回JSON（可查看识别诊断）');return}
             var result=JSON.parse(m[0]);if(!result.items||!result.items.length){mimoDiag('run_failed',{stage:'empty_items'});hideAILoading(false);toast('未识别到商品（可查看识别诊断）');return}
             if(!result.date)result.date=td();
-            // 获取默认来源（优先从AI识别结果读取）
-            var src=result.source||'';
-            if(!src){var sources=getPurchaseSources();if(sources.length>0)src=sources[0];}
+            // 识别到的来源仅匹配账号已配置来源；无唯一匹配时留空，交由用户选择。
+            var sources=getPurchaseSources();
+            var sourceSuggestion=normalizePurchaseSource(result.source, '');
+            var sourceMatch=matchConfiguredPurchaseSource(sourceSuggestion, sources);
+            var src=sourceMatch.source;
+            result.source=src;
             var items=[];result.items.forEach(function(item){
                 var qty=parseFloat(item.qty)||0,total=parseFloat(item.total)||0,unitPrice=parseFloat(item.unitPrice)||0;
                 if(!unitPrice&&total>0&&qty>0)unitPrice=Math.round(total/qty*100)/100;
-                if(qty>0&&total>0)items.push({name:item.name||'',section:item.section||'',category:'',qty:qty,unit:item.unit||'',unitPrice:unitPrice,total:total,source:src});
+                if(qty>0&&total>0)items.push({name:String(item.name||''),section:'',category:'',aiSectionSuggestion:normalizePurchaseSource(item.section,''),aiCategorySuggestion:normalizePurchaseSource(item.category,''),qty:qty,unit:String(item.unit||''),unitPrice:unitPrice,total:total,source:src});
             });
             if(!items.length){mimoDiag('run_failed',{stage:'items_filtered_out',rawItems:result.items.length});hideAILoading(false);toast('解析结果为空（可查看识别诊断）');return}
             // 英文括号转中文括号
             items.forEach(function(item){item.name=fixBrackets(item.name)});
             // 添加历史匹配
             items = addHistoryMatches(items);
+            window._pmAiReviewState={active:true,source:src,sourceResolved:!!src,sourceSuggestion:src?'':sourceSuggestion,sourceMatchStatus:sourceMatch.status,sourceManuallySelected:false,sourceMatchCandidates:sourceMatch.candidates};
             hideAILoading();
             _pmItems=items.slice();goPage('purchase');
-            setTimeout(function(){switchPT('manual');if(result.date&&$id('pmDate'))$id('pmDate').value=result.date;if($id('pmSrc')){for(var i=0;i<$id('pmSrc').options.length;i++){if($id('pmSrc').options[i].value==src){$id('pmSrc').selectedIndex=i;break}}}renderPML();toast('已识别 '+items.length+' 项物品')},200);
+            setTimeout(function(){switchPT('manual');if(result.date&&$id('pmDate'))$id('pmDate').value=result.date;if($id('pmSrc'))$id('pmSrc').value=src;renderPML();toast('已识别 '+items.length+' 项，请核对未匹配项目和来源')},200);
         }catch(e){mimoDiag('run_failed',{stage:'response_parse',errorName:e&&e.name||'Error'});hideAILoading(false);toast('解析失败（可查看识别诊断）');console.error(e)}
     };
     xhr.onerror=function(){window._mimoProcessing=false;mimoDiag('api_failure',{stage:'network_error'});clearPendingMimo();releaseMimoMemory();hideAILoading(false);toast("请求失败，请检查网络或 API 地址（可查看识别诊断）")};xhr.ontimeout=function(){window._mimoProcessing=false;mimoDiag('api_failure',{stage:'timeout',timeoutMs:xhr.timeout});clearPendingMimo();releaseMimoMemory();hideAILoading(false);toast("请求超时（可查看识别诊断）")};
@@ -490,16 +494,20 @@ if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded'
 // 获取历史采购物品
 function getHistoryItems() {
     var items = [];
-    DB.purchases.forEach(function(p) {
-        (p.items || []).forEach(function(item) {
-            if (item.name && item.unitPrice > 0) {
+    DB.purchases.forEach(function(p, purchaseOrder) {
+        if (!p || p.recordType === 'return' || p.type === 'return' || p.source === '退货') return;
+        (p.items || []).forEach(function(item, itemOrder) {
+            if (item.name && item.recordType !== 'return' && item.return !== true && item.source !== '退货') {
                 items.push({
                     name: item.name,
                     section: item.section || '',
                     category: item.category || '',
                     source: item.source || p.source || '外购',
                     unitPrice: item.unitPrice,
-                    unit: item.unit || ''
+                    unit: item.unit || '',
+                    date: String(p.date || ''),
+                    purchaseOrder: purchaseOrder,
+                    itemOrder: itemOrder
                 });
             }
         });
@@ -507,84 +515,324 @@ function getHistoryItems() {
     return items;
 }
 
-// 计算字符串相似度（Jaccard系数）
-function calculateSimilarity(str1, str2) {
-    str1 = str1.toLowerCase().replace(/\s+/g, '');
-    str2 = str2.toLowerCase().replace(/\s+/g, '');
-    
-    if (str1 === str2) return 1;
-    if (str1.length === 0 || str2.length === 0) return 0;
-    
-    var set1 = new Set(str1.split(''));
-    var set2 = new Set(str2.split(''));
-    
-    var intersection = 0;
-    set1.forEach(function(char) {
-        if (set2.has(char)) intersection++;
+/**
+ * 从同名历史商品中取采购日期最近的一条；同日时取记录顺序靠后的一条。
+ * @param {Array<Object>} items 同名历史商品记录。
+ * @returns {Object|null} 最近记录；没有历史记录时返回 null。
+ */
+function getLatestPurchaseHistoryItem(items) {
+    var latest = null;
+    (items || []).forEach(function(item) {
+        if (!latest) { latest = item; return; }
+        var itemDate = String(item.date || '');
+        var latestDate = String(latest.date || '');
+        if (itemDate > latestDate) { latest = item; return; }
+        if (itemDate < latestDate) return;
+
+        var itemPurchaseOrder = Number(item.purchaseOrder) || 0;
+        var latestPurchaseOrder = Number(latest.purchaseOrder) || 0;
+        if (itemPurchaseOrder > latestPurchaseOrder) { latest = item; return; }
+        if (itemPurchaseOrder < latestPurchaseOrder) return;
+        if ((Number(item.itemOrder) || 0) > (Number(latest.itemOrder) || 0)) latest = item;
     });
-    
-    var union = set1.size + set2.size - intersection;
-    return intersection / union;
+    return latest;
 }
 
-// 匹配历史物品
-function matchHistoricalItem(aiName, historyItems, threshold) {
-    threshold = threshold || 0.8;
-    var bestMatch = null;
-    var bestScore = 0;
-    
-    historyItems.forEach(function(item) {
-        var score = calculateSimilarity(aiName, item.name);
-        if (score > bestScore && score >= threshold) {
-            bestScore = score;
-            bestMatch = item;
+/**
+ * 规范化采购品名，忽略空格、大小写、常见标点及全半角差异。
+ * @param {unknown} name 原始品名。
+ * @returns {string} 用于比较的规范化品名。
+ */
+function normalizePurchaseItemName(name) {
+    var value = String(name == null ? '' : name);
+    if (typeof value.normalize === 'function') value = value.normalize('NFKC');
+    return value.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+}
+
+/**
+ * 计算两个采购品名规范化后的 Levenshtein 编辑距离。
+ * @param {unknown} left 第一个品名。
+ * @param {unknown} right 第二个品名。
+ * @returns {number} 将左侧品名转换为右侧品名所需的最少单字符操作数。
+ */
+function calculatePurchaseNameDistance(left, right) {
+    var a = normalizePurchaseItemName(left);
+    var b = normalizePurchaseItemName(right);
+    if (!a || !b) return Math.max(a.length, b.length);
+
+    var previous = [];
+    for (var j = 0; j <= b.length; j++) previous[j] = j;
+    for (var i = 1; i <= a.length; i++) {
+        var current = [i];
+        for (var k = 1; k <= b.length; k++) {
+            var substitution = previous[k - 1] + (a.charAt(i - 1) === b.charAt(k - 1) ? 0 : 1);
+            current[k] = Math.min(previous[k] + 1, current[k - 1] + 1, substitution);
         }
-    });
-    
-    return bestMatch ? { item: bestMatch, score: bestScore } : null;
+        previous = current;
+    }
+    return previous[b.length];
 }
 
-// 为AI识别的物品添加历史匹配
+// 保留相似度接口，使用编辑距离衡量识图名称差异。
+function calculateSimilarity(str1, str2) {
+    var a = normalizePurchaseItemName(str1);
+    var b = normalizePurchaseItemName(str2);
+    var longest = Math.max(a.length, b.length);
+    if (!longest) return 1;
+    return 1 - calculatePurchaseNameDistance(a, b) / longest;
+}
+
+/**
+ * 按规范化名称匹配历史采购物品；精确优先，OCR 错字只接受唯一的一字符差异候选。
+ * @param {unknown} aiName AI 识别出的品名。
+ * @param {Array<Object>} historyItems 历史采购物品。
+ * @returns {Object|null} 唯一匹配及其同名记录、歧义候选，或未命中时的 null。
+ */
+function matchHistoricalItem(aiName, historyItems) {
+    var aiKey = normalizePurchaseItemName(aiName);
+    if (!aiKey) return null;
+
+    var groups = [];
+    historyItems.forEach(function(item) {
+        var key = normalizePurchaseItemName(item.name);
+        if (!key) return;
+        var group = groups.find(function(candidate) { return candidate.key === key; });
+        if (!group) {
+            group = { key: key, name: item.name, items: [] };
+            groups.push(group);
+        }
+        group.items.push(item);
+    });
+
+    groups.forEach(function(group) {
+        group.distance = calculatePurchaseNameDistance(aiKey, group.key);
+        group.score = 1 - group.distance / Math.max(aiKey.length, group.key.length);
+        group.latestItem = getLatestPurchaseHistoryItem(group.items);
+        if (group.latestItem) group.name = group.latestItem.name;
+    });
+
+    var exact = groups.find(function(group) { return group.distance === 0; });
+    if (exact) return { item: exact.latestItem, items: exact.items, score: 1 };
+
+    var near = groups.filter(function(group) {
+        return group.distance === 1 && Math.min(aiKey.length, group.key.length) >= 3;
+    });
+    if (near.length === 1) return { item: near[0].latestItem, items: near[0].items, score: near[0].score };
+    if (near.length > 1) return { ambiguous: true, candidates: near.map(function(group) { return group.name; }) };
+    return null;
+}
+
+/**
+ * 将唯一历史品名匹配自动规范化，并从最近采购记录回填账号配置中仍有效的区域/分类。
+ * @param {Array<Object>} items AI 识别出的采购物品。
+ * @returns {Array<Object>} 已应用唯一历史匹配的原数组。
+ */
 function addHistoryMatches(items) {
     var historyItems = getHistoryItems();
-    
+    var configuredSections = getPurchaseSections();
     items.forEach(function(item) {
         if (!item.name) return;
-        
+        item.aiHistoryReview = true;
+        item.section = '';
+        item.category = '';
+
         var match = matchHistoricalItem(item.name, historyItems);
-        if (match) {
-            item.historyMatch = {
-                name: match.item.name,
-                section: match.item.section,
-                category: match.item.category,
-                source: match.item.source,
-                unitPrice: match.item.unitPrice,
-                score: match.score
-            };
-            
-            if (match.score >= 0.8) {
-                item.originalName = item.name;
-                item.name = match.item.name;
-            }
-            
+        if (!match) return;
+        if (match.ambiguous) {
+            item.historyMatchAmbiguous = true;
+            return;
         }
+
+        var originalName = String(item.name);
+        if (originalName !== match.item.name) item.originalName = originalName;
+        item.name = match.item.name;
+
+        // 最新一笔采购作为区域/分类来源，再核对值是否仍存在于当前账号配置。
+        var historicalSection = normalizePurchaseSource(match.item.section, '');
+        var configuredSection = historicalSection
+            ? configuredSections.find(function(sectionName) {
+                return normalizePurchaseSource(sectionName, '') === historicalSection;
+            }) || ''
+            : '';
+
+        var historicalCategory = normalizePurchaseSource(match.item.category, '');
+        var configuredCategory = historicalCategory
+            ? (configuredSection ? getPurCats(configuredSection) : []).find(function(categoryName) {
+                return normalizePurchaseSource(categoryName, '') === historicalCategory;
+            }) || ''
+            : '';
+        // Area and category form one location choice; never partially apply an incomplete history row.
+        var locationReady = !!configuredSection && !!configuredCategory;
+        var section = locationReady ? configuredSection : '';
+        var category = locationReady ? configuredCategory : '';
+        if (section) item.section = section;
+        if (category) item.category = category;
+        item.historyMatch = {
+            name: match.item.name,
+            section: section,
+            category: category,
+            score: match.score,
+            locationUnavailable: !!((historicalSection && !configuredSection) ||
+                (historicalCategory && (!configuredSection || !configuredCategory))),
+            locationIncomplete: !locationReady
+        };
     });
-    
+
     return items;
 }
 
-// 获取匹配建议的HTML
+// 为 AI 识图结果显示名称匹配、历史回填和待核对状态。
 function getMatchSuggestionHTML(item) {
-    if (!item.historyMatch) return '';
-    
-    var match = item.historyMatch;
-    var scorePercent = Math.round(match.score * 100);
-    
-    if (item.originalName && item.originalName !== item.name) {
-        return '<div style="font-size:.6rem;color:var(--gn);margin-top:2px;background:var(--gn-b);padding:2px 6px;border-radius:3px;display:inline-block">✓ 匹配: ' + item.name + ' (' + scorePercent + '%)</div>';
+    if (!item.aiHistoryReview) return '';
+    var message = '';
+    var detail = '';
+    var statusClass = 'is-review';
+    if (item.historyMatchAmbiguous) {
+        message = '候选不唯一，请核对品名';
+    } else if (item.historyMatch) {
+        var nameCorrected = item.originalName && item.originalName !== item.name;
+        var locationReady = !!item.section && !!item.category;
+        if (!locationReady) {
+            message = item.historyMatch.locationUnavailable ? '区域/分类需重选' : '需补区域/分类';
+            detail = item.historyMatch.locationUnavailable
+                ? '最近记录区域/分类不可用，请重新选择'
+                : '最近记录缺区域/分类，请补选';
+            statusClass += ' is-location-review';
+        } else if (nameCorrected) {
+            message = '名称已纠正';
+            statusClass = 'is-success';
+        } else if (locationReady) {
+            message = '已匹配';
+            statusClass = 'is-success';
+        }
+    } else if (!item.section || !item.category) {
+        message = '未匹配，请核对品名';
     }
-    
-    return '<div style="font-size:.6rem;color:var(--tx-m);margin-top:2px">匹配历史: ' + match.name + ' (' + scorePercent + '%)</div>';
+    if (!message) return '';
+    var detailAttribute = detail ? ' title="' + axEscapeHtml(detail) + '" aria-label="' + axEscapeHtml(detail) + '"' : '';
+    return '<div class="pm-ai-suggestion ' + statusClass + '"' + detailAttribute + '>' + axEscapeHtml(message) + '</div>';
+}
+
+/**
+ * 规范化供应商来源；空值时回退到调用方提供的当前采购来源。
+ * @param {unknown} source AI 或表单提供的来源。
+ * @param {unknown} fallback 空来源时使用的回退来源。
+ * @returns {string} 去除首尾空白后的来源。
+ */
+function normalizePurchaseSource(source, fallback) {
+    var value = String(source == null ? '' : source).replace(/\s+/g, ' ').trim();
+    return value || String(fallback == null ? '' : fallback).replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * 将识别来源映射到唯一且足够具体的账号已配置来源。
+ * @param {unknown} source 识别到的供应商文本。
+ * @param {Array<string>} configuredSources 当前账号来源配置。
+ * @returns {{source: string, status: string, candidates: Array<string>}} 映射结果与候选状态。
+ */
+function matchConfiguredPurchaseSource(source, configuredSources) {
+    var normalized = normalizePurchaseSource(source, '');
+    if (!normalized) return { source: '', status: 'empty', candidates: [] };
+
+    function key(value) { return normalizePurchaseSource(value, '').toLowerCase().replace(/\s+/g, ''); }
+    function isSpecific(value) {
+        var compact = key(value);
+        var core = compact.replace(/(有限责任公司|股份有限公司|有限公司|集团|公司)$/g, '');
+        var generic = ['外购', '内购', '采购', '其他', '其它', '供应商', '未知', '商贸', '贸易'];
+        return core.length >= 3 && generic.indexOf(core) < 0;
+    }
+
+    var sourceKey = key(normalized);
+    var configured = (configuredSources || []).map(function(value) {
+        return normalizePurchaseSource(value, '');
+    }).filter(function(value, index, list) {
+        return value && list.findIndex(function(candidate) { return key(candidate) === key(value); }) === index;
+    });
+    var exact = configured.filter(function(value) { return key(value) === sourceKey; });
+    if (exact.length === 1) return { source: exact[0], status: 'exact', candidates: exact };
+    if (exact.length > 1) return { source: '', status: 'ambiguous', candidates: exact };
+
+    var aliases = configured.filter(function(value) {
+        var configuredKey = key(value);
+        return isSpecific(value) && configuredKey.length < sourceKey.length && sourceKey.indexOf(configuredKey) >= 0;
+    });
+    if (aliases.length === 1) return { source: aliases[0], status: 'alias', candidates: aliases };
+    if (aliases.length > 1) return { source: '', status: 'ambiguous', candidates: aliases };
+    return { source: '', status: 'unmatched', candidates: [] };
+}
+
+/**
+ * 确保来源可在当前采购表单选择；未配置来源只创建本次页面的临时选项。
+ * @param {HTMLSelectElement} select 来源下拉。
+ * @param {string} source 来源名称。
+ * @returns {boolean} 来源有效且存在或已插入时返回 true。
+ */
+function ensurePurchaseSourceOption(select, source) {
+    source = normalizePurchaseSource(source, '');
+    if (!select || !source) return false;
+    for (var i = 0; i < select.options.length; i++) {
+        if (select.options[i].value === source) return true;
+    }
+    var option = document.createElement('option');
+    option.value = source;
+    option.textContent = source;
+    option.setAttribute('data-ai-temporary', 'true');
+    select.appendChild(option);
+    return true;
+}
+
+/**
+ * 将已填写的聊天补全地址转换为 OpenAI 兼容的模型列表地址。
+ * @param {string} endpoint API 地址。
+ * @returns {string} 模型列表地址；空输入返回空字符串。
+ */
+function getMimoModelsEndpoint(endpoint) {
+    var value = String(endpoint || '').trim().replace(/\/+$/, '');
+    if (/\/models$/i.test(value)) return value;
+    if (/\/chat\/completions$/i.test(value)) return value.replace(/\/chat\/completions$/i, '/models');
+    return value ? value + '/models' : '';
+}
+
+/**
+ * 使用当前设置中的 API Key 加载模型候选；请求失败时不改当前输入模型。
+ * @returns {void}
+ */
+function loadMimoModels() {
+    var endpointInput = document.getElementById('mimoEndpoint');
+    var keyInput = document.getElementById('mimoKey');
+    var select = document.getElementById('mimoModel');
+    var list = document.getElementById('mimoModelOptions');
+    var status = document.getElementById('mimoModelStatus');
+    var endpoint = getMimoModelsEndpoint(endpointInput && endpointInput.value);
+    var key = keyInput && keyInput.value.trim();
+    /** Updates the visible model-loading status without including request credentials. */
+    function report(message) { if (status) status.textContent = message; }
+    if (!endpoint || !key || !select || !list) { report('请先填写 API 地址和 API Key'); return; }
+    report('正在加载模型…');
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', endpoint, true);
+    xhr.setRequestHeader('Authorization', 'Bearer ' + key);
+    xhr.timeout = 15000;
+    xhr.onload = function() {
+        if (xhr.status < 200 || xhr.status >= 300) { report('加载失败（HTTP ' + xhr.status + '），仍可使用当前模型'); return; }
+        try {
+            var response = JSON.parse(xhr.responseText);
+            var models = Array.isArray(response.data) ? response.data.map(function(model) { return String(model && model.id || '').trim(); }).filter(Boolean) : [];
+            models = Array.from(new Set(models)).sort();
+            // 把已保存/手工输入模型保留在候选首位，再追加已去重排序的 API 结果。
+            var current = select.value.trim() || (localStorage.getItem('ax_mimo_model') || '').trim();
+            // 空列表响应不清空此前候选；有返回时才用当前结果刷新列表。
+            var previous = Array.from(list.options || []).map(function(option) { return String(option.value || '').trim(); });
+            var options = Array.from(new Set([current].concat(models.length ? models : previous).filter(Boolean)));
+            list.innerHTML = '';
+            options.forEach(function(model) { var option = document.createElement('option'); option.value = model; list.appendChild(option); });
+            select.value = current;
+            report(models.length ? '已加载 ' + models.length + ' 个模型' : '接口未返回模型，仍可手动填写');
+        } catch (error) { report('模型列表格式无法识别，仍可使用当前模型'); }
+    };
+    xhr.onerror = function() { report('加载失败（网络或跨域限制），仍可使用当前模型'); };
+    xhr.ontimeout = function() { report('加载超时，仍可使用当前模型'); };
+    xhr.send();
 }
 
 

@@ -314,7 +314,7 @@ function doGen(period) {
     // 采购成本（按来源细分）
     if (mPur > 0) {
         // 按来源统计
-        var purBySrc = {};
+        var purBySrc = Object.create(null);
         DB.purchases.filter(function(p) {
             var d = parseInt(p.date.split('-')[2]);
             return p.date.startsWith(m) && d >= sd && d <= ed;
@@ -333,7 +333,7 @@ function doGen(period) {
         html += '<table><tr><th>采购来源</th><th>金额（元）</th><th>占比</th></tr>';
         Object.keys(purBySrc).sort(function(a, b) { return purBySrc[b] - purBySrc[a]; }).forEach(function(src) {
             var pct = mPur > 0 ? (purBySrc[src] / mPur * 100).toFixed(1) : '0';
-            html += '<tr><td>' + src + '</td><td class="nr">' + num(purBySrc[src]) + '</td><td class="nr">' + pct + '%</td></tr>';
+            html += '<tr><td>' + axEscapeHtml(src) + '</td><td class="nr">' + num(purBySrc[src]) + '</td><td class="nr">' + pct + '%</td></tr>';
         });
         html += '<tr class="total"><td>合计</td><td class="nr">' + num(mPur) + '</td><td class="nr">100%</td></tr>';
         html += '</table>';
