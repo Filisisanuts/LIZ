@@ -12,7 +12,7 @@ var _baiduSK = localStorage.getItem('ax_baidu_sk') || '';
 // 采购明细页折叠状态缓存
 var _pfFolds = {};
 var _purchaseSelectTarget = '';
-var _repairReturnId = '';
+var _repairReturnTarget = null;
 
 function isPurchaseReturnItem(item) {
     return !!(item && (item.recordType === 'return' || item.return === true || item.source === '退货'));
@@ -533,7 +533,11 @@ function pmSrcChanged() {
 }
 
 // 打开关联原采购选择弹窗
-function openRelPurModal() {
+function openRelPurModal(forRepair) {
+    if (!forRepair) {
+        _repairReturnTarget = null;
+        _purchaseSelectTarget = '';
+    }
     var h = '<h3>选择关联原采购物品</h3>';
 
     // 搜索框
@@ -546,9 +550,28 @@ function openRelPurModal() {
 
     showModal(h, 600);
 
-    // 渲染日历
+    // 每次打开时回到当前月份，月内切换时由状态保留搜索条件。
     window._relPurSearchKeyword = '';
+    window._relPurMonth = curYM();
     renderRelPurCalendar();
+}
+
+// 设置关联原采购选择器的月份。
+function setRelPurMonth(ym) {
+    if (!/^\d{4}-\d{2}$/.test(ym || '')) return;
+    var parts = ym.split('-');
+    var month = parseInt(parts[1], 10);
+    if (month < 1 || month > 12) return;
+    window._relPurMonth = ym;
+    renderRelPurCalendar();
+}
+
+// 按月前后浏览关联原采购日历。
+function changeRelPurMonth(offset) {
+    var ym = window._relPurMonth || curYM();
+    var parts = ym.split('-');
+    var date = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1 + offset, 1);
+    setRelPurMonth(date.getFullYear() + '-' + ('0' + (date.getMonth() + 1)).slice(-2));
 }
 
 // 渲染关联原采购选择日历
@@ -557,7 +580,7 @@ function renderRelPurCalendar() {
     if (!el) return;
 
     var keyword = window._relPurSearchKeyword || '';
-    var ym = curYM();
+    var ym = window._relPurMonth || curYM();
 
     var year = parseInt(ym.split('-')[0]);
     var month = parseInt(ym.split('-')[1]);
@@ -565,24 +588,27 @@ function renderRelPurCalendar() {
     var firstDay = new Date(year, month - 1, 1).getDay();
     firstDay = firstDay === 0 ? 6 : firstDay - 1;
 
-    // 统计每天的采购总额
+    // 统计每天可关联的采购额；有符合条件的采购明细即可选日期。
     var dayTotals = {};
-    DB.purchases.filter(function(p) { return p.date.startsWith(ym); }).forEach(function(p) {
-        var day = parseInt(p.date.substring(8, 10));
-        if (!dayTotals[day]) dayTotals[day] = 0;
-        p.items.forEach(function(item) {
+    var dayCounts = {};
+    (DB.purchases || []).filter(function(p) { return String(p.date || '').slice(0, 7) === ym; }).forEach(function(p) {
+        var day = parseInt(String(p.date || '').substring(8, 10), 10);
+        if (isNaN(day) || day < 1 || day > daysInMonth) return;
+        (p.items || []).forEach(function(item) {
             var qty = parseFloat(item.qty) || 0;
-            var src = item.source || p.source || '外购';
-            // 过滤：数量大于0且不是退货
-            if (qty > 0 && src !== '退货') {
-                // 如果有搜索关键词，检查是否匹配
-                if (keyword && item.name.indexOf(keyword) < 0) return;
-                dayTotals[day] += item.total;
-            }
+            if (qty <= 0 || isPurchaseReturnItem(item) || isPurchaseReturnRecord(p)) return;
+            if (keyword && String(item.name || '').indexOf(keyword) < 0) return;
+            dayCounts[day] = (dayCounts[day] || 0) + 1;
+            dayTotals[day] = (dayTotals[day] || 0) + (parseFloat(item.total) || 0);
         });
     });
 
     var h = '';
+    h += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">';
+    h += '<button class="btn s" type="button" onclick="changeRelPurMonth(-1)">上月</button>';
+    h += '<input class="inp" id="relPurMonthInput" type="month" value="' + ym + '" onchange="setRelPurMonth(this.value)" aria-label="选择采购月份" style="max-width:180px">';
+    h += '<button class="btn s" type="button" onclick="changeRelPurMonth(1)">下月</button>';
+    h += '</div>';
     h += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">';
     ['一','二','三','四','五','六','日'].forEach(function(w) {
         h += '<div style="text-align:center;font-size:.7rem;color:var(--tx-m);padding:4px 0">' + w + '</div>';
@@ -593,7 +619,7 @@ function renderRelPurCalendar() {
     for (var d = 1; d <= daysInMonth; d++) {
         var dateStr = ym + '-' + (d < 10 ? '0' + d : d);
         var total = dayTotals[d] || 0;
-        var has = total > 0;
+        var has = (dayCounts[d] || 0) > 0;
         var bg = has ? 'var(--card)' : 'var(--card-h)';
         var border = '1px solid var(--bd)';
 
@@ -609,6 +635,8 @@ function renderRelPurCalendar() {
     }
 
     h += '</div>';
+    if (!Object.keys(dayCounts).length) h += '<div style="padding:12px 4px;color:var(--tx-m);text-align:center">这个月没有符合搜索条件的原采购明细</div>';
+    h += '<div class="brow" style="margin-top:10px;justify-content:flex-end"><button class="btn" type="button" onclick="cancelRelPurSelection()">取消</button></div>';
     el.innerHTML = h;
 }
 
@@ -683,10 +711,16 @@ function showRelPurDayItems(date) {
     // 返回日历按钮
     h += '<div class="brow" style="margin-top:12px;justify-content:flex-end">';
     h += '<button class="btn" onclick="renderRelPurCalendar()">返回日历</button>';
-    h += '<button class="btn" onclick="closeModal()">取消</button>';
+    h += '<button class="btn" onclick="cancelRelPurSelection()">取消</button>';
     h += '</div>';
 
     el.innerHTML = h;
+}
+
+function cancelRelPurSelection() {
+    _repairReturnTarget = null;
+    _purchaseSelectTarget = '';
+    closeModal();
 }
 
 // 选择关联原采购物品
@@ -725,8 +759,8 @@ function selectRelPurItem(date, itemIdx) {
     // 保存选择结果
     window._selectedRelPur = selectedItem;
 
-    if (_repairReturnId) {
-        applyReturnRepair(_repairReturnId, selectedItem);
+    if (_repairReturnTarget) {
+        applyReturnRepair(_repairReturnTarget, selectedItem);
         return;
     }
 
@@ -782,12 +816,61 @@ function renderPurchaseReturn() {
     });
     var pendingEl = $id('prPending');
     if (!pendingEl) return;
+    window._pendingReturnRows = pending.slice();
     pendingEl.innerHTML = pending.length
-        ? '<div class="section-label">待修正历史退货</div>' + pending.map(function(record) {
+        ? '<div class="section-label">待修正历史退货</div>' + pending.map(function(record, rowIndex) {
             var item = (record.items || [])[0] || {};
-            return '<div class="item-card"><span class="name">' + item.name + '</span><span class="nums">' + record.date + '</span><button class="btn s" onclick="repairPurchaseReturn(\'' + record.id + '\')">关联原采购</button></div>';
+            var needsIdRepair = typeof record.id !== 'string' || !record.id || (DB.purchases || []).filter(function(other) { return other && other.id === record.id; }).length !== 1;
+            var repairHint = needsIdRepair ? '<span style="font-size:.7rem;color:var(--tx-m)">关联后自动补编号</span>' : '';
+            return '<div class="item-card"><span class="name">' + axEscapeHtml(item.name || '历史退货') + '</span><span class="nums">' + axEscapeHtml(record.date || '') + '</span>' +
+                '<span style="display:inline-flex;align-items:center;justify-content:flex-end;gap:8px;margin-left:auto;flex-wrap:wrap">' + repairHint +
+                '<button class="btn s" type="button" onclick="repairPendingPurchaseReturn(' + rowIndex + ')">关联原采购</button>' +
+                '<button class="btn s" type="button" onclick="deletePendingPurchaseReturn(' + rowIndex + ')">删除</button></span></div>';
         }).join('')
         : '';
+}
+
+// 将指定行的待修正历史退货移入回收站，不依赖旧记录是否已有编号。
+function deletePendingPurchaseReturn(rowIndex) {
+    if (!salaryRequireAuth()) return;
+    var index = parseInt(rowIndex, 10);
+    var target = (window._pendingReturnRows || [])[index];
+    if (!target || (DB.purchases || []).indexOf(target) < 0) { toast('这条退货记录已变化，请刷新后重试'); renderPurchaseReturn(); return; }
+    if (!isPurchaseReturnRecord(target) || target.returnMigrationStatus !== 'pending') {
+        toast('这条退货已不在待修正状态，未删除');
+        renderPurchaseReturn();
+        return;
+    }
+
+    var targetItem = (target.items || [])[0] || {};
+    if (!window.confirm('确定删除待修正退货“' + (targetItem.name || '历史退货') + '”（' + (target.date || '日期未知') + '）？\n删除后可在采购回收站中恢复，保留 30 天。')) return;
+
+    var removed = false;
+    upd(function(db) {
+        prunePurchaseTrash(db);
+        var currentMatches = (db.purchases || []).map(function(record, index) {
+            return record === target ? { record: record, index: index } : null;
+        }).filter(Boolean);
+        if (currentMatches.length !== 1) return;
+        var current = currentMatches[0];
+        if (!isPurchaseReturnRecord(current.record) || current.record.returnMigrationStatus !== 'pending') return;
+
+        db.purchaseTrash.push({
+            id: 'pur_trash_return_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+            kind: 'purchase-return-record',
+            recordId: current.record.id == null ? '' : current.record.id,
+            originalIndex: current.index,
+            record: copyAppConfigValue(current.record),
+            deletedAt: Date.now(),
+            expiresAt: Date.now() + 30 * 86400000
+        });
+        db.purchases.splice(current.index, 1);
+        removed = true;
+    });
+
+    if (!removed) { toast('退货记录已变化或已被处理，未删除'); renderPurchaseReturn(); return; }
+    renderPurchaseReturn();
+    toast('待修正退货已移入采购回收站');
 }
 
 function calcPurchaseReturnTotal() {
@@ -848,16 +931,41 @@ function savePurchaseReturn() {
     toast('已退货 ' + selected.name + ' ¥' + fmtC(total));
 }
 
-function repairPurchaseReturn(recordId) {
-    _repairReturnId = recordId;
+function beginRepairPurchaseReturn(record) {
+    if (!record || (DB.purchases || []).indexOf(record) < 0 || !isPurchaseReturnRecord(record) || record.returnMigrationStatus !== 'pending') {
+        toast('这条退货记录已变化，请刷新后重试');
+        renderPurchaseReturn();
+        return;
+    }
+    _repairReturnTarget = record;
     _purchaseSelectTarget = 'return';
-    openRelPurModal();
+    openRelPurModal(true);
 }
 
-function applyReturnRepair(recordId, selected) {
+function repairPendingPurchaseReturn(rowIndex) {
+    var record = (window._pendingReturnRows || [])[parseInt(rowIndex, 10)];
+    beginRepairPurchaseReturn(record);
+}
+
+function repairPurchaseReturn(recordId) {
+    var matches = (DB.purchases || []).filter(function(record) {
+        return record && record.id === recordId && isPurchaseReturnRecord(record) && record.returnMigrationStatus === 'pending';
+    });
+    if (matches.length !== 1) { toast('退货记录编号缺失或重复，请从待修正列表选择'); return; }
+    beginRepairPurchaseReturn(matches[0]);
+}
+
+function applyReturnRepair(targetRecord, selected) {
+    var applied = false;
     upd(function(db) {
-        var record = db.purchases.find(function(item) { return item.id === recordId; });
-        if (!record) return;
+        var record = targetRecord;
+        var referenceCount = (db.purchases || []).filter(function(item) { return item === record; }).length;
+        if (referenceCount !== 1 || !isPurchaseReturnRecord(record) || record.returnMigrationStatus !== 'pending') return;
+        if (typeof record.id !== 'string' || !record.id || db.purchases.filter(function(item) { return item && item.id === record.id; }).length !== 1) {
+            do {
+                record.id = 'p_ret_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+            } while (db.purchases.some(function(item) { return item !== record && item && item.id === record.id; }));
+        }
         record.source = selected.source;
         record.originalSource = selected.source;
         record.originalPurchaseId = selected.purchaseId;
@@ -877,8 +985,18 @@ function applyReturnRepair(recordId, selected) {
                 name: selected.name
             };
         });
+        applied = true;
     });
-    _repairReturnId = '';
+
+    if (!applied) {
+        _repairReturnTarget = null;
+        _purchaseSelectTarget = '';
+        closeModal();
+        renderPurchaseReturn();
+        toast('这条退货记录已变化，未完成关联');
+        return;
+    }
+    _repairReturnTarget = null;
     _purchaseSelectTarget = '';
     closeModal();
     renderPurchaseReturn();
@@ -999,9 +1117,16 @@ function deletePurchaseItemWithReturns(db, purchaseId, itemId) {
 
 function openPurchaseTrash() {
     var items = activePurchaseTrash();
-    var h = '<h3>采购回收站</h3><p class="salary-move-hint">原采购及其关联退货保留 30 天，可恢复。</p>';
+    var h = '<h3>采购回收站</h3><p class="salary-move-hint">采购商品及待修正历史退货保留 30 天，可恢复。</p>';
     if (!items.length) h += '<div class="salary-trash-empty">回收站为空</div>';
     items.forEach(function(item) {
+        if (item.kind === 'purchase-return-record') {
+            var record = item.record || {};
+            var recordItem = (record.items || [])[0] || {};
+            h += '<div class="salary-trash-item"><div><strong>' + salaryEscape(recordItem.name || '历史退货') + '</strong><small>待修正退货 · ' + salaryEscape(record.date || '日期未知') + ' · 30 天内可恢复</small></div>';
+            h += '<button class="btn s" onclick="restorePurchaseTrash(\'' + item.id + '\')">恢复</button></div>';
+            return;
+        }
         var original = item.original && item.original.item ? item.original.item : {};
         h += '<div class="salary-trash-item"><div><strong>' + salaryEscape(original.name || '采购物品') + '</strong><small>关联退货 ' + (item.returns || []).length + ' 条 · 30 天内可恢复</small></div>';
         h += '<button class="btn s" onclick="restorePurchaseTrash(\'' + item.id + '\')">恢复</button></div>';
@@ -1013,6 +1138,32 @@ function openPurchaseTrash() {
 function restorePurchaseTrash(itemId) {
     var entry = (DB.purchaseTrash || []).find(function(item) { return item.id === itemId; });
     if (!entry) { toast('回收站项目不存在'); return; }
+
+    if (entry.kind === 'purchase-return-record') {
+        var restored = false;
+        upd(function(db) {
+            prunePurchaseTrash(db);
+            var currentEntry = (db.purchaseTrash || []).find(function(item) {
+                return item.id === itemId && item.kind === 'purchase-return-record';
+            });
+            var snapshot = currentEntry && currentEntry.record;
+            if (!snapshot || typeof snapshot !== 'object') return;
+            db.purchases = db.purchases || [];
+            var index = parseInt(currentEntry.originalIndex, 10);
+            if (isNaN(index)) index = db.purchases.length;
+            index = Math.max(0, Math.min(index, db.purchases.length));
+            db.purchases.splice(index, 0, copyAppConfigValue(snapshot));
+            db.purchaseTrash = db.purchaseTrash.filter(function(item) { return item.id !== itemId; });
+            restored = true;
+        });
+        if (!restored) { toast('回收站记录已过期或无法恢复'); return; }
+        closeModal();
+        renderPHist();
+        renderPurchaseReturn();
+        toast('历史退货已恢复');
+        return;
+    }
+
     upd(function(db) {
         prunePurchaseTrash(db);
         var snapshot = entry.original;
