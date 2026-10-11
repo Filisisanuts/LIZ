@@ -51,36 +51,23 @@ function rDash() {
     var ym = curYM();
     var alerts = [];
     DB.teaItems.forEach(function(i) {
-        var tp = (i.purchases || []).filter(function(p) { return p.date && p.date.startsWith(ym); }).reduce(function(s, p) { return s + (p.qty || 0); }, 0);
-        var ts = 0;
-        (i.sales || []).filter(function(s) { return s.date && s.date.startsWith(ym); }).forEach(function(s) {
-            if (i.calcMode === 'pack') ts += (s.cups || 0) * (i.packsPerCup || 0) + (s.pots || 0) * (i.packsPerPot || 0);
-            else ts += (s.cups || 0) * (i.gramsPerCup || 5) + (s.pots || 0) * (i.gramsPerPot || 15);
-        });
-        var stock = (i.openingStock || 0) + tp - ts;
+        var stock = invCalc(i, 'tea', ym).stock;
+        if (stock === null) return;
         if (i.restockAlert && stock <= i.restockAlert) alerts.push(i.name + ' ' + stock + (i.calcMode === 'pack' ? '包' : '克'));
     });
     DB.cigItems.forEach(function(i) {
-        var tp = (i.purchases || []).filter(function(p) { return p.date && p.date.startsWith(ym); }).reduce(function(s, p) { return s + (p.qty || 0); }, 0);
-        var ts = (i.sales || []).filter(function(s) { return s.date && s.date.startsWith(ym); }).reduce(function(s, r) { return s + (r.qty || 0); }, 0);
-        var stock = (i.openingStock || 0) + tp - ts;
+        var stock = invCalc(i, 'cig', ym).stock;
+        if (stock === null) return;
         if (i.restockAlert && stock <= i.restockAlert) alerts.push(i.name + ' ' + stock + '包');
     });
     DB.alcItems.forEach(function(i) {
-        var tp = (i.purchases || []).filter(function(p) { return p.date && p.date.startsWith(ym); }).reduce(function(s, p) { return s + (p.qty || 0); }, 0);
-        var ts = (i.sales || []).filter(function(s) { return s.date && s.date.startsWith(ym); }).reduce(function(s, r) { return s + (r.qty || 0); }, 0);
-        var stock = (i.openingStock || 0) + tp - ts;
+        var stock = invCalc(i, 'alc', ym).stock;
+        if (stock === null) return;
         if (i.restockAlert && stock <= i.restockAlert) alerts.push(i.name + ' ' + stock + '瓶');
     });
     (DB.otherItems || []).forEach(function(i) {
-        var tp = (i.purchases || []).filter(function(p) { return p.date && p.date.startsWith(ym); }).reduce(function(s, p) { return s + (p.qty || 0); }, 0);
-        var ts = 0;
-        (i.sales || []).filter(function(s) { return s.date && s.date.startsWith(ym); }).forEach(function(s) {
-            if (i.calcMode === 'pack') ts += (s.cups || 0) * (i.packsPerCup || 0) + (s.pots || 0) * (i.packsPerPot || 0);
-            else if (i.calcMode === 'gram') ts += (s.cups || 0) * (i.gramsPerCup || 1) + (s.pots || 0) * (i.gramsPerPot || 0);
-            else ts += (s.qty || 0);
-        });
-        var stock = (i.openingStock || 0) + tp - ts;
+        var stock = invCalc(i, 'other', ym).stock;
+        if (stock === null) return;
         var unit = i.calcMode === 'pack' ? '包' : i.calcMode === 'gram' ? '克' : '个';
         if (i.restockAlert && stock <= i.restockAlert) alerts.push(i.name + ' ' + stock + unit);
     });

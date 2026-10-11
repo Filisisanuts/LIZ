@@ -539,20 +539,20 @@ function renderCigSection(stats, rev, cost, profit, ym) {
 
     stats.forEach(function(st) {
         var item = st.item;
-        var c = invCalc(item, 'cig');
+        var c = invCalc(item, 'cig', ym);
         var purch = 0, sold = 0;
         item.purchases.filter(function(p) { return p.date.startsWith(ym); }).forEach(function(p) {
             if (p.qty > 0) purch += p.qty; else sold += Math.abs(p.qty);
         });
         item.sales.filter(function(s) { return s.date.startsWith(ym); }).forEach(function(s) { sold += s.qty || 0; });
-        var opening = parseInt(item.openingStock || 0);
+        var opening = c.openingStock;
         var margin = st.revenue > 0 ? (st.profit / st.revenue * 100).toFixed(1) : '0';
 
         h += '<tr><td>' + item.name + '</td>';
-        h += '<td class="nr">' + opening + '</td>';
+        h += '<td class="nr">' + (opening === null ? '未记录' : parseInt(opening)) + '</td>';
         h += '<td class="nr">' + purch + '</td>';
         h += '<td class="nr">' + sold + '</td>';
-        h += '<td class="nr">' + c.stock + '</td>';
+        h += '<td class="nr">' + (c.stock === null ? '未记录' : c.stock) + '</td>';
         h += '<td class="nr">' + fmtC(st.revenue) + '</td>';
         h += '<td class="nr">' + fmtC(st.cost) + '</td>';
         h += '<td class="nr" style="color:' + (st.profit >= 0 ? 'var(--gn)' : 'var(--rd)') + '">' + fmtC(st.profit) + '</td>';
@@ -633,7 +633,7 @@ function renderAlcSection(stats, rev, cost, profit, ym) {
 
     stats.forEach(function(st) {
         var item = st.item;
-        var c = invCalc(item, 'alc');
+        var c = invCalc(item, 'alc', ym);
         var purch = 0, sold = 0;
         item.purchases.filter(function(p) { return p.date.startsWith(ym); }).forEach(function(p) {
             if (p.qty > 0) purch += p.qty; else sold += Math.abs(p.qty);
@@ -642,10 +642,10 @@ function renderAlcSection(stats, rev, cost, profit, ym) {
         var margin = st.revenue > 0 ? (st.profit / st.revenue * 100).toFixed(1) : '0';
 
         h += '<tr><td>' + item.name + '</td>';
-        h += '<td class="nr">' + parseInt(item.openingStock || 0) + '</td>';
+        h += '<td class="nr">' + (c.openingStock === null ? '未记录' : parseInt(c.openingStock)) + '</td>';
         h += '<td class="nr">' + purch + '</td>';
         h += '<td class="nr">' + sold + '</td>';
-        h += '<td class="nr">' + c.stock + '</td>';
+        h += '<td class="nr">' + (c.stock === null ? '未记录' : c.stock) + '</td>';
         h += '<td class="nr">' + fmtC(st.revenue) + '</td>';
         h += '<td class="nr">' + fmtC(st.cost) + '</td>';
         h += '<td class="nr" style="color:' + (st.profit >= 0 ? 'var(--gn)' : 'var(--rd)') + '">' + fmtC(st.profit) + '</td>';

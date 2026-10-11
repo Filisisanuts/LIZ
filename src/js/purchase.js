@@ -2717,6 +2717,8 @@ function doReturnPurItem(date, name) {
         var item = (DB[key] || []).find(function(it) { return it.name === name; });
         if (item) {
             var c = invCalc(item, invTypes[t]);
+            if (c.stock === null && retQty > 0) { toast('当前月份期初未记录，请先补录库存，再确认退货'); return; }
+            if (c.stock === null) break;
             var unit = invTypes[t] === 'tea' ? (item.calcMode === 'pack' ? '包' : '克') : (invTypes[t] === 'cig' ? '包' : '瓶');
             stockImpact = { item: item, currentStock: c.stock, unit: unit, retQty: retQty };
             break;
