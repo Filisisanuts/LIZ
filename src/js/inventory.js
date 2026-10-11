@@ -10,14 +10,23 @@ function inventoryStockText(stock, unit) {
 
 // 库存主页：顶部统计卡片 + 标签栏（库存/明细）+ 库存表格
 // customCategory: 可选，用于自定义贵重物品类型筛选
-function rInv(type, customCategory) {
+function rInv(type, customCategory, displayName, unclassifiedOnly) {
+    var activeType = inventoryCurrentLegacyType(type);
+    if (type === 'other' && !customCategory && activeType && activeType.preset === 'other-category') customCategory = activeType.legacyCategory;
+    if (!displayName && activeType) displayName = activeType.name;
     var items = DB[INV[type].key] || [];
 
     // 如果指定了自定义类型，过滤只显示该类型的商品
-    if (customCategory && type === 'other') {
+    if (type === 'other' && (unclassifiedOnly === true || _curPage === 'inventory_unclassified')) {
+        items = inventoryUnclassifiedLegacyItems();
+    } else if (customCategory && type === 'other') {
         items = items.filter(function(item) {
             return item.category === customCategory;
         });
+    }
+    if (type === 'other' && (unclassifiedOnly === true || _curPage === 'inventory_unclassified') && !items.length) {
+        goPage('dash');
+        return;
     }
 
     var ym = $id('invMonth') ? $id('invMonth').value || curYM() : curYM();
@@ -99,14 +108,15 @@ function rInv(type, customCategory) {
     // ===== 库存表格（默认隐藏） =====
     h += '<div id="invStock" style="display:none">';
     h += '<div class="brow" style="margin-bottom:14px">';
-    h += '<button class="btn" onclick="showAddInv(\'' + type + '\')">+添加</button> ';
-    h += '<button class="btn" onclick="invMoveAll(\'' + type + '\',1)">入库</button> ';
-    h += '<button class="btn" onclick="invMoveAll(\'' + type + '\',-1)">销售</button>';
+    if (activeType && activeType.actions.add) h += '<button class="btn" onclick="showAddInv(\'' + type + '\')">+添加</button> ';
+    if (activeType && activeType.actions.inbound) h += '<button class="btn" onclick="invMoveAll(\'' + type + '\',1)">入库</button> ';
+    if (activeType && activeType.actions.sale) h += '<button class="btn" onclick="invMoveAll(\'' + type + '\',-1)">销售</button>';
+    h += ' <button class="btn" onclick="showInventoryTypeManager()">类型设置</button>';
     if (type === 'other') h += ' <button class="btn p" onclick="showExchangeModal()">🎰兑换</button> <button class="btn" onclick="showExchangeList()">📋兑奖明细</button>';
     h += '</div>';
 
     if (items.length) {
-        h += '<div class="tw"><table>';
+        h += '<div class="tw tw-viewport-scroll inventory-viewport-table"><table>';
 
         // ---------- 茗茶 ----------
         if (type === 'tea') {
@@ -286,7 +296,7 @@ function rInv(type, customCategory) {
     var activeTab = document.querySelector('#invT .view-tab.active');
     if (activeTab) lastTab = activeTab.dataset.tab || 'hist';
 
-    setMain(INV[type].label + '管理', h);
+    setMain(inventoryHtml(displayName || (typeof inventoryTypeById === 'function' && inventoryTypeById(type) || {}).name || INV[type].label) + '管理', h);
     setTimeout(function() { switchInvT(lastTab, type); }, 100);
 }
 
@@ -299,8 +309,25 @@ function switchInvT(tab, type) {
     });
     $id('invStock').style.display = tab === 'stock' ? '' : 'none';
     $id('invHist').style.display = tab === 'hist' ? '' : 'none';
+    if (tab === 'stock') requestAnimationFrame(syncInventoryViewportHeight);
     if (tab === 'hist') renderInvHist(type);
 }
+
+// 让库存表格的滚动上限适配其上方内容，避免整页被内部滚动区撑出空白。
+function syncInventoryViewportHeight() {
+    var content = $id('mainContent');
+    if (!content) return;
+    var bottomPadding = parseFloat(getComputedStyle(content).paddingBottom) || 0;
+    document.querySelectorAll('#invStock .inventory-viewport-table, #inventoryCustomStock .inventory-viewport-table').forEach(function(table) {
+        if (!table.getClientRects().length) return;
+        var topInDocument = table.getBoundingClientRect().top + window.scrollY;
+        var marginBottom = parseFloat(getComputedStyle(table).marginBottom) || 0;
+        var available = Math.max(0, window.innerHeight - topInDocument - bottomPadding - marginBottom);
+        table.style.setProperty('--inventory-viewport-available', available + 'px');
+    });
+}
+
+window.addEventListener('resize', syncInventoryViewportHeight);
 
 // ------ 库存明细日历 ------
 
@@ -311,6 +338,7 @@ function renderInvHist(type) {
     // 读取共享月份选择器
     var ym = $id('invMonth') ? $id('invMonth').value || curYM() : curYM();
     var items = DB[INV[type].key] || [];
+    if (type === 'other' && _curPage === 'inventory_unclassified') items = inventoryUnclassifiedLegacyItems();
     var unit = type === 'tea' ? (items[0] && items[0].calcMode === 'pack' ? '包' : '克') :
                type === 'other' ? (items[0] && items[0].unit || '个') :
                type === 'cig' ? '包' : type === 'alc' ? '瓶' : '';
@@ -375,6 +403,7 @@ function renderInvHist(type) {
 // 日销售详情弹窗
 function showInvDayModal(type, date) {
     var items = DB[INV[type].key] || [];
+    if (type === 'other' && _curPage === 'inventory_unclassified') items = inventoryUnclassifiedLegacyItems();
     var unit = type === 'tea' ? (items[0] && items[0].calcMode === 'pack' ? '包' : '克') :
                type === 'other' ? (items[0] && items[0].unit || '个') :
                type === 'cig' ? '包' : type === 'alc' ? '瓶' : '克';
@@ -510,35 +539,6 @@ function saveEditInvSale(type, itemId, si) {
 
 // ------ 库存详情 ------
 
-// 修改指定月份的期初库存（只影响当月，不影响后续月份）
-function editOpeningStock(type, itemId, ym) {
-    var item = DB[INV[type].key].find(function(i) { return i.id === itemId; });
-    if (!item) return;
-    var currentOS = getOpeningStock(item, ym);
-    var unit = type === 'tea' ? (item.calcMode === 'pack' ? '包' : '克') :
-               type === 'other' ? (item.unit || '个') :
-               type === 'cig' ? '包' : type === 'alc' ? '瓶' : '个';
-    var isCurMonth = ym === curYM();
-
-    var h = '<div style="max-width:360px;margin:0 auto">';
-    h += '<h3 style="margin-bottom:12px;color:var(--ac)">修改期初库存</h3>';
-    h += '<div style="font-size:.78rem;color:var(--tx-s);margin-bottom:14px">' + item.name + ' · ' + ym + (isCurMonth ? '（当月）' : '（历史月份）') + '</div>';
-    h += '<div class="hrow"><label>期初库存</label>';
-    h += '<input class="inp" id="editOS" type="number" step="0.1" value="' + (currentOS === null ? '' : currentOS) + '" style="width:120px;text-align:right;font-family:var(--fm)">';
-    h += '<span style="font-size:.82rem;color:var(--tx-m)">' + unit + '</span></div>';
-    if (!isCurMonth) {
-        h += '<div style="font-size:.68rem;color:var(--tx-m);margin-top:8px">仅修改 ' + ym + ' 的期初，不影响其他月份</div>';
-    }
-    h += '<div class="brow" style="margin-top:14px;justify-content:flex-end">';
-    h += '<button class="btn" onclick="closeModal()">取消</button>';
-    h += '<button class="btn p" onclick="saveOpeningStock(\'' + type + '\',\'' + itemId + '\',\'' + ym + '\')">保存</button>';
-    h += '</div></div>';
-    showModal(h, 380);
-}
-
-function saveOpeningStock(type, itemId, ym) {
-    var item = DB[INV[type].key].find(function(i) { return i.id === itemId; });
-    if (!item) return;
 function inventoryMonthShift(ym, offset) {
     var parts = String(ym || '').split('-');
     if (parts.length !== 2) return '';
@@ -572,6 +572,36 @@ function applyInventoryOpeningInput(item, ym, inputId, isNew) {
     if (isNew && ym !== curYM()) item.openingStock = 0;
 }
 
+// 修改指定月份的期初库存（只影响当月，不影响后续月份）
+function editOpeningStock(type, itemId, ym) {
+    var item = DB[INV[type].key].find(function(i) { return i.id === itemId; });
+    if (!item) return;
+    var currentOS = getOpeningStock(item, ym);
+    var unit = type === 'tea' ? (item.calcMode === 'pack' ? '包' : '克') :
+               type === 'other' ? (item.unit || '个') :
+               type === 'cig' ? '包' : type === 'alc' ? '瓶' : '个';
+    var isCurMonth = ym === curYM();
+
+    var h = '<div style="max-width:360px;margin:0 auto">';
+    h += '<h3 style="margin-bottom:12px;color:var(--ac)">修改期初库存</h3>';
+    h += '<div style="font-size:.78rem;color:var(--tx-s);margin-bottom:14px">' + item.name + ' · ' + ym + (isCurMonth ? '（当月）' : '（历史月份）') + '</div>';
+    h += '<div class="hrow"><label>期初库存</label>';
+    h += '<input class="inp" id="editOS" type="number" step="0.1" value="' + (currentOS === null ? '' : currentOS) + '" style="width:120px;text-align:right;font-family:var(--fm)">';
+    h += '<span style="font-size:.82rem;color:var(--tx-m)">' + unit + '</span></div>';
+    if (currentOS === null) h += '<div style="font-size:.68rem;color:var(--tx-m);margin-top:8px">此月份没有期初记录，请按当月盘存资料补录；留空不会写入。</div>';
+    if (!isCurMonth) {
+        h += '<div style="font-size:.68rem;color:var(--tx-m);margin-top:8px">仅修改 ' + ym + ' 的期初，不影响其他月份</div>';
+    }
+    h += '<div class="brow" style="margin-top:14px;justify-content:flex-end">';
+    h += '<button class="btn" onclick="closeModal()">取消</button>';
+    h += '<button class="btn p" onclick="saveOpeningStock(\'' + type + '\',\'' + itemId + '\',\'' + ym + '\')">保存</button>';
+    h += '</div></div>';
+    showModal(h, 380);
+}
+
+function saveOpeningStock(type, itemId, ym) {
+    var item = DB[INV[type].key].find(function(i) { return i.id === itemId; });
+    if (!item) return;
     var raw = String(document.getElementById('editOS').value || '').trim();
     var val = Number(raw);
     if (!raw || !Number.isFinite(val)) { toast('请输入有效的期初库存'); return; }
@@ -583,7 +613,6 @@ function applyInventoryOpeningInput(item, ym, inputId, isNew) {
 }
 
 // 单个商品的进销存详情弹窗（按日期展示销售+出入库记录）
-    if (currentOS === null) h += '<div style="font-size:.68rem;color:var(--tx-m);margin-top:8px">此月份没有期初记录，请按当月盘存资料补录；留空不会写入。</div>';
 function invDetail(type, itemId) {
     var item = DB[INV[type].key].find(function(i) { return i.id === itemId; });
     if (!item) return;
@@ -709,7 +738,7 @@ function renderSaleDetail(item, type, ym, unit) {
     }
 
     var totalQty = 0, totalExp = 0, totalAmt = 0;
-    h += '<div class="tw"><table><tr><th>日期</th>';
+    h += '<div class="tw tw-viewport-scroll"><table><tr><th>日期</th>';
     if (type === 'tea') h += '<th>杯</th><th>壶</th><th>应收</th><th>实收</th>';
     else h += '<th>数量</th><th>应收</th><th>实收</th>';
     h += '</tr>';
@@ -788,7 +817,7 @@ function renderBuyDetail(item, type, ym, unit) {
     }
 
     var totalIn = 0, totalOut = 0, totalSale = 0, totalExp = 0, totalAmt = 0;
-    h += '<div class="tw"><table><tr><th>日期</th><th>类型</th><th>数量</th><th>来源</th><th>应收</th><th>实收</th><th>操作</th></tr>';
+    h += '<div class="tw tw-viewport-scroll"><table><tr><th>日期</th><th>类型</th><th>数量</th><th>来源</th><th>应收</th><th>实收</th><th>操作</th></tr>';
 
     allRows.forEach(function(r) {
         var color = r.type === '入库' ? 'gn' : r.type === '销售' ? 'og' : 'rd';
@@ -1057,7 +1086,11 @@ function detBuyRefresh(type, itemId) {
 
 // 批量入库/销售弹窗（选择物品+填写数量）
 function invMoveAll(type, dir) {
+    var currentType = inventoryCurrentLegacyType(type);
+    if (!currentType || !inventoryOperationEnabled(currentType.id, dir > 0 ? 'inbound' : 'sale')) { toast('此操作已关闭'); return; }
     var items = DB[INV[type].key] || [];
+    if (type === 'other' && _curPage === 'inventory_unclassified') items = inventoryUnclassifiedLegacyItems();
+    else if (type === 'other' && currentType.preset === 'other-category') items = items.filter(function(item) { return item.category === currentType.legacyCategory; });
     if (!items.length) { toast('请先添加'); return; }
     var title = dir > 0 ? '入库' : '销售';
 
@@ -1198,8 +1231,16 @@ function doInvMoveAll(type, dir) {
 
 // 执行单个物品的入库或销售操作
 function doInvMove(type, id, dir) {
+    var itemForPermission = (DB[INV[type].key] || []).find(function(item) { return item.id === id; });
+    var currentType = inventoryCurrentLegacyType(type);
+    if (!itemForPermission || !currentType || !inventoryOperationEnabled(currentType.id, dir > 0 ? 'inbound' : 'sale') ||
+        !inventoryLegacyActionEnabled(type, itemForPermission, dir > 0 ? 'inbound' : 'sale') ||
+        (type === 'other' && currentType.preset === 'other-category' && itemForPermission.category !== currentType.legacyCategory)) {
+        toast('此操作已关闭'); return;
+    }
     var date = $id('mvDate').value || td();
     var cfg = INV[type];
+    var selectedYM = $id('invMonth') ? $id('invMonth').value || curYM() : curYM();
 
     if (dir > 0) {
         // 入库
@@ -1332,6 +1373,8 @@ function autoCalcCost(mode) {
 
 // 弹窗添加/编辑库存商品（茗茶支持克/包两种模式）
 function showAddInv(type, itemId) {
+    var currentType = inventoryCurrentLegacyType(type);
+    if (!itemId && (!currentType || !inventoryOperationEnabled(currentType.id, 'add'))) { toast('此类型已关闭添加物品'); return; }
     var item = null;
     if (itemId) item = DB[INV[type].key].find(function(i) { return i.id === itemId; });
     var isEdit = !!item;
@@ -1342,6 +1385,7 @@ function showAddInv(type, itemId) {
     var currentOS = isEdit ? getOpeningStock(item, ym) : 0;
 
     var h = '<h3>' + (isEdit ? '编辑' : '添加') + ' ' + INV[type].label + '</h3>';
+    if (isEdit && currentOS === null) h += '<div style="font-size:.72rem;color:var(--tx-m);margin-bottom:10px">该月份期初未记录。留空保存不会覆盖期初，填入数值后只更新所选月份。</div>';
     // 茶叶
     if (type === 'tea') {
         var mode = (isEdit ? item.calcMode : '') || 'gram';
@@ -1385,15 +1429,14 @@ function showAddInv(type, itemId) {
         h += '<div style="font-size:.72rem;color:var(--tx-s);margin-bottom:8px">采购换算: 1斤=500克 ÷ ' + gpk + '克/包 ≈ ' + Math.floor(500 / gpk) + '包</div>';
         h += '</div>';
     // 其他贵重物品（可选计算方式）
-    if (isEdit && currentOS === null) h += '<div style="font-size:.72rem;color:var(--tx-m);margin-bottom:10px">该月份期初未记录。留空保存不会覆盖期初，填入数值后只更新所选月份。</div>';
     } else if (type === 'other') {
         var oMode = (isEdit ? item.calcMode : '') || 'simple';
         h += '<div class="section-label">基本信息</div>';
         h += '<div class="hrow"><label>品名</label><input class="inp" id="ai_name" style="flex:2" value="' + (isEdit ? item.name.replace(/"/g, '&quot;') : '') + '">';
-        h += '<label>分类</label><input class="inp" id="ai_category" list="otherCatDL" style="max-width:120px" value="' + (isEdit ? (item.category || '') : '') + '">';
+        h += '<label>分类</label><input class="inp" id="ai_category" list="otherCatDL" style="max-width:120px" value="' + inventoryHtml(isEdit ? (item.category || '') : currentType && currentType.preset === 'other-category' ? currentType.legacyCategory : '') + '"' + (currentType && currentType.preset === 'other-category' ? ' readonly' : '') + '>';
         h += '<datalist id="otherCatDL">';
-        var allCats = getPurCats();
-        allCats.forEach(function(c) { h += '<option value="' + c + '">'; });
+        var allCats = inventoryTypeDefinitions().filter(function(entry) { return entry.preset === 'other-category' && !entry.archived && !entry.deleted; });
+        allCats.forEach(function(entry) { h += '<option value="' + inventoryHtml(entry.legacyCategory) + '">'; });
         h += '</datalist></div>';
         h += '<div class="hrow"><label>单位</label><input class="inp" id="ai_unit" style="max-width:80px" value="' + (isEdit ? (item.unit || '个') : '个') + '">';
         h += '<label>计算方式</label><select class="inp" id="ai_otherMode" style="max-width:100px" onchange="toggleOtherMode()">';
@@ -1479,7 +1522,16 @@ function showAddInv(type, itemId) {
 
 // 保存库存商品（新建或编辑）
 function doAddInv(type, itemId) {
+    var currentType = inventoryCurrentLegacyType(type);
+    if (!itemId && (!currentType || !inventoryOperationEnabled(currentType.id, 'add'))) { toast('此类型已关闭添加物品'); return; }
+    if (!itemId && type === 'other') {
+        var category = String($id('ai_category').value || '').trim();
+        var categoryType = inventoryTypeDefinitions().find(function(entry) { return entry.preset === 'other-category' && entry.legacyCategory === category && !entry.deleted; });
+        if (category && !categoryType) { toast('请先在库存类型中添加此分类'); return; }
+        if (categoryType && !inventoryOperationEnabled(categoryType.id, 'add')) { toast('此类型已关闭添加物品'); return; }
+    }
     var cfg = INV[type];
+    var selectedYM = document.getElementById('invMonth') ? document.getElementById('invMonth').value || curYM() : curYM();
     var name = ($id('ai_name').value || '').trim();
     console.log('doAddInv: type=' + type + ', itemId=' + itemId + ', name=' + name);
     if (!name) { toast('填名称'); return; }
@@ -1531,7 +1583,6 @@ function doAddInv(type, itemId) {
                 item.pricePerCup = parseFloat($id('ai_ppc2').value) || 0;
                 item.pricePerPot = parseFloat($id('ai_ppp2').value) || 0;
                 applyInventoryOpeningInput(item, selectedYM, 'ai_os_p2', true);
-    var selectedYM = document.getElementById('invMonth') ? document.getElementById('invMonth').value || curYM() : curYM();
                 item.restockAlert = parseInt($id('ai_ra_p').value) || 0;
             }
             upd(function(db) {
@@ -1632,6 +1683,7 @@ function doAddInv(type, itemId) {
             item.purchaseConvRatio = cr ? parseInt(cr.value) || 10 : (type === 'cig' ? 10 : 12);
             var mk = $id('ai_matchKeyword');
             item.matchKeyword = mk ? mk.value.trim() : '';
+            applyInventoryOpeningInput(item, selectedYM, 'ai_os', true);
             upd(function(db) {
                 if (!db[cfg.key]) db[cfg.key] = [];
                 db[cfg.key].push(item);
@@ -1641,6 +1693,7 @@ function doAddInv(type, itemId) {
     }
     closeModal();
     rInv(type);
+    renderNav();
 }
 
 // ------ 表格行操作事件委托 ------
@@ -1665,6 +1718,7 @@ function handleInvAction(e) {
         sbScheduleSave();
         toast('已删除');
         rInv(type);
+        renderNav();
     } else if (e.target.closest('[data-act="edit"]')) {
         showAddInv(type, id);
     }
@@ -1702,13 +1756,14 @@ function getRolloverOpening(item, ym, lastROL) {
         return Number.isFinite(legacyOpening) ? legacyOpening : null;
     }
     return null;
-            applyInventoryOpeningInput(item, selectedYM, 'ai_os', true);
 }
 
 // 单个商品进销存计算（指定月份）
 function invCalc(item, type, ym) {
     ym = ym || curYM();
     var os = getOpeningStock(item, ym);
+    var hasOpening = os !== null;
+    var openingForCalc = hasOpening ? Number(os) : 0;
     // 当月入库数量（采购为正，退货为负）
     var tp = (item.purchases || []).filter(function(p) { return p.date && p.date.startsWith(ym); }).reduce(function(s, p) { return s + (p.qty || 0); }, 0);
 
@@ -1720,6 +1775,7 @@ function invCalc(item, type, ym) {
         var rev = salesCur.reduce(function(s, r) { return s + r.amount; }, 0);
 
         var cost, stock;
+        var hasClosingSnapshot = hasInventoryMonthValue(item.monthClosingStock, ym);
         if (item.calcMode === 'pack') {
             var soldPacks = tc * (item.packsPerCup || 0) + tp2 * (item.packsPerPot || 0);
             cost = soldPacks * (item.costPerPack || 0);
@@ -1731,6 +1787,7 @@ function invCalc(item, type, ym) {
         }
 
         return {
+            openingStock: hasOpening ? openingForCalc : null,
             stock: stock,
             revenue: rev,
             cost: cost,
@@ -1744,6 +1801,7 @@ function invCalc(item, type, ym) {
     var ts = salesCur.reduce(function(s, r) { return s + (r.qty || 0); }, 0);
     var rev = salesCur.reduce(function(s, r) { return s + r.amount; }, 0);
     var cost = ts * (item.costPerUnit || 0);
+    var hasClosingSnapshot = hasInventoryMonthValue(item.monthClosingStock, ym);
 
     return {
         openingStock: hasOpening ? openingForCalc : null,
@@ -1763,8 +1821,6 @@ function invCalcMon(item, type, ym) {
 
     if (type === 'tea') {
         // 茗茶：按杯/壶计算成本
-    var hasOpening = os !== null;
-    var openingForCalc = hasOpening ? Number(os) : 0;
         sales.forEach(function(s) {
             revenue += (s.amount || 0);
             cost += ((s.cups || 0) * (item.gramsPerCup || 5)
@@ -1776,7 +1832,6 @@ function invCalcMon(item, type, ym) {
         sales.forEach(function(s) {
             revenue += (s.amount || 0);
             cost += (s.qty || 0) * (item.costPerUnit || 0);
-        var hasClosingSnapshot = hasInventoryMonthValue(item.monthClosingStock, ym);
         });
     }
 
@@ -1788,7 +1843,6 @@ function invCalcMon(item, type, ym) {
 }
 
 // ==================== 月度期初结转 ====================
-            openingStock: hasOpening ? openingForCalc : null,
 function rolloverInventory() {
     var nowYM = curYM();
     if (!DB.settings) DB.settings = {};
@@ -1802,9 +1856,9 @@ function rolloverInventory() {
         return;
     }
 
-    var hasClosingSnapshot = hasInventoryMonthValue(item.monthClosingStock, ym);
     var types = ['tea', 'cig', 'alc', 'other'];
     var rolloverItems = [];
+    var lastYM = inventoryMonthShift(nowYM, -1);
 
     types.forEach(function(type) {
         var key = INV[type].key;
@@ -1853,7 +1907,6 @@ function rolloverInventory() {
         }
     });
     window._rolloverGroupIdx = 0;
-    var lastYM = inventoryMonthShift(nowYM, -1);
     window._lastRolloverYM = nowYM;
     showNextRolloverGroup();
 }
@@ -1886,6 +1939,7 @@ function showNextRolloverGroup() {
         h += '<input class="inp" id="rol_' + i + '" type="number" step="0.1" value="' + (r.closing === null ? '' : r.closing) + '" style="width:80px;text-align:right;font-family:var(--fm)"' + (r.closing === null ? ' placeholder="需盘存"' : '') + '>';
         h += '<span style="font-size:.72rem;color:var(--tx-m)">' + r.unit + '</span>';
         h += '</div>';
+        if (r.closing === null) h += '<div style="font-size:.68rem;color:var(--tx-m);margin:-6px 0 8px">缺少可确认的上月期初，请按实际盘存数填写。</div>';
     });
 
     h += '<div class="brow" style="margin-top:16px;justify-content:flex-end;gap:6px">';
@@ -1925,16 +1979,9 @@ function confirmRolloverGroup() {
     sbScheduleSave(); // 触发云同步
     console.log('confirmRolloverGroup: 已保存到数据库');
 
-    // 验证保存是否成功
-    var testItem = DB[INV[group.type].key].find(function(it) { return it.id === group.items[0].item.id; });
-    if (testItem) {
-        console.log('保存后验证: ' + testItem.name + ' 的openingStock = ' + testItem.openingStock);
-    }
-
     window._rolloverGroupIdx = idx + 1;
     closeModal();
     showNextRolloverGroup();
-        if (r.closing === null) h += '<div style="font-size:.68rem;color:var(--tx-m);margin:-6px 0 8px">缺少可确认的上月期初，请按实际盘存数填写。</div>';
 }
 
 function skipRolloverGroup() {
@@ -2046,6 +2093,7 @@ function doExchange() {
 
     // 检查库存
     var calc = invCalc(item, 'other', curYM());
+    if (calc.stock === null) { toast('当前月份期初未记录，请先补录库存'); return; }
     if (calc.stock < qty) {
         toast('库存不足，当前库存: ' + calc.stock);
         return;
@@ -2093,7 +2141,6 @@ function showExchangeList() {
     var pending = records.filter(function(r) { return r.status === 'pending'; });
     var done = records.filter(function(r) { return r.status === 'done'; });
 
-    if (calc.stock === null) { toast('当前月份期初未记录，请先补录库存'); return; }
     // 统计
     var pendingQty = pending.reduce(function(s, r) { return s + r.qty; }, 0);
     var receivedTotal = pending.reduce(function(s, r) { return s + (r.customerAmount || 0); }, 0);

@@ -75,7 +75,7 @@ function rWH() {
             if (catLow > 0) h += '<span class="badge rd">' + catLow + '项低库存</span>';
             h += '</div>';
 
-            h += '<div class="tw"><table>';
+            h += '<div class="tw tw-viewport-scroll"><table>';
             h += '<tr><th>品名</th><th>单位</th><th>库存</th><th>安全库存</th><th>状态</th><th>操作</th></tr>';
 
             catItems.forEach(function(item) {

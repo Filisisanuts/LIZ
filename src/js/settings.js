@@ -132,6 +132,7 @@ function rData() {
     h += '<button class="btn" onclick="showPurchaseSectionConfig()">采购区域</button>';
     h += '<button class="btn" onclick="showExpenseCatConfig()">费用分类</button>';
     h += '<button class="btn" onclick="showWarehouseCatConfig()">仓库分类</button>';
+    h += '<button class="btn" onclick="showInventoryTypeManager()">库存类型</button>';
     h += '</div>';
     h += '</div>';
 

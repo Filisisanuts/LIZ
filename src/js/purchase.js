@@ -2297,10 +2297,10 @@ function showPurDayModal(date) {
     var h = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
     h += '<div style="display:flex;align-items:center;gap:6px">';
     h += '<h3 style="margin:0">' + dateLabel + ' 采购明细</h3>';
-    h += '<button class="btn s" style="font-size:.65rem;padding:2px 6px" onclick="editPurDate(\'' + date + '\')">改日期</button></div>';
+    h += '<button class="btn s pur-day-action" style="font-size:.65rem" onclick="editPurDate(\'' + date + '\')">改日期</button></div>';
     h += '<div style="display:flex;align-items:center;gap:8px">';
     h += '<span style="font-size:.95rem;font-weight:700;color:var(--ac)">¥' + fmtC(total) + '</span>';
-    h += '<button class="btn s d" onclick="delPurDay(\'' + date + '\')">删除当日</button></div></div>';
+    h += '<button class="btn s d pur-day-action" onclick="delPurDay(\'' + date + '\')">删除当日</button></div></div>';
 
     // 按来源 → 区域 → 分类 三层分组
     _purSrcEditEntries = [];
@@ -2347,7 +2347,7 @@ function showPurDayModal(date) {
         h += '<span class="pur-toggle-title"><span class="pur-toggle-arrow open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span><span style="font-size:.88rem;font-weight:700;color:var(--ac)">' + axEscapeHtml(src) + '</span></span>';
         h += '<div style="display:flex;align-items:center;gap:6px">';
         h += '<span style="font-family:var(--fm);font-size:.88rem;font-weight:600">¥' + fmtC(srcTotals[src]) + '</span>';
-        h += '<button class="btn s" style="font-size:.65rem;padding:2px 6px" onclick="event.stopPropagation();editPurSrcByIndex(' + sourceEditIndex + ')">编</button>';
+        h += '<button class="btn s pur-day-action" style="font-size:.65rem" onclick="event.stopPropagation();editPurSrcByIndex(' + sourceEditIndex + ')">编</button>';
         h += '</div></div>';
 
         h += '<div id="' + srcId + '">';
@@ -2390,7 +2390,7 @@ function showPurDayModal(date) {
             if (secReturnTotal > 0) {
                 h += '<span style="font-family:var(--fm);font-size:.65rem;color:var(--rd);background:var(--rd-b);padding:2px 6px;border-radius:3px">退 ¥' + fmtC(secReturnTotal) + '</span>';
             }
-            h += '<button class="btn s d" style="font-size:.6rem;padding:1px 5px" onclick="event.stopPropagation();delPurSec(\'' + date + '\',\'' + sec.replace(/'/g, "\\'") + '\')">删</button>';
+            h += '<button class="btn s d pur-day-action" style="font-size:.6rem" onclick="event.stopPropagation();delPurSec(\'' + date + '\',\'' + sec.replace(/'/g, "\\'") + '\')">删</button>';
             h += '</div></div>';
 
             h += '<div id="' + secId + '">';
@@ -2422,7 +2422,7 @@ function showPurDayModal(date) {
                 if (returnTotal > 0) {
                     h += '<span style="font-family:var(--fm);font-size:.65rem;color:var(--rd);background:var(--rd-b);padding:1px 5px;border-radius:3px">退 ¥' + fmtC(returnTotal) + '</span>';
                 }
-                h += '<button class="btn s d" style="font-size:.6rem;padding:1px 5px" onclick="event.stopPropagation();delPurCat(\'' + date + '\',\'' + sec.replace(/'/g, "\\'") + '\',\'' + cat.replace(/'/g, "\\'") + '\')">删</button>';
+                h += '<button class="btn s d pur-day-action" style="font-size:.6rem" onclick="event.stopPropagation();delPurCat(\'' + date + '\',\'' + sec.replace(/'/g, "\\'") + '\',\'' + cat.replace(/'/g, "\\'") + '\')">删</button>';
                 h += '</div></div>';
 
                 h += '<div id="' + catId + '">';
@@ -2442,12 +2442,12 @@ function showPurDayModal(date) {
                     h += '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;margin-left:6px">';
                     h += '<span style="font-size:.82rem;font-weight:700;color:' + (item.total < 0 ? 'var(--rd)' : 'var(--ac)') + '">' + (item.total < 0 ? '-' : '') + '¥' + fmtC(Math.abs(item.total)) + '</span>';
                     // 所有物品都有编辑和删除按钮
-                    h += '<button class="btn s" style="font-size:.65rem;padding:2px 6px" onclick="editPurFromModal(\'' + date + '\',\'' + item.name.replace(/'/g, "\\'") + '\')">编</button>';
-                    h += '<button class="btn s d" style="font-size:.65rem;padding:2px 6px" onclick="delPurFromModal(\'' + date + '\',\'' + item.name.replace(/'/g, "\\'") + '\')">删</button>';
+                    h += '<button class="btn s pur-day-action" style="font-size:.65rem" onclick="editPurFromModal(\'' + date + '\',\'' + item.name.replace(/'/g, "\\'") + '\')">编</button>';
+                    h += '<button class="btn s d pur-day-action" style="font-size:.65rem" onclick="delPurFromModal(\'' + date + '\',\'' + item.name.replace(/'/g, "\\'") + '\')">删</button>';
                     // 只有非退货物品才有退货按钮
                     var itemQty = parseFloat(item.qty) || 0;
                     if (itemQty > 0 && item.source !== '退货') {
-                        h += '<button class="btn s og" style="font-size:.65rem;padding:2px 6px" onclick="returnPurItem(\'' + date + '\',' + sq(item.name) + ')">退</button>';
+                        h += '<button class="btn s og pur-day-action" style="font-size:.65rem" onclick="returnPurItem(\'' + date + '\',' + sq(item.name) + ')">退</button>';
                     }
                     h += '</div></div>';
                 });

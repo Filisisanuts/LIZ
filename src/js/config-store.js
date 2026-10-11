@@ -6,6 +6,7 @@ var APP_CONFIG_PUBLIC_KEY = 'ax_app_config';
 var ONBOARDING_BUSINESS_COLLECTIONS = [
     'dailyReports', 'purchases', 'expenses', 'salaryRecords', 'salaryTrash',
     'teaItems', 'cigItems', 'alcItems', 'otherItems', 'whItems',
+    'inventoryCustomItems',
     'damageRecords', 'exchangeRecords'
 ];
 
@@ -22,6 +23,7 @@ function appConfigDefaults() {
         warehouseCategories: [],
         inventoryTypes: [],
         customInventoryTypes: [],
+        inventoryTypeDefinitions: [],
         salaryDepartments: [],
         salaryFieldSchemaVersion: 2,
         salaryFieldGroups: defaultSalaryFieldGroups(),
@@ -33,6 +35,69 @@ function appConfigDefaults() {
         schemaVersion: APP_CONFIG_SCHEMA_VERSION,
         updatedAt: 0
     };
+}
+
+function defaultInventoryTypeDefinitions() {
+    return [
+        { id: 'tea', name: '茗茶', preset: 'tea' },
+        { id: 'cig', name: '香烟', preset: 'cig' },
+        { id: 'alc', name: '酒类', preset: 'alc' },
+        { id: 'other', name: '贵重物品', preset: 'other' }
+    ].map(function(type) {
+        return Object.assign(type, {
+            archived: false, deleted: false, dailyLink: true,
+            actions: { add: true, inbound: true, sale: true, adjust: false, loss: false }
+        });
+    });
+}
+
+function legacyInventoryCategoryId(name) {
+    return 'legacy_custom_' + Array.from(String(name)).map(function(char) {
+        return char.codePointAt(0).toString(16);
+    }).join('_');
+}
+
+function normalizeInventoryTypeDefinitions(value, legacyTypes, legacyCustom) {
+    var defaults = defaultInventoryTypeDefinitions();
+    var hasDefinitions = Array.isArray(value) && value.length > 0;
+    var source = hasDefinitions ? value.slice() : defaults.map(function(type) {
+        var copy = copyAppConfigValue(type);
+        copy.archived = Array.isArray(legacyTypes) && legacyTypes.length > 0 && legacyTypes.indexOf(type.id) < 0;
+        return copy;
+    });
+    (Array.isArray(legacyCustom) ? legacyCustom : []).forEach(function(name) {
+        if (!source.some(function(entry) { return entry && entry.preset === 'other-category' && entry.legacyCategory === name; })) {
+            source.push({ id: legacyInventoryCategoryId(name), name: name, preset: 'other-category',
+                legacyCategory: name, dailyLink: true });
+        }
+    });
+    var used = {};
+    var result = source.map(function(raw) {
+        if (!raw || typeof raw !== 'object') return null;
+        var id = String(raw.id || '').trim();
+        var name = String(raw.name || '').trim();
+        if (!/^[a-zA-Z0-9_]+$/.test(id) || !name || used[id]) return null;
+        used[id] = true;
+        var preset = ['tea', 'cig', 'alc', 'other', 'other-category'].indexOf(raw.preset) >= 0 ? raw.preset : 'generic';
+        var actions = raw.actions && typeof raw.actions === 'object' ? raw.actions : {};
+        return {
+            id: id, name: name, preset: preset,
+            legacyCategory: preset === 'other-category' ? String(raw.legacyCategory || name) : '',
+            archived: raw.archived === true, deleted: raw.deleted === true,
+            dailyLink: typeof raw.dailyLink === 'boolean' ? raw.dailyLink : preset !== 'generic',
+            actions: {
+                add: actions.add !== false,
+                inbound: actions.inbound !== false,
+                sale: actions.sale !== false,
+                adjust: actions.adjust === true,
+                loss: actions.loss === true
+            }
+        };
+    }).filter(Boolean);
+    defaults.forEach(function(type) {
+        if (!used[type.id]) result.unshift(type);
+    });
+    return result;
 }
 
 // 工资表头分组。span: true 表示该组字段各自跨两行显示（无分组标题行），
@@ -365,6 +430,7 @@ function legacyAppConfig(database) {
     var sources = [];
     var expenseCategories = [];
     var warehouseCategories = uniqueStrings(db.whCats, []);
+    var inventoryCategories = uniqueStrings((db.otherItems || []).map(function(item) { return item && item.category; }), []);
     var purchaseCategories = categoryMap(db.areaCats, {});
     var salaryDepartments = [];
     var legacySalaryTemplate = [];
@@ -424,6 +490,7 @@ function legacyAppConfig(database) {
         purchaseCategories: purchaseCategories,
         expenseCategories: expenseCategories,
         warehouseCategories: warehouseCategories,
+        inventoryCategories: inventoryCategories,
         salaryDepartments: salaryDepartments,
         legacySalaryTemplate: legacySalaryTemplate,
         hasBusinessData: hasExistingBusinessData(db)
@@ -476,6 +543,9 @@ function hasMeaningfulAppConfig(raw) {
     if (raw.purchaseCategories && Object.keys(raw.purchaseCategories).length > 0) return true;
     if (Array.isArray(raw.salaryDepartments) && raw.salaryDepartments.length > 0) return true;
     if (Array.isArray(raw.salaryTemplates) && raw.salaryTemplates.length > 0) return true;
+    if (Array.isArray(raw.inventoryTypeDefinitions) && raw.inventoryTypeDefinitions.some(function(type) {
+        return type && (type.preset === 'generic' || type.archived || type.deleted);
+    })) return true;
     if (raw.dailyFeatures && (raw.dailyFeatures.roomEnabled || raw.dailyFeatures.reporterEnabled)) return true;
     return false;
 }
@@ -504,6 +574,10 @@ function normalizeAppConfig(raw, legacy) {
     config.warehouseCategories = stringsWithLegacy(source.warehouseCategories, legacy.warehouseCategories, needsMigration);
     config.inventoryTypes = uniqueStrings(source.inventoryTypes, []);
     config.customInventoryTypes = uniqueStrings(source.customInventoryTypes, []);
+    config.inventoryTypeDefinitions = normalizeInventoryTypeDefinitions(
+        source.inventoryTypeDefinitions, config.inventoryTypes,
+        uniqueStrings(config.customInventoryTypes.concat(legacy.inventoryCategories || []), [])
+    );
     config.salaryDepartments = stringsWithLegacy(source.salaryDepartments, legacy.salaryDepartments, true);
     var salaryFieldsNeedMigration = Number(source.salaryFieldSchemaVersion || 0) < 2;
     config.salaryFieldDefinitions = normalizeSalaryFieldDefinitions(source.salaryFieldDefinitions, salaryFieldsNeedMigration);

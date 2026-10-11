@@ -23,7 +23,26 @@ function goPage(name) {
         document.body.style.overflow = '';
     }
 
-    // 处理自定义贵重物品类型（custom_xxx 格式）
+    if (name.startsWith('inventory_type_')) {
+        var inventoryType = inventoryTypeById(name.slice('inventory_type_'.length));
+        if (!inventoryType || inventoryType.archived) { rDash(); return; }
+        if (inventoryType.preset === 'other') {
+            goPage(inventoryUnclassifiedLegacyItems().length ? 'inventory_unclassified' : 'dash');
+            return;
+        }
+        if (inventoryType.preset === 'generic') rCustomInventory(inventoryType.id);
+        else if (inventoryType.preset === 'other-category') rInv('other', inventoryType.legacyCategory, inventoryType.name);
+        else rInv(inventoryType.preset, null, inventoryType.name);
+        return;
+    }
+
+    if (name === 'inventory_unclassified') {
+        if (!inventoryUnclassifiedLegacyItems().length) { goPage('dash'); return; }
+        rInv('other', null, '未分类', true);
+        return;
+    }
+
+    // 兼容旧版保存的 custom_xxx 页面位置。
     if (name.startsWith('custom_')) {
         var customType = name.replace('custom_', '');
         rInv('other', customType); // 显示其他贵重物品页面，传入自定义类型名
@@ -40,7 +59,7 @@ function goPage(name) {
         case 'tea':       rInv('tea'); break;
         case 'cig':       rInv('cig'); break;
         case 'alc':       rInv('alc'); break;
-        case 'other':     rInv('other'); break;
+        case 'other':     goPage(inventoryUnclassifiedLegacyItems().length ? 'inventory_unclassified' : 'dash'); break;
         case 'wh':        rWH(); break;
         case 'report':    rReport(); break;
         case 'gen':       rGen(); break;
@@ -966,20 +985,86 @@ function salaryFieldCategoryLabel(category) {
     return { info: '信息项', earning: '应发项', deduction: '扣款项', computed: '自动计算' }[category] || '应发项';
 }
 
-function salaryFieldGroupOptions(selectedId) {
-    var h = '<option value="">未分组</option>';
-    salaryFieldGroups().forEach(function(group) {
-        h += '<option value="' + salaryEscape(group.id) + '"' + (group.id === selectedId ? ' selected' : '') + '>' + salaryEscape(group.label) + '</option>';
-    });
-    return h;
+function salaryCalculationGroupForField(fieldId, category, group, selectedGroup) {
+    if (fieldId === 'attendanceDays') return 'attendance';
+    if (category === 'earning') {
+        return selectedGroup === 'base' || selectedGroup === 'direct'
+            ? selectedGroup
+            : (group === 'basePay' ? 'base' : 'direct');
+    }
+    if (category === 'deduction') {
+        return selectedGroup === 'preTaxDeduction' || selectedGroup === 'postTaxDeduction'
+            ? selectedGroup
+            : (group === 'preTax' ? 'preTaxDeduction' : 'postTaxDeduction');
+    }
+    return '';
 }
 
-function salaryGroupEditorRow(group) {
-    var h = '<div class="salary-group-edit-row" data-group-id="' + salaryEscape(group.id) + '">';
+function salaryCalculationGroupLabel(value) {
+    return {
+        base: '基本工资',
+        direct: '直接应发',
+        preTaxDeduction: '税前扣款',
+        postTaxDeduction: '税后扣款',
+        attendance: '出勤天数'
+    }[value] || '不参与合计';
+}
+
+function salaryCalculationGroupOptions(category, selected) {
+    var options = category === 'earning'
+        ? [{ value: 'base', label: '基本工资' }, { value: 'direct', label: '直接应发' }]
+        : [{ value: 'preTaxDeduction', label: '税前扣款' }, { value: 'postTaxDeduction', label: '税后扣款' }];
+    return options.map(function(option) {
+        return '<option value="' + option.value + '"' + (option.value === selected ? ' selected' : '') + '>' + option.label + '</option>';
+    }).join('');
+}
+
+function salaryFieldCalculationControl(field) {
+    var selected = salaryCalculationGroupForField(field.id, field.category, field.group, field.calculationGroup);
+    if (field.id === 'attendanceDays') return '<span class="salary-calculation-fixed">' + salaryCalculationGroupLabel('attendance') + '</span>';
+    if (field.category === 'earning' || field.category === 'deduction') {
+        return '<select class="inp salary-field-calculation-group-input" aria-label="' + salaryEscape(field.label) + '计入工资计算" title="计入工资计算">'
+            + salaryCalculationGroupOptions(field.category, selected) + '</select>';
+    }
+    return '<span class="salary-calculation-fixed">' + (field.category === 'computed' ? '公式计算' : '不参与合计') + '</span>';
+}
+
+document.addEventListener('pointerdown', function(event) {
+    var current = event.target.closest && event.target.closest('.salary-editor-actions');
+    document.querySelectorAll('.salary-editor-actions[open]').forEach(function(menu) {
+        if (menu !== current) menu.open = false;
+    });
+    var addMenu = event.target.closest && event.target.closest('.salary-layout-add-fab');
+    var openAddMenu = document.querySelector('.salary-layout-add-fab[open]');
+    if (openAddMenu && openAddMenu !== addMenu) openAddMenu.open = false;
+});
+document.addEventListener('keydown', function(event) {
+    if (event.key !== 'Escape') return;
+    var menu = document.querySelector('.salary-editor-actions[open]');
+    var addMenu = document.querySelector('.salary-layout-add-fab[open]');
+    if (!menu && !addMenu) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (menu) {
+        menu.open = false;
+        menu.querySelector('summary').focus();
+    } else {
+        addMenu.open = false;
+        addMenu.querySelector('summary').focus();
+    }
+}, true);
+
+function salaryGroupEditorRow(group, fields) {
+    fields = fields || [];
+    var h = '<section class="salary-layout-group" data-group-id="' + salaryEscape(group.id) + '">';
+    h += '<div class="salary-group-edit-row">';
+    h += '<button type="button" class="salary-layout-drag-handle" data-drag-kind="group" onpointerdown="startSalaryLayoutDrag(event)" onkeydown="salaryLayoutHandleKeydown(event)" aria-label="拖动分组，也可用上下方向键调整" title="拖动或用键盘上下方向键调整">&#8942;&#8942;</button>';
     h += '<label class="salary-group-name"><input class="inp salary-group-label" value="' + salaryEscape(group.label) + '" aria-label="分组名称"></label>';
-    h += '<label class="salary-group-span" title="开启后隐藏分组标题，字段名称独立跨两行显示"><input type="checkbox" class="salary-group-span-input"' + (group.span ? ' checked' : '') + '><span>单列显示</span></label>';
-    h += '<div class="salary-group-order"><button type="button" class="btn s" onclick="moveSalaryGroupEditorRow(this,-1)" aria-label="上移分组">&#8593;</button><button type="button" class="btn s" onclick="moveSalaryGroupEditorRow(this,1)" aria-label="下移分组">&#8595;</button><button type="button" class="btn s d" onclick="removeSalaryGroupEditorRow(this)" aria-label="删除分组">&times;</button></div>';
-    h += '</div>';
+    h += '<label class="salary-group-span" title="开启后隐藏分组标题，每个字段名跨两行表头显示"><input type="checkbox" class="salary-group-span-input"' + (group.span ? ' checked' : '') + '><span>字段名跨两行</span></label>';
+    h += '<details class="salary-editor-actions salary-group-actions"><summary aria-label="分组操作" title="分组操作">&#8942;</summary><div class="salary-editor-actions-menu"><button type="button" aria-label="上移分组" onclick="moveSalaryGroupEditorRow(this,-1)">上移分组</button><button type="button" aria-label="下移分组" onclick="moveSalaryGroupEditorRow(this,1)">下移分组</button><button type="button" class="danger" aria-label="删除分组" onclick="removeSalaryGroupEditorRow(this)">删除分组</button></div></details>';
+    h += '</div><div class="salary-layout-fields" aria-label="' + salaryEscape(group.label) + '分组字段">';
+    fields.forEach(function(field) { h += salaryFieldEditorRow(field, false); });
+    h += '</div></section>';
     return h;
 }
 
@@ -993,66 +1078,92 @@ function addSalaryGroupRow() {
         order: container.children.length
     };
     var wrapper = document.createElement('div');
-    wrapper.innerHTML = salaryGroupEditorRow(group);
+    wrapper.innerHTML = salaryGroupEditorRow(group, []);
     var row = wrapper.firstElementChild;
     container.appendChild(row);
-    document.querySelectorAll('.salary-field-group-input').forEach(function(select) {
-        var option = document.createElement('option');
-        option.value = group.id;
-        option.textContent = group.label;
-        select.appendChild(option);
-    });
+    updateSalaryGroupFieldNameWidth(row);
+    scrollSalaryLayoutRowIntoView(row);
     var input = row.querySelector('.salary-group-label');
-    if (input) { input.focus(); input.select(); }
+    if (input) { input.focus({ preventScroll: true }); input.select(); }
 }
 
 function moveSalaryGroupEditorRow(button, delta) {
-    var row = button.closest('.salary-group-edit-row');
+    var row = button.closest('.salary-layout-group');
     if (!row) return;
+    var menu = button.closest('.salary-editor-actions');
+    if (menu) menu.open = false;
     var sibling = delta < 0 ? row.previousElementSibling : row.nextElementSibling;
-    if (!sibling) return;
+    if (!sibling) { toast(delta < 0 ? '该分组已在最前面' : '该分组已在最后面'); return; }
     if (delta < 0) row.parentNode.insertBefore(row, sibling);
     else row.parentNode.insertBefore(sibling, row);
+    toast('分组顺序已调整，保存后生效');
 }
 
 function removeSalaryGroupEditorRow(button) {
-    var row = button.closest('.salary-group-edit-row');
-    if (!row) return;
-    var groupId = row.dataset.groupId;
-    var hasInfo = !!document.querySelector('#salaryGroupRows [data-group-id="info"]');
-    var fallback = hasInfo ? 'info' : '';
-    var moved = 0;
-    document.querySelectorAll('#salaryFieldRows .salary-field-edit-row').forEach(function(fieldRow) {
-        var select = fieldRow.querySelector('.salary-field-group-input');
-        if (!select || select.value !== groupId) return;
-        select.value = fallback;
-        moved++;
-    });
-    document.querySelectorAll('#salaryFieldRows .salary-field-group-input').forEach(function(select) {
-        Array.from(select.options).forEach(function(option) {
-            if (option.value === groupId) option.remove();
-        });
-    });
-    row.remove();
-    toast(moved ? '分组已删除，' + moved + ' 个字段已归入' + (fallback === 'info' ? '信息项' : '未分组') : '分组已删除');
+    var group = button.closest('.salary-layout-group');
+    if (!group) return;
+    var allGroups = Array.from(document.querySelectorAll('#salaryGroupRows > .salary-layout-group'));
+    if (allGroups.length <= 1) { toast('至少保留一个工资表分组'); return; }
+    var fallbackGroup = allGroups.find(function(item) { return item !== group; });
+    var fields = Array.from(group.querySelectorAll('.salary-layout-fields > .salary-field-edit-row'));
+    var fallbackContainer = fallbackGroup.querySelector('.salary-layout-fields');
+    fields.forEach(function(field) { fallbackContainer.appendChild(field); });
+    group.remove();
+    updateSalaryGroupFieldNameWidth(fallbackGroup);
+    toast(fields.length ? '分组已删除，字段已移入“' + (fallbackGroup.querySelector('.salary-group-label').value || '其他分组') + '”' : '分组已删除');
 }
 
-function salaryFieldEditorRow(field) {
+function salaryFieldEditorRow(field, fixed) {
     var lockedType = field.category === 'info' || field.category === 'computed';
-    var lockedOrder = field.required || field.category === 'computed';
-    var h = '<div class="salary-field-edit-row" data-field-id="' + salaryEscape(field.id) + '" data-builtin="' + (field.builtin ? 'true' : 'false') + '" data-required="' + (field.required ? 'true' : 'false') + '" data-readonly="' + (field.readonly ? 'true' : 'false') + '" data-field-type="' + salaryEscape(field.type || 'number') + '" data-calculation="' + salaryEscape(field.calculation || '') + '" data-width="' + salaryEscape(field.width || '70px') + '" data-aliases="' + salaryEscape(JSON.stringify(field.aliases || [])) + '">';
-    h += '<label class="salary-field-name"><input class="inp salary-field-label" value="' + salaryEscape(field.label) + '" aria-label="工资字段名称"></label>';
-    h += '<label class="salary-field-category"><select class="inp salary-field-category-input" aria-label="计算归属"' + (lockedType ? ' disabled' : '') + '>';
-    if (lockedType) h += '<option value="' + field.category + '" selected>' + salaryFieldCategoryLabel(field.category) + '</option>';
-    else h += '<option value="earning"' + (field.category === 'earning' ? ' selected' : '') + '>应发项</option><option value="deduction"' + (field.category === 'deduction' ? ' selected' : '') + '>扣款项</option>';
-    h += '</select></label>';
-    h += '<label class="salary-field-group"><select class="inp salary-field-group-input" aria-label="所属分组">' + salaryFieldGroupOptions(field.group || '') + '</select></label>';
-    h += '<div class="salary-field-spacer" aria-hidden="true"></div>';
-    h += '<label class="salary-field-visible"><input type="checkbox" class="salary-field-visible-input"' + (field.visible !== false ? ' checked' : '') + (field.required ? ' disabled' : '') + '><span>显示</span></label>';
-    h += '<div class="salary-field-order"><button type="button" class="btn s" onclick="moveSalaryFieldEditorRow(this,-1)" aria-label="上移字段"' + (lockedOrder ? ' disabled' : '') + '>↑</button><button type="button" class="btn s" onclick="moveSalaryFieldEditorRow(this,1)" aria-label="下移字段"' + (lockedOrder ? ' disabled' : '') + '>↓</button></div>';
-    h += '<div class="salary-field-remove"><button type="button" class="btn s d" onclick="removeSalaryFieldEditorRow(this)" aria-label="删除字段">&times;</button></div>';
+    var editableCalculation = field.category === 'earning' || field.category === 'deduction';
+    var calculationGroup = salaryCalculationGroupForField(field.id, field.category, field.group, field.calculationGroup);
+    var rowClass = 'salary-field-edit-row' + (fixed ? ' salary-layout-field-fixed' : (editableCalculation ? ' salary-field-editable' : ' salary-field-static'));
+    var h = '<div class="' + rowClass + '" data-field-id="' + salaryEscape(field.id) + '" data-group-id="' + salaryEscape(field.group || '') + '" data-category="' + salaryEscape(field.category) + '" data-calculation-group="' + salaryEscape(calculationGroup) + '" data-builtin="' + (field.builtin ? 'true' : 'false') + '" data-required="' + (field.required ? 'true' : 'false') + '" data-readonly="' + (field.readonly ? 'true' : 'false') + '" data-field-type="' + salaryEscape(field.type || 'number') + '" data-calculation="' + salaryEscape(field.calculation || '') + '" data-width="' + salaryEscape(field.width || '70px') + '" data-aliases="' + salaryEscape(JSON.stringify(field.aliases || [])) + '">';
+    if (fixed) {
+        h += '<label class="salary-field-name"><input class="inp salary-field-label" value="' + salaryEscape(field.label) + '" aria-label="工资字段名称"></label>';
+        h += '<input type="hidden" class="salary-field-category-input" value="' + salaryEscape(field.category) + '">';
+        h += '<input type="checkbox" class="salary-field-visible-input salary-field-hidden-state"' + (field.required || field.visible !== false ? ' checked' : '') + (field.required ? ' disabled' : '') + '>';
+        h += '</div>';
+        return h;
+    }
+    h += fixed
+        ? '<span class="salary-layout-fixed-badge" title="姓名固定显示在工资表首列">固定首列</span>'
+        : '<button type="button" class="salary-layout-drag-handle" data-drag-kind="field" onpointerdown="startSalaryLayoutDrag(event)" onkeydown="salaryLayoutHandleKeydown(event)" aria-label="拖动' + salaryEscape(field.label) + '，也可用上下方向键调整" title="拖动或用键盘上下方向键调整">&#8942;&#8942;</button>';
+    h += '<label class="salary-field-name"><input class="inp salary-field-label" value="' + salaryEscape(field.label) + '" aria-label="工资字段名称" oninput="updateSalaryGroupFieldNameWidth(this.closest(\'.salary-layout-group\'))"></label>';
+    if (lockedType) {
+        var calculationLabel = field.category === 'computed'
+            ? '公式计算'
+            : (field.id === 'attendanceDays' ? salaryCalculationGroupLabel(calculationGroup) : '信息 · 不参与合计');
+        h += '<div class="salary-field-meta salary-field-meta-static"><span class="salary-field-static-value">' + salaryEscape(calculationLabel) + '</span><input type="hidden" class="salary-field-category-input" value="' + salaryEscape(field.category) + '"></div>';
+    } else {
+        h += '<label class="salary-field-category"><span class="salary-layout-label">类型</span><select class="inp salary-field-category-input" aria-label="字段类型" onchange="updateSalaryFieldCalculationControl(this)">';
+        h += '<option value="earning"' + (field.category === 'earning' ? ' selected' : '') + '>应发项</option><option value="deduction"' + (field.category === 'deduction' ? ' selected' : '') + '>扣款项</option>';
+        h += '</select></label>';
+        h += '<label class="salary-field-calculation"><span class="salary-layout-label">计算归属</span>' + salaryFieldCalculationControl(field) + '</label>';
+    }
+    h += field.required
+        ? '<div class="salary-field-visible"><span class="salary-field-visible-fixed" aria-label="必填字段，始终显示">必显</span></div>'
+        : '<label class="salary-field-visible"><input type="checkbox" class="salary-field-visible-input"' + (field.visible !== false ? ' checked' : '') + '><span>显示</span></label>';
+    h += fixed
+        ? '<div class="salary-layout-fixed-note">姓名固定首列</div>'
+        : '<details class="salary-editor-actions salary-field-actions"><summary aria-label="' + salaryEscape(field.label) + '字段操作" title="字段操作">&#8942;</summary><div class="salary-editor-actions-menu"><button type="button" aria-label="上移字段" onclick="moveSalaryFieldEditorRow(this,-1)">上移字段</button><button type="button" aria-label="下移字段" onclick="moveSalaryFieldEditorRow(this,1)">下移字段</button><button type="button" class="danger" aria-label="删除字段" onclick="removeSalaryFieldEditorRow(this)">删除字段</button></div></details>';
     h += '</div>';
     return h;
+}
+
+function updateSalaryFieldCalculationControl(select) {
+    var row = select.closest('.salary-field-edit-row');
+    var calculation = row && row.querySelector('.salary-field-calculation-group-input');
+    if (!row || !calculation) return;
+    var category = select.value;
+    var oldValue = calculation.value;
+    var nextValue = category === 'earning'
+        ? (oldValue === 'base' || oldValue === 'direct' ? oldValue : 'direct')
+        : (oldValue === 'preTaxDeduction' || oldValue === 'postTaxDeduction' ? oldValue : 'postTaxDeduction');
+    calculation.innerHTML = salaryCalculationGroupOptions(category, nextValue);
+    row.dataset.category = category;
+    row.dataset.calculationGroup = nextValue;
+    updateSalaryGroupFieldNameWidth(row.closest('.salary-layout-group'));
 }
 
 function removeSalaryFieldEditorRow(button) {
@@ -1060,33 +1171,112 @@ function removeSalaryFieldEditorRow(button) {
     if (!row) return;
     if (row.dataset.required === 'true') { toast('必填字段（如姓名）不能删除'); return; }
     if (row.dataset.builtin === 'true' && !window.confirm('这是内置字段，删除后如需恢复要手动重新添加（历史数据保留）。确定删除？')) return;
+    var group = row.closest('.salary-layout-group');
     row.remove();
+    updateSalaryGroupFieldNameWidth(group);
     toast('字段已从列表移除，保存后生效');
 }
 
 function openSalaryFieldManager() {
     var fields = salaryFieldDefinitions();
+    var groups = salaryFieldGroups();
+    var employeeField = fields.find(function(field) { return field.id === 'employee'; });
     var h = '<div class="salary-template-dialog salary-field-dialog"><h3>工资字段设置</h3>';
-    h += '<p class="salary-template-intro">设置表头结构、工资项目与计算方式。修改会随当前账号同步，隐藏字段仍保留历史数据。</p>';
+    h += '<p class="salary-template-intro">拖动只调列位置；核算由“计算归属”决定，隐藏字段仍保留历史数据。</p>';
     h += '<div class="view-tabs salary-field-tabs" role="tablist" aria-label="工资字段设置视图">';
-    h += '<button type="button" class="view-tab active" role="tab" aria-selected="true" data-tab="groups" onclick="switchSalaryFieldTab(\'groups\')">表头分组</button>';
-    h += '<button type="button" class="view-tab" role="tab" aria-selected="false" data-tab="fields" onclick="switchSalaryFieldTab(\'fields\')">工资字段</button>';
+    h += '<button type="button" class="view-tab active" role="tab" aria-selected="true" data-tab="layout" onclick="switchSalaryFieldTab(\'layout\')">工资表布局</button>';
     h += '<button type="button" class="view-tab" role="tab" aria-selected="false" data-tab="formulas" onclick="switchSalaryFieldTab(\'formulas\')">计算公式</button>';
     h += '</div><div class="salary-field-dialog-body">';
-    h += '<div class="salary-field-panel" data-panel="groups"><p class="salary-field-panel-copy">调整表头分组顺序；开启“单列显示”后，该组不显示上层分组标题。</p>';
-    h += '<div id="salaryGroupRows" class="salary-group-editor">';
-    salaryFieldGroups().forEach(function(group) { h += salaryGroupEditorRow(group); });
-    h += '</div><button type="button" class="btn salary-department-add" onclick="addSalaryGroupRow()">+ 新增分组</button>';
+    h += '<div class="salary-field-panel" data-panel="layout">';
+    if (employeeField) {
+        h += '<div class="salary-layout-fixed"><div class="salary-layout-section-title">固定首列</div>';
+        h += '<div id="salaryPinnedFieldRows">' + salaryFieldEditorRow(employeeField, true) + '</div></div>';
+    }
+    h += '<div id="salaryGroupRows" class="salary-layout-groups">';
+    groups.forEach(function(group) {
+        var groupFields = fields.filter(function(field) { return field.id !== 'employee' && field.group === group.id; });
+        h += salaryGroupEditorRow(group, groupFields);
+    });
     h += '</div>';
-    h += '<div class="salary-field-panel" data-panel="fields" hidden><p class="salary-field-panel-copy">计算归属：应发项计入工资、扣款项从工资中扣除；表头分组：该字段显示在工资表顶部表头的哪个分组下；显示：是否在工资表中展示。</p>';
-    h += '<div class="salary-field-list-head"><span>字段名称</span><span>归属</span><span>表头分组</span><span class="salary-field-spacer"></span><span>显示</span><span>排序</span><span></span></div>';
-    h += '<div id="salaryFieldRows" class="salary-field-editor">';
-    fields.forEach(function(field) { h += salaryFieldEditorRow(field); });
-    h += '</div><button type="button" class="btn salary-department-add" onclick="addSalaryCustomField()">+ 添加工资项</button>';
+    var groupIds = groups.map(function(group) { return group.id; });
+    var ungroupedFields = fields.filter(function(field) {
+        return field.id !== 'employee' && groupIds.indexOf(field.group) < 0;
+    });
+    if (ungroupedFields.length) {
+        h += '<section class="salary-layout-ungrouped"><div class="salary-layout-section-title">待归入工资表分组</div><p class="salary-field-panel-copy">这些字段当前没有对应分组；可用拖动或上下按钮将它们移入工资表分组。</p>';
+        h += '<div id="salaryUngroupedFields" class="salary-layout-fields" aria-label="待归组工资字段">';
+        ungroupedFields.forEach(function(field) { h += salaryFieldEditorRow(field, false); });
+        h += '</div></section>';
+    }
     h += '</div>';
-    h += '<div class="salary-field-panel" data-panel="formulas" hidden><p class="salary-field-panel-copy">公式使用字段名称引用；留空时采用系统内置计算。</p>' + salaryFormulaEditorHtml() + '</div></div>';
+    h += '<div class="salary-field-panel" data-panel="formulas" hidden><div class="salary-layout-section-title">工资计算公式</div><p class="salary-field-panel-copy">公式通过字段名称引用；拖动列位置不会更改公式。</p>' + salaryFormulaEditorHtml() + '</div></div>';
+    h += '<details class="salary-layout-add-fab"><summary aria-label="添加字段或分组" title="添加字段或分组">+</summary><div class="salary-layout-add-menu"><button type="button" onclick="closeSalaryLayoutAddMenu();addSalaryGroupRow()">添加分组</button><button type="button" onclick="closeSalaryLayoutAddMenu();addSalaryCustomField()">添加工资段</button><button type="button" onclick="closeSalaryLayoutAddMenu();addSalaryInfoField()">添加信息段</button></div></details>';
     h += '<div class="salary-template-footer split"><button type="button" class="btn" onclick="backToModal(function(){openSalaryTemplateMenu()})">取消</button><button type="button" class="btn p" onclick="saveSalaryFieldDefinitions()">保存设置</button></div></div>';
     showModal(h, 880);
+    document.querySelectorAll('#salaryGroupRows > .salary-layout-group').forEach(updateSalaryGroupFieldNameWidth);
+}
+
+function closeSalaryLayoutAddMenu() {
+    var menu = document.querySelector('.salary-layout-add-fab[open]');
+    if (menu) menu.open = false;
+}
+
+function scrollSalaryLayoutRowIntoView(row) {
+    var body = row && row.closest('.salary-field-dialog-body');
+    if (!row || !body) return;
+    var rowRect = row.getBoundingClientRect();
+    var bodyRect = body.getBoundingClientRect();
+    var nextTop = body.scrollTop + rowRect.top - bodyRect.top - (body.clientHeight - rowRect.height) / 2;
+    body.scrollTo({ left: 0, top: Math.max(0, nextTop), behavior: 'smooth' });
+}
+
+function updateSalaryGroupFieldNameWidth(group) {
+    if (!group || !group.matches('.salary-layout-group')) return;
+    var canvas = updateSalaryGroupFieldNameWidth.canvas || (updateSalaryGroupFieldNameWidth.canvas = document.createElement('canvas'));
+    var context = canvas.getContext('2d');
+    var fieldLabels = Array.from(group.querySelectorAll('.salary-layout-fields > .salary-field-edit-row .salary-field-label'));
+    if (!context) return;
+    var requiredWidth = 0;
+    fieldLabels.forEach(function(input) {
+        context.font = getComputedStyle(input).font;
+        requiredWidth = Math.max(requiredWidth, context.measureText(input.value || '').width + 24);
+    });
+    var width = Math.max(96, Math.min(220, Math.ceil(requiredWidth)));
+    group.style.setProperty('--salary-field-name-width', width + 'px');
+
+    function measureSelectWidth(selector, fallback, minimum, maximum) {
+        var required = minimum;
+        group.querySelectorAll(selector).forEach(function(select) {
+            context.font = getComputedStyle(select.closest('label') || select).font;
+            Array.from(select.options || []).forEach(function(option) {
+                required = Math.max(required, context.measureText(option.textContent || '').width + 46);
+            });
+        });
+        return Math.max(minimum, Math.min(maximum, Math.ceil(required || fallback)));
+    }
+
+    var categoryWidth = measureSelectWidth('.salary-field-category-input', 100, 96, 140);
+    var calculationWidth = measureSelectWidth('.salary-field-calculation-group-input', 116, 112, 160);
+    context.font = getComputedStyle(group).font;
+    var visibleWidth = Math.max(48, Math.min(64, Math.ceil(Math.max(
+        context.measureText('必显').width,
+        context.measureText('显示').width + 21
+    ) + 8)));
+    group.style.setProperty('--salary-field-category-width', categoryWidth + 'px');
+    group.style.setProperty('--salary-field-calculation-width', calculationWidth + 'px');
+    group.style.setProperty('--salary-field-visible-width', visibleWidth + 'px');
+
+    var groups = Array.from(document.querySelectorAll('#salaryGroupRows > .salary-layout-group'));
+    var tableWidth = groups.reduce(function(maxWidth, item) {
+        var style = getComputedStyle(item);
+        var columns = ['--salary-field-name-width', '--salary-field-category-width', '--salary-field-calculation-width', '--salary-field-visible-width'];
+        var contentWidth = columns.reduce(function(sum, property) {
+            return sum + (parseFloat(style.getPropertyValue(property)) || 0);
+        }, 0);
+        return Math.max(maxWidth, Math.ceil(contentWidth + 112));
+    }, 0);
+    var container = document.getElementById('salaryGroupRows');
+    if (container && tableWidth) container.style.setProperty('--salary-layout-table-width', tableWidth + 'px');
 }
 
 function switchSalaryFieldTab(name) {
@@ -1098,6 +1288,11 @@ function switchSalaryFieldTab(name) {
     document.querySelectorAll('.salary-field-panel').forEach(function(panel) {
         panel.hidden = panel.dataset.panel !== name;
     });
+    var addMenu = document.querySelector('.salary-layout-add-fab');
+    if (addMenu) {
+        addMenu.hidden = name !== 'layout';
+        addMenu.open = false;
+    }
 }
 
 function salaryFormulaEditorHtml() {
@@ -1178,33 +1373,216 @@ function salaryFormulaCycles(formulas) {
 }
 
 function addSalaryCustomField() {
-    var container = $id('salaryFieldRows');
+    var groups = Array.from(document.querySelectorAll('#salaryGroupRows > .salary-layout-group'));
+    if (!groups.length) { toast('请先新增一个工资表分组'); return; }
+    var targetGroup = groups[groups.length - 1];
+    var container = targetGroup.querySelector('.salary-layout-fields');
     if (!container) return;
     var field = {
         id: 'salary_custom_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-        label: '新工资项', category: 'earning', group: '', type: 'number', visible: true,
+        label: '新工资项', category: 'earning', group: targetGroup.dataset.groupId, calculationGroup: 'direct', type: 'number', visible: true,
         builtin: false, required: false, readonly: false, width: '70px', aliases: []
     };
     var wrapper = document.createElement('div');
-    wrapper.innerHTML = salaryFieldEditorRow(field);
+    wrapper.innerHTML = salaryFieldEditorRow(field, false);
     var row = wrapper.firstElementChild;
-    var actualRow = container.querySelector('[data-field-id="actualSalary"]');
-    container.insertBefore(row, actualRow || null);
+    container.appendChild(row);
+    updateSalaryGroupFieldNameWidth(targetGroup);
+    scrollSalaryLayoutRowIntoView(row);
     var input = row.querySelector('.salary-field-label');
-    if (input) { input.focus(); input.select(); }
+    if (input) { input.focus({ preventScroll: true }); input.select(); }
+}
+
+function addSalaryInfoField() {
+    var container = $id('salaryGroupRows');
+    if (!container) return;
+    var targetGroup = Array.from(container.children).find(function(group) { return group.dataset.groupId === 'info'; });
+    if (!targetGroup) {
+        var infoGroup = { id: 'info', label: '信息项', span: true, order: 0 };
+        var groupWrapper = document.createElement('div');
+        groupWrapper.innerHTML = salaryGroupEditorRow(infoGroup, []);
+        targetGroup = groupWrapper.firstElementChild;
+        container.insertBefore(targetGroup, container.firstElementChild);
+    }
+    var fields = targetGroup.querySelector('.salary-layout-fields');
+    if (!fields) return;
+    var field = {
+        id: 'salary_custom_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+        label: '新信息字段', category: 'info', group: targetGroup.dataset.groupId, type: 'text', visible: true,
+        builtin: false, required: false, readonly: false, width: '90px', aliases: []
+    };
+    var wrapper = document.createElement('div');
+    wrapper.innerHTML = salaryFieldEditorRow(field, false);
+    var row = wrapper.firstElementChild;
+    fields.appendChild(row);
+    updateSalaryGroupFieldNameWidth(targetGroup);
+    scrollSalaryLayoutRowIntoView(row);
+    var input = row.querySelector('.salary-field-label');
+    if (input) { input.focus({ preventScroll: true }); input.select(); }
 }
 
 function moveSalaryFieldEditorRow(button, delta) {
     var row = button.closest('.salary-field-edit-row');
     if (!row) return;
+    var menu = button.closest('.salary-editor-actions');
+    if (menu) menu.open = false;
+    var container = row.closest('.salary-layout-fields');
+    var group = row.closest('.salary-layout-group');
+    if (!container) return;
     var sibling = delta < 0 ? row.previousElementSibling : row.nextElementSibling;
-    if (!sibling || sibling.dataset.required === 'true' || sibling.dataset.readonly === 'true') return;
-    if (delta < 0) row.parentNode.insertBefore(row, sibling);
-    else row.parentNode.insertBefore(sibling, row);
+    if (sibling && sibling.classList.contains('salary-field-edit-row')) {
+        if (delta < 0) container.insertBefore(row, sibling);
+        else container.insertBefore(sibling, row);
+    } else {
+        var groups = Array.from(document.querySelectorAll('#salaryGroupRows > .salary-layout-group'));
+        var groupIndex = group ? groups.indexOf(group) : -1;
+        var targetIndex = group ? groupIndex + (delta < 0 ? -1 : 1) : (delta < 0 ? groups.length - 1 : -1);
+        var targetGroup = groups[targetIndex];
+        if (!targetGroup) { toast(delta < 0 ? '该字段已在最前面' : '该字段已在最后面'); return; }
+        var targetContainer = targetGroup.querySelector('.salary-layout-fields');
+        if (delta < 0) targetContainer.appendChild(row);
+        else targetContainer.insertBefore(row, targetContainer.firstElementChild);
+    }
+    updateSalaryGroupFieldNameWidth(group);
+    updateSalaryGroupFieldNameWidth(row.closest('.salary-layout-group'));
+    hideEmptySalaryUngroupedFields();
+    toast('字段顺序已调整，保存后生效');
+}
+
+function hideEmptySalaryUngroupedFields() {
+    var container = $id('salaryUngroupedFields');
+    var section = container && container.closest('.salary-layout-ungrouped');
+    if (section && !container.children.length) section.hidden = true;
+}
+
+function salaryLayoutHandleKeydown(event) {
+    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+    event.preventDefault();
+    var delta = event.key === 'ArrowUp' ? -1 : 1;
+    if (event.currentTarget.dataset.dragKind === 'group') moveSalaryGroupEditorRow(event.currentTarget, delta);
+    else moveSalaryFieldEditorRow(event.currentTarget, delta);
+}
+
+var _salaryLayoutDrag = null;
+
+function clearSalaryLayoutDropTargets() {
+    document.querySelectorAll('.salary-layout-drop-before,.salary-layout-drop-after,.salary-layout-drop-active').forEach(function(node) {
+        node.classList.remove('salary-layout-drop-before', 'salary-layout-drop-after', 'salary-layout-drop-active');
+    });
+}
+
+function startSalaryLayoutDrag(event) {
+    if (event.button !== undefined && event.button !== 0) return;
+    var kind = event.currentTarget.dataset.dragKind;
+    var item = kind === 'group' ? event.currentTarget.closest('.salary-layout-group') : event.currentTarget.closest('.salary-field-edit-row');
+    if (!item) return;
+    if (_salaryLayoutDrag) cancelSalaryLayoutDrag();
+    event.preventDefault();
+    _salaryLayoutDrag = {
+        kind: kind,
+        item: item,
+        originContainer: item.closest('.salary-layout-fields'),
+        startRect: item.getBoundingClientRect(),
+        startX: event.clientX,
+        startY: event.clientY,
+        pointerId: event.pointerId,
+        activated: false,
+        dropTarget: null
+    };
+    document.addEventListener('pointermove', moveSalaryLayoutDrag);
+    document.addEventListener('pointerup', finishSalaryLayoutDrag);
+    document.addEventListener('pointercancel', cancelSalaryLayoutDrag);
+}
+
+function moveSalaryLayoutDrag(event) {
+    if (!_salaryLayoutDrag) return;
+    var drag = _salaryLayoutDrag;
+    if (drag.pointerId !== undefined && event.pointerId !== drag.pointerId) return;
+    if (!drag.activated) {
+        if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 8) return;
+        drag.activated = true;
+        drag.item.classList.add('salary-layout-dragging-item');
+        document.body.classList.add('salary-layout-dragging');
+    }
+    clearSalaryLayoutDropTargets();
+    var hit = document.elementFromPoint(event.clientX, event.clientY);
+    if (!hit) return;
+    if (drag.kind === 'group') {
+        var targetGroup = hit.closest('.salary-layout-group');
+        if (!targetGroup || targetGroup === drag.item) { drag.dropTarget = null; return; }
+        var afterGroup = event.clientY > targetGroup.getBoundingClientRect().top + targetGroup.getBoundingClientRect().height / 2;
+        targetGroup.classList.add(afterGroup ? 'salary-layout-drop-after' : 'salary-layout-drop-before');
+        drag.dropTarget = { kind: 'group', target: targetGroup, after: afterGroup };
+        return;
+    }
+    var targetField = hit.closest('.salary-field-edit-row');
+    if (targetField && targetField !== drag.item && !targetField.classList.contains('salary-layout-field-fixed')) {
+        var afterField = event.clientY > targetField.getBoundingClientRect().top + targetField.getBoundingClientRect().height / 2;
+        targetField.classList.add(afterField ? 'salary-layout-drop-after' : 'salary-layout-drop-before');
+        drag.dropTarget = { kind: 'field', target: targetField, after: afterField };
+        return;
+    }
+    var group = hit.closest('.salary-layout-group');
+    var fields = group && group.querySelector('.salary-layout-fields');
+    if (fields) {
+        var overOriginalPosition = fields === drag.originContainer
+            && event.clientX >= drag.startRect.left && event.clientX <= drag.startRect.right
+            && event.clientY >= drag.startRect.top && event.clientY <= drag.startRect.bottom;
+        if (overOriginalPosition) { drag.dropTarget = null; return; }
+        fields.classList.add('salary-layout-drop-active');
+        drag.dropTarget = { kind: 'fields', target: fields };
+    } else drag.dropTarget = null;
+}
+
+function cleanupSalaryLayoutDrag() {
+    var drag = _salaryLayoutDrag;
+    if (!drag) return null;
+    document.removeEventListener('pointermove', moveSalaryLayoutDrag);
+    document.removeEventListener('pointerup', finishSalaryLayoutDrag);
+    document.removeEventListener('pointercancel', cancelSalaryLayoutDrag);
+    clearSalaryLayoutDropTargets();
+    drag.item.classList.remove('salary-layout-dragging-item');
+    document.body.classList.remove('salary-layout-dragging');
+    _salaryLayoutDrag = null;
+    return drag;
+}
+
+function cancelSalaryLayoutDrag(event) {
+    if (_salaryLayoutDrag && event && _salaryLayoutDrag.pointerId !== undefined && event.pointerId !== _salaryLayoutDrag.pointerId) return;
+    cleanupSalaryLayoutDrag();
+}
+
+function finishSalaryLayoutDrag(event) {
+    if (_salaryLayoutDrag && event && _salaryLayoutDrag.pointerId !== undefined && event.pointerId !== _salaryLayoutDrag.pointerId) return;
+    var drag = cleanupSalaryLayoutDrag();
+    if (!drag || !drag.activated) return;
+    var target = drag.dropTarget;
+    if (!target) return;
+    var oldGroup = drag.item.closest('.salary-layout-group');
+    if (target.kind === 'group') {
+        var groupParent = target.target.parentNode;
+        if (drag.item === target.target || drag.item.contains(target.target)) return;
+        groupParent.insertBefore(drag.item, target.after ? target.target.nextSibling : target.target);
+        toast('分组顺序已调整，保存后生效');
+    } else if (target.kind === 'field') {
+        var fieldParent = target.target.parentNode;
+        if (drag.item === target.target) return;
+        fieldParent.insertBefore(drag.item, target.after ? target.target.nextSibling : target.target);
+        updateSalaryGroupFieldNameWidth(oldGroup);
+        updateSalaryGroupFieldNameWidth(drag.item.closest('.salary-layout-group'));
+        hideEmptySalaryUngroupedFields();
+        toast('字段位置已调整，保存后生效');
+    } else if (target.kind === 'fields') {
+        target.target.appendChild(drag.item);
+        updateSalaryGroupFieldNameWidth(oldGroup);
+        updateSalaryGroupFieldNameWidth(drag.item.closest('.salary-layout-group'));
+        hideEmptySalaryUngroupedFields();
+        toast('字段已移入分组，保存后生效');
+    }
 }
 
 function saveSalaryFieldDefinitions() {
-    var groupRows = Array.from(document.querySelectorAll('#salaryGroupRows .salary-group-edit-row'));
+    var groupRows = Array.from(document.querySelectorAll('#salaryGroupRows > .salary-layout-group'));
     var groupLabels = [];
     var invalidGroup = false;
     var groups = groupRows.map(function(row, index) {
@@ -1222,7 +1600,7 @@ function saveSalaryFieldDefinitions() {
     if (!groups.length) { toast('至少需要一个表头分组'); return; }
     var groupIds = groups.map(function(group) { return group.id; });
 
-    var rows = Array.from(document.querySelectorAll('#salaryFieldRows .salary-field-edit-row'));
+    var rows = Array.from(document.querySelectorAll('#salaryPinnedFieldRows .salary-field-edit-row, #salaryGroupRows .salary-field-edit-row, #salaryUngroupedFields .salary-field-edit-row'));
     var labels = [];
     var invalid = false;
     var fields = rows.map(function(row, index) {
@@ -1231,9 +1609,11 @@ function saveSalaryFieldDefinitions() {
         labels.push(label);
         var categoryInput = row.querySelector('.salary-field-category-input');
         var category = categoryInput.value;
-        var groupInput = row.querySelector('.salary-field-group-input');
-        var group = groupInput ? groupInput.value : '';
+        var groupContainer = row.closest('.salary-layout-group');
+        var group = groupContainer ? groupContainer.dataset.groupId : (row.dataset.groupId || '');
+        var calculationInput = row.querySelector('.salary-field-calculation-group-input');
         var required = row.dataset.required === 'true';
+        var visibleInput = row.querySelector('.salary-field-visible-input');
         var aliases = [];
         try { aliases = JSON.parse(row.dataset.aliases || '[]'); } catch (e) {}
         return {
@@ -1242,9 +1622,9 @@ function saveSalaryFieldDefinitions() {
             category: category,
             group: group,
             calculation: row.dataset.calculation || '',
-            calculationGroup: salaryCalculationGroupForField(row.dataset.fieldId, category, group),
+            calculationGroup: salaryCalculationGroupForField(row.dataset.fieldId, category, group, calculationInput ? calculationInput.value : row.dataset.calculationGroup),
             type: category === 'info' ? (row.dataset.fieldType || 'text') : 'number',
-            visible: required || row.querySelector('.salary-field-visible-input').checked,
+            visible: required || !visibleInput || visibleInput.checked,
             builtin: row.dataset.builtin === 'true',
             required: required,
             readonly: row.dataset.readonly === 'true',
@@ -1288,13 +1668,6 @@ function saveSalaryFieldDefinitions() {
     closeModal();
     renderSalaryPage();
     toast('工资字段已更新');
-}
-
-function salaryCalculationGroupForField(fieldId, category, group) {
-    if (fieldId === 'attendanceDays') return 'attendance';
-    if (category === 'earning') return group === 'basePay' ? 'base' : 'direct';
-    if (category === 'deduction') return group === 'preTax' ? 'preTaxDeduction' : 'postTaxDeduction';
-    return '';
 }
 
 function onSalDragStart(event, rowId) {
@@ -1926,20 +2299,19 @@ function renderNav() {
     if (isModuleEnabled('expense')) mainPages.push({ id: 'expense', icon: 'receipt', label: '费用' });
     if (isModuleEnabled('salary')) mainPages.push({ id: 'salary', icon: 'wallet', label: '工资' });
 
-    // 贵重物品（根据配置显示）
+    // 库存类型由账号配置定义；旧类型和历史自定义分类也有稳定 ID。
     var invPages = [];
-    if (isInventoryTypeEnabled('tea')) invPages.push({ id: 'tea', icon: 'leaf', label: '茗茶' });
-    if (isInventoryTypeEnabled('cig')) invPages.push({ id: 'cig', icon: 'package', label: '香烟' });
-    if (isInventoryTypeEnabled('alc')) invPages.push({ id: 'alc', icon: 'wine', label: '酒类' });
-    if (isInventoryTypeEnabled('other')) invPages.push({ id: 'other', icon: 'gem', label: '贵重' });
-
-    // 添加自定义贵重物品类型
     var config = getAppConfig();
-    if (config && config.customInventoryTypes && config.customInventoryTypes.length > 0) {
-        config.customInventoryTypes.forEach(function(type) {
-            invPages.push({ id: 'custom_' + type, icon: 'gem', label: type, isCustom: true });
-        });
+    (config.inventoryTypeDefinitions || []).forEach(function(type) {
+        if (type.archived || type.deleted) return;
+        if (type.preset === 'other') return;
+        var icon = { tea: 'leaf', cig: 'package', alc: 'wine' }[type.preset] || 'gem';
+        invPages.push({ id: 'inventory_type_' + type.id, icon: icon, label: type.name });
+    });
+    if (inventoryUnclassifiedLegacyItems().length) {
+        invPages.push({ id: 'inventory_unclassified', icon: 'gem', label: '未分类' });
     }
+    invPages.push({ id: 'inventory_add', icon: 'plus', label: '添加类型', action: 'showCreateInventoryType()' });
 
     // 仓库管理
     var whPages = [];
@@ -1961,9 +2333,9 @@ function renderNav() {
         }
         el.style.display = '';
         el.innerHTML = pages.map(function(p) {
-            return '<button class="toolbar-btn" data-page="' + p.id + '" onclick="goPage(\'' + p.id + '\')" title="' + p.label + '">' +
+            return '<button class="toolbar-btn" data-page="' + p.id + '" onclick="' + (p.action || ('goPage(\'' + p.id + '\')')) + '" title="' + inventoryHtml(p.label) + '">' +
                 '<span class="ticon">' + axIcon(p.icon, 'ax-icon--nav') + '</span>' +
-                '<span class="tlabel">' + p.label + '</span>' +
+                '<span class="tlabel">' + inventoryHtml(p.label) + '</span>' +
                 '</button>';
         }).join('');
     }

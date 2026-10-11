@@ -172,7 +172,7 @@ function updateAuthUI() {
     var el = document.getElementById('authBadge');
     if (!el) return;
     if (_guest && !_auth.loggedIn) {
-        el.innerHTML = '<a href="login.html" style="font-size:.65rem;color:var(--ac);text-decoration:none;border:1px solid var(--ac);border-radius:12px;padding:3px 10px;white-space:nowrap;transition:background .2s" onmouseenter="this.style.background=\'var(--ac-b)\'" onmouseleave="this.style.background=\'transparent\'">登录</a>';
+        el.innerHTML = '<a href="login.html" class="btn-link" style="font-size:.65rem;color:var(--ac);text-decoration:none;border:1px solid var(--ac);border-radius:12px;padding:3px 10px;white-space:nowrap;transition:background .2s" onmouseenter="this.style.background=\'var(--ac-b)\'" onmouseleave="this.style.background=\'transparent\'">登录</a>';
         return;
     }
     if (_auth.loggedIn && _auth.user) {

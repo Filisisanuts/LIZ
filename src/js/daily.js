@@ -24,25 +24,26 @@ function rDaily() {
 
     // 解析后的结构化录入区
     h += '<div id="dMan" style="display:none">';
-    h += '<div class="hrow"><label>日期</label><input class="inp" id="dmDate" type="text" readonly placeholder="选择日期" value="' + td() + '" onclick="_dpOpen(\'dmDate\')" style="cursor:pointer"></div>';
+    h += '<div class="hrow"><label>日期</label><input class="inp" id="dmDate" type="text" readonly placeholder="选择日期" value="' + td() + '" onclick="_dpOpen(\'dmDate\')" onchange="refreshDailyInventorySales(this.value)" style="cursor:pointer"></div>';
     h += '<div class="section-label">经营数据</div><div id="dmFreeList"></div>';
 
     // 根据配置显示贵重物品销售区块
     var config = getAppConfig();
     var invTypes = (config && config.inventoryTypes) ? config.inventoryTypes : ['tea', 'cig', 'alc', 'other'];
 
-    if (invTypes.includes('tea') || (DB.teaItems && DB.teaItems.length > 0)) {
+    if (inventoryLegacyDailyInputEnabled('tea') && (invTypes.includes('tea') || (DB.teaItems && DB.teaItems.length > 0))) {
         h += '<div class="section-label">茗茶销售</div><div id="dmTeaList"></div>';
     }
-    if (invTypes.includes('cig') || (DB.cigItems && DB.cigItems.length > 0)) {
+    if (inventoryLegacyDailyInputEnabled('cig') && (invTypes.includes('cig') || (DB.cigItems && DB.cigItems.length > 0))) {
         h += '<div class="section-label">香烟销售</div><div id="dmCigList"></div>';
     }
-    if (invTypes.includes('alc') || (DB.alcItems && DB.alcItems.length > 0)) {
+    if (inventoryLegacyDailyInputEnabled('alc') && (invTypes.includes('alc') || (DB.alcItems && DB.alcItems.length > 0))) {
         h += '<div class="section-label">酒类销售</div><div id="dmAlcList"></div>';
     }
-    if (invTypes.includes('other') || (DB.otherItems && DB.otherItems.length > 0)) {
+    if (inventoryLegacyDailyInputEnabled('other') && (invTypes.includes('other') || (DB.otherItems && DB.otherItems.length > 0))) {
         h += '<div class="section-label">其他贵重物品</div><div id="dmOtherList"></div>';
     }
+    h += '<div id="dmInventorySales">' + inventoryDailySalesSection(td()) + '</div>';
 
     // 根据配置显示包厢预定和汇报人
     var dailyFeatures = (config && config.dailyFeatures) || {};
@@ -389,6 +390,7 @@ function addFreeRow() {
 // 日报茗茶/香烟销售录入
 // 茗茶录入：为每个茶品生成杯/壶输入行，自动计算应收金额
 function initTeaBlock() {
+    if (!inventoryLegacyDailyInputEnabled('tea')) { $id('dmTeaList').innerHTML = '<div class="inventory-muted">此类型已关闭日报销售录入</div>'; return; }
     var items = DB.teaItems;
     if (!items.length) { $id('dmTeaList').innerHTML = '<div style="font-size:.74rem;color:var(--tx-m)">先在茗茶管理中添加</div>'; return; }
     var h = '';
@@ -405,6 +407,7 @@ function initTeaBlock() {
 }
 // 香烟录入：：为每个香烟生成数量输入行，自动计算应收金额
 function initCigBlock() {
+    if (!inventoryLegacyDailyInputEnabled('cig')) { $id('dmCigList').innerHTML = '<div class="inventory-muted">此类型已关闭日报销售录入</div>'; return; }
     var items = DB.cigItems;
     if (!items.length) { $id('dmCigList').innerHTML = '<div style="font-size:.74rem;color:var(--tx-m)">先在香烟管理中添加</div>'; return; }
     var h = '';
@@ -456,6 +459,7 @@ function calcCigExpected(el) {
 }
 // 酒类录入：为每个酒类生成数量输入行，自动计算应收金额
 function initAlcBlock() {
+    if (!inventoryLegacyDailyInputEnabled('alc')) { $id('dmAlcList').innerHTML = '<div class="inventory-muted">此类型已关闭日报销售录入</div>'; return; }
     var items = DB.alcItems;
     if (!items.length) { $id('dmAlcList').innerHTML = '<div style="font-size:.74rem;color:var(--tx-m)">先在酒类管理中添加</div>'; return; }
     var h = '';
@@ -492,6 +496,7 @@ function initOtherBlock() {
     if (!items.length) { $id('dmOtherList').innerHTML = '<div style="font-size:.74rem;color:var(--tx-m)">先在其他贵重物品管理中添加</div>'; return; }
     var h = '';
     items.forEach(function(item) {
+        if (!inventoryLegacyDailyInputEnabled('other', item)) return;
         h += '<div class="tea-sale-row" data-oid="' + item.id + '">';
         h += '<label>' + item.name + '</label>';
         h += '数量:<input class="inp other-sqty" type="number" value="0" style="max-width:60px" oninput="calcOtherExpected(this)"> ';
@@ -645,6 +650,10 @@ function doSaveManual(date, mode) {
     var freeData = data.freeData;
     var teaData = data.teaData;
     var cigData = data.cigData;
+    if (teaData.some(function(entry) { return !inventoryLegacyDailyInputEnabled('tea'); }) ||
+        cigData.some(function(entry) { return !inventoryLegacyDailyInputEnabled('cig'); })) {
+        toast('有已关闭的库存销售操作，无法保存'); return;
+    }
     var roomData = data.roomData || [];
     var premCum = data.premCum || 0;
     var f = { hasDel: false, hasAR: false };
@@ -669,11 +678,23 @@ function doSaveManual(date, mode) {
                 alcSales: {},
                 reporter: ''
             };
+            if (existing) {
+                if (!inventoryLegacyDailyInputEnabled('tea')) r.teaSales = JSON.parse(JSON.stringify(existing.teaSales || {}));
+                if (!inventoryLegacyDailyInputEnabled('cig')) {
+                    r.cigSales = JSON.parse(JSON.stringify(existing.cigSales || {}));
+                    r.revenue.cigarette.total = Number(existing.revenue && existing.revenue.cigarette && existing.revenue.cigarette.total) || 0;
+                }
+                if (!inventoryLegacyDailyInputEnabled('alc')) r.alcSales = JSON.parse(JSON.stringify(existing.alcSales || {}));
+                r.otherSales = JSON.parse(JSON.stringify(existing.otherSales || {}));
+            }
         }
 
         if ($id('dmReporter').value.trim()) r.reporter = $id('dmReporter').value.trim();
 
         freeData.forEach(function(fd) { matchLabel(fd.label, fd.value, r, f); });
+        if (existing && !inventoryLegacyDailyInputEnabled('cig')) {
+            r.revenue.cigarette.total = Number(existing.revenue && existing.revenue.cigarette && existing.revenue.cigarette.total) || 0;
+        }
         if (!f.hasDel) r.delivery.total = (r.delivery.meituan || 0) + (r.delivery.taobao || 0) + (r.delivery.jd || 0);
         if (!f.hasAR) r.payment.ar.total = (r.payment.ar.meituan || 0) + (r.payment.ar.douyin || 0);
 
@@ -1145,6 +1166,8 @@ function renderDP() {
     // 茗茶销售
     h += '<div class="pv-card"><h4>茗茶销售</h4>';
     DB.teaItems.forEach(function(item) {
+        var saleLocked = !inventoryLegacyDailyInputEnabled('tea', item);
+        if (saleLocked) h += '<fieldset class="inventory-disabled-sale" disabled>';
         var sv = r.teaSales && r.teaSales[item.id];
         var cups = sv ? sv.cups || 0 : 0;
         var pots = sv ? sv.pots || 0 : 0;
@@ -1157,6 +1180,7 @@ function renderDP() {
         h += '应收:<input class="ed-input tea-expected" type="number" step="0.01" value="' + expected + '" data-prev-expected="' + expected + '" style="width:80px;background:var(--card-h)" readonly> ';
         h += '实收:<input class="ed-input tea-amt" type="number" step="0.01" value="' + amt + '" style="width:80px">';
         h += '</div>';
+        if (saleLocked) h += '</fieldset>';
     });
     h += '</div>';
 
@@ -1164,6 +1188,8 @@ function renderDP() {
     var parsedCig = r.revenue.cigarette.items || {};
     h += '<div class="pv-card"><h4>香烟销售</h4>';
     DB.cigItems.forEach(function(item) {
+        var saleLocked = !inventoryLegacyDailyInputEnabled('cig', item);
+        if (saleLocked) h += '<fieldset class="inventory-disabled-sale" disabled>';
         var sv = r.cigSales && r.cigSales[item.id];
         var dq = 0, da = 0;
         if (sv) {
@@ -1214,6 +1240,7 @@ function renderDP() {
         h += '应收:<input class="ed-input cig-expected" type="number" step="0.01" value="' + (Math.round(da * 100) / 100) + '" data-prev-expected="' + (Math.round(da * 100) / 100) + '" style="width:80px;background:var(--card-h)" readonly>';
         h += '实收:<input class="ed-input cig-samt" type="number" step="0.01" value="' + (Math.round(da * 100) / 100) + '" style="width:80px">';
         h += '</div>';
+        if (saleLocked) h += '</fieldset>';
     });
     if (!DB.cigItems.length && Object.keys(parsedCig).length) {
         Object.keys(parsedCig).forEach(function(nm) {
@@ -1227,6 +1254,8 @@ function renderDP() {
     // 酒类销售
     h += '<div class="pv-card"><h4>酒类销售</h4>';
     DB.alcItems.forEach(function(item) {
+        var saleLocked = !inventoryLegacyDailyInputEnabled('alc', item);
+        if (saleLocked) h += '<fieldset class="inventory-disabled-sale" disabled>';
         var sv = r.alcSales && r.alcSales[item.id];
         var dq = sv ? sv.qty || 0 : 0;
         var da = sv ? sv.amount || 0 : 0;
@@ -1236,12 +1265,15 @@ function renderDP() {
         h += '应收:<input class="ed-input alc-expected" type="number" step="0.01" value="' + (Math.round(da * 100) / 100) + '" data-prev-expected="' + (Math.round(da * 100) / 100) + '" style="width:80px;background:var(--card-h)" readonly>';
         h += '实收:<input class="ed-input alc-samt" type="number" step="0.01" value="' + (Math.round(da * 100) / 100) + '" style="width:80px">';
         h += '</div>';
+        if (saleLocked) h += '</fieldset>';
     });
     h += '</div>';
 
     // 其他贵重物品销售
     h += '<div class="pv-card"><h4>其他贵重物品</h4>';
     DB.otherItems.forEach(function(item) {
+        var saleLocked = !inventoryLegacyDailyInputEnabled('other', item);
+        if (saleLocked) h += '<fieldset class="inventory-disabled-sale" disabled>';
         var sv = r.otherSales && r.otherSales[item.id];
         var dq = sv ? sv.qty || 0 : 0;
         var da = sv ? sv.amount || 0 : 0;
@@ -1251,8 +1283,11 @@ function renderDP() {
         h += '应收:<input class="ed-input other-expected" type="number" step="0.01" value="' + (Math.round(da * 100) / 100) + '" data-prev-expected="' + (Math.round(da * 100) / 100) + '" style="width:80px;background:var(--card-h)" readonly>';
         h += '实收:<input class="ed-input other-samt" type="number" step="0.01" value="' + (Math.round(da * 100) / 100) + '" style="width:80px">';
         h += '</div>';
+        if (saleLocked) h += '</fieldset>';
     });
     h += '</div>';
+
+    h += inventoryDailySalesSection(r.date);
 
     h += '<div class="brow" style="margin-top:12px;justify-content:flex-end;gap:10px">';
     h += '<button class="btn p" onclick="saveDaily()">保存</button>';
@@ -1391,6 +1426,28 @@ function finalizeDailySave(mode) {
 
     // 检查是否已有该日期的数据
     var existingReport = DB.dailyReports.find(function(d) { return d.date === _pd.date; });
+    var saleCollections = [
+        { key: 'teaSales', items: DB.teaItems || [], type: 'tea' },
+        { key: 'cigSales', items: DB.cigItems || [], type: 'cig' },
+        { key: 'alcSales', items: DB.alcItems || [], type: 'alc' },
+        { key: 'otherSales', items: DB.otherItems || [], type: 'other' }
+    ];
+    for (var collection of saleCollections) {
+        var incoming = _pd[collection.key] || {};
+        var previous = existingReport && existingReport[collection.key] || {};
+        for (var item of collection.items) {
+            if (inventoryLegacyDailyInputEnabled(collection.type, item)) continue;
+            if (incoming[item.id] && JSON.stringify(incoming[item.id]) !== JSON.stringify(previous[item.id])) {
+                toast('有已关闭的库存销售操作，无法保存'); return;
+            }
+            if (previous[item.id]) incoming[item.id] = JSON.parse(JSON.stringify(previous[item.id]));
+            else delete incoming[item.id];
+        }
+        _pd[collection.key] = incoming;
+    }
+    if (existingReport && !inventoryLegacyDailyInputEnabled('cig')) {
+        _pd.revenue.cigarette.total = Number(existingReport.revenue && existingReport.revenue.cigarette && existingReport.revenue.cigarette.total) || 0;
+    }
     if (existingReport && !_dailySaveMode) {
         if (!confirm('⚠️ ' + _pd.date + ' 已有日报数据，确定要覆盖吗？\n\n覆盖后原数据将被删除。')) {
             return;
@@ -1404,24 +1461,25 @@ function finalizeDailySave(mode) {
         if (oldReport) {
             Object.keys(oldReport.teaSales || {}).forEach(function(tid) {
                 var item = db.teaItems.find(function(t) { return t.id === tid; });
-                if (item) item.sales = item.sales.filter(function(s) { return s.date !== _pd.date; });
+                if (item && inventoryLegacyDailyInputEnabled('tea', item)) item.sales = item.sales.filter(function(s) { return s.date !== _pd.date; });
             });
             Object.keys(oldReport.cigSales || {}).forEach(function(cid) {
                 var item = db.cigItems.find(function(c) { return c.id === cid; });
-                if (item) item.sales = item.sales.filter(function(s) { return s.date !== _pd.date; });
+                if (item && inventoryLegacyDailyInputEnabled('cig', item)) item.sales = item.sales.filter(function(s) { return s.date !== _pd.date; });
             });
             Object.keys(oldReport.alcSales || {}).forEach(function(aid) {
                 var item = db.alcItems.find(function(a) { return a.id === aid; });
-                if (item) item.sales = item.sales.filter(function(s) { return s.date !== _pd.date; });
+                if (item && inventoryLegacyDailyInputEnabled('alc', item)) item.sales = item.sales.filter(function(s) { return s.date !== _pd.date; });
             });
             Object.keys(oldReport.otherSales || {}).forEach(function(oid) {
                 var item = db.otherItems.find(function(o) { return o.id === oid; });
-                if (item) item.sales = item.sales.filter(function(s) { return s.date !== _pd.date; });
+                if (item && inventoryLegacyDailyInputEnabled('other', item)) item.sales = item.sales.filter(function(s) { return s.date !== _pd.date; });
             });
         }
 
         // 茗茶销售
         document.querySelectorAll('.tea-sale-row[data-tid]').forEach(function(row) {
+            if (!inventoryLegacyDailyInputEnabled('tea')) return;
             var id = row.dataset.tid;
             var item = db.teaItems.find(function(t) { return t.id === id; });
             if (!item) return;
@@ -1444,6 +1502,7 @@ function finalizeDailySave(mode) {
         // 香烟销售
         var cigTotal = 0;
         document.querySelectorAll('.tea-sale-row[data-cid]').forEach(function(row) {
+            if (!inventoryLegacyDailyInputEnabled('cig')) return;
             var id = row.dataset.cid;
             var item = db.cigItems.find(function(c) { return c.id === id; });
             if (!item) return;
@@ -1469,6 +1528,7 @@ function finalizeDailySave(mode) {
         // 酒类销售
         var alcTotal = 0;
         document.querySelectorAll('.tea-sale-row[data-aid]').forEach(function(row) {
+            if (!inventoryLegacyDailyInputEnabled('alc')) return;
             var id = row.dataset.aid;
             var item = db.alcItems.find(function(a) { return a.id === id; });
             if (!item) return;
@@ -1494,7 +1554,7 @@ function finalizeDailySave(mode) {
         document.querySelectorAll('.tea-sale-row[data-oid]').forEach(function(row) {
             var id = row.dataset.oid;
             var item = db.otherItems.find(function(o) { return o.id === id; });
-            if (!item) return;
+            if (!item || !inventoryLegacyDailyInputEnabled('other', item)) return;
             var qty = parseFloat(row.querySelector('.other-sqty').value) || 0;
             var expected = parseFloat(row.querySelector('.other-expected').value) || 0;
             var amt = parseFloat(row.querySelector('.other-samt').value) || 0;
@@ -1647,6 +1707,8 @@ function showDailyModal(date) {
         });
         h += '</table></div>';
     }
+
+    h += inventoryDailySalesSection(r.date);
 
     // 汇报人
     if (r.reporter) {
@@ -1915,6 +1977,8 @@ function addEditRoomRow() {
 // 库存销售编辑后，同步日报
 // 库存销售编辑/删除后，同步日报
 function syncInvToDaily(type, date) {
+    if (type !== 'other' && !inventoryLegacyDailyInputEnabled(type)) return;
+    if (type === 'other' && !inventoryLegacyDailyInputEnabled('other')) return;
     var items = DB[INV[type].key] || [];
 
     // ★ 不再创建负数purchase记录（直接通过销售扣减库存）
@@ -1975,8 +2039,10 @@ function syncInvToDaily(type, date) {
         }
 
         if (type === 'other') {
-            var newOtherSales = {};
+            var newOtherSales = Object.assign({}, dr.otherSales || {});
             DB.otherItems.forEach(function(item) {
+                if (!inventoryLegacyDailyInputEnabled('other', item)) return;
+                delete newOtherSales[item.id];
                 var qty = 0, amount = 0;
                 item.sales.filter(function(s) { return s.date === date; }).forEach(function(s) {
                     qty += (s.qty || 0);

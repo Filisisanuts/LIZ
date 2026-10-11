@@ -48,6 +48,16 @@ export interface AppConfig {
   // 贵重物品配置
   inventoryTypes: string[];
   customInventoryTypes: string[];
+  inventoryTypeDefinitions: Array<{
+    id: string;
+    name: string;
+    preset: 'tea' | 'cig' | 'alc' | 'other' | 'other-category' | 'generic';
+    legacyCategory: string;
+    archived: boolean;
+    deleted: boolean;
+    dailyLink: boolean;
+    actions: { add: boolean; inbound: boolean; sale: boolean; adjust: boolean; loss: boolean };
+  }>;
 
   // 工资模板与部门
   salaryDepartments: string[];

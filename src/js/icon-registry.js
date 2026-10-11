@@ -10,6 +10,7 @@
         package: '<path d="m4 7 8-4 8 4v10l-8 4-8-4Z"/><path d="m4 7 8 4 8-4M12 11v10"/>',
         wine: '<path d="M7 3h10v5a5 5 0 0 1-10 0Z"/><path d="M12 13v7M8 21h8"/>',
         gem: '<path d="m3 9 4-5h10l4 5-9 11Z"/><path d="m3 9h18M9 9l3 11 3-11M7 4l2 5m8-5-2 5"/>',
+        plus: '<path d="M12 5v14M5 12h14"/>',
         warehouse: '<path d="m3 10 9-6 9 6v10H3Z"/><path d="M8 20v-6h8v6M7 10h.01M12 10h.01M17 10h.01"/>',
         alert: '<path d="m12 3 10 18H2Z"/><path d="M12 9v4M12 17h.01"/>',
         chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/><path d="m3 8 6-3 6 4 6-6"/>',
