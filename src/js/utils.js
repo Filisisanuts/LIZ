@@ -1,5 +1,11 @@
 var $id=function(id){return document.getElementById(id)};
 
+function axEscapeHtml(value) {
+    return String(value == null ? '' : value).replace(/[&<>'"]/g, function(char) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char];
+    });
+}
+
 // 括号转换：英文括号转中文括号
 function fixBrackets(s){if(!s)return s;return s.replace(/\(/g,'（').replace(/\)/g,'）')}
 

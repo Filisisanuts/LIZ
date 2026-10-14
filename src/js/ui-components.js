@@ -42,12 +42,6 @@ function axSyncSelectTriggerLabel(native) {
     if (label) trigger.setAttribute(label.attribute, label.value);
 }
 
-function axEscapeHtml(value) {
-    return String(value == null ? '' : value).replace(/[&<>'"]/g, function(char) {
-        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char];
-    });
-}
-
 function axIsSheetViewport() {
     return window.matchMedia('(max-width: 600px)').matches;
 }
