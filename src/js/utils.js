@@ -92,8 +92,10 @@ function showModal(content, width) {
 function closeModal() {
     // AI 识图确认框被遮罩关闭时，也必须释放待处理的原始照片。
     if(window._pendingMimoDialog&&typeof clearPendingMimo==='function')clearPendingMimo();
+    if(typeof cleanupSalaryImagePaste==='function')cleanupSalaryImagePaste();
     var m = $id('modal'), o = $id('overlay');
     if (m) {
+        if (m.querySelector('.salary-image-review') && typeof clearSalaryImageReviewState === 'function') clearSalaryImageReviewState();
         m.onkeydown = null;
         m.removeAttribute('role');
         m.removeAttribute('aria-modal');
@@ -382,6 +384,44 @@ function prepareMimoImage(file,cb){
         finish(new Error("内存不足，无法加载图片。请关闭其他标签页后重试"));
     }
 }
+
+// 供工资表等图片识别场景复用当前账号配置的 OpenAI 兼容视觉服务。
+// 不记录图片内容、识别文本或工资数据；调用方负责验证并展示识别结果。
+function requestConfiguredVisionAI(prompt,base64,callback){
+    var endpoint=localStorage.getItem('ax_mimo_ep')||'';
+    var apiKey=localStorage.getItem('ax_mimo_key')||'';
+    var model=localStorage.getItem('ax_mimo_model')||'mimo-v2.5';
+    if(!endpoint||!apiKey){callback(new Error('请先在设置页配置 AI 识图服务'));return}
+    try{new URL(endpoint,window.location.href)}catch(e){callback(new Error('AI 识图接口地址无效，请检查设置'));return}
+    var body={model:model,messages:[{role:'user',content:[
+        {type:'text',text:prompt},
+        {type:'image_url',image_url:{url:'data:image/jpeg;base64,'+base64}}
+    ]}],max_tokens:8192,temperature:.1};
+    var xhr=new XMLHttpRequest();
+    xhr.open('POST',endpoint,true);
+    xhr.setRequestHeader('Content-Type','application/json');
+    xhr.setRequestHeader('Authorization','Bearer '+apiKey);
+    xhr.timeout=120000;
+    xhr.onload=function(){
+        if(xhr.status<200||xhr.status>=300){
+            var message='AI 服务返回 HTTP '+xhr.status;
+            try{JSON.parse(xhr.responseText||'');message=mimoErrorMessage(xhr.responseText)||message}catch(e){}
+            callback(new Error(message));
+            return;
+        }
+        try{
+            var data=JSON.parse(xhr.responseText||'{}');
+            var content=data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content;
+            if(Array.isArray(content)) content=content.map(function(part){return part&&part.text||''}).join('\n');
+            if(typeof content!=='string'||!content.trim()) throw new Error('AI 返回内容为空');
+            callback(null,content);
+        }catch(error){callback(error instanceof Error?error:new Error('无法读取 AI 返回内容'))}
+    };
+    xhr.onerror=function(){callback(new Error('请求失败，请检查网络或 AI 接口地址'))};
+    xhr.ontimeout=function(){callback(new Error('AI 识别超时，请稍后重试'))};
+    try{xhr.send(JSON.stringify(body))}catch(error){callback(new Error('无法发送图片，请重试'))}
+}
+
 function doAIParse(){
     if(!localStorage.getItem('ax_mimo_key')){toast('请先在设置页配置MiMo API');return}
     var input=document.createElement('input');input.type='file';input.accept='image/*';input.capture='environment';

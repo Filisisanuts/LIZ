@@ -79,7 +79,8 @@ var _salDropTargetId = null;
 var _salDropPosition = 'before';
 var _salaryView = 'entry';
 var _salaryDetailPeriod = '';
-var _pendingSalaryImportRows = [];
+var _salaryImageImportState = null;
+var _salaryImagePasteHandler = null;
 var SALARY_TRASH_RETENTION_DAYS = 30;
 
 function salaryFieldDefinitions() {
@@ -2080,7 +2081,13 @@ function changeSalaryPeriod(period) {
 }
 
 function saveSalaryTable() {
-    var validRows = _salaryTableData.filter(function(r) { return r.employee && calcSalaryActual(r) !== 0; });
+    var validRows = _salaryTableData.filter(function(r) {
+        return r.employee && (calcSalaryActual(r) !== 0 || r._salaryRecognitionAdded);
+    }).map(function(row) {
+        var savedRow = Object.assign({}, row);
+        delete savedRow._salaryRecognitionAdded;
+        return savedRow;
+    });
     if (validRows.length === 0) { toast('没有有效数据'); return; }
     var departments = salaryDepartments();
     storeAppConfig({ salaryDepartments: departments });
@@ -2111,10 +2118,11 @@ function importSalaryExcel() {
 }
 
 function openSalaryAddMenu() {
-    var h = '<h3>添加工资数据</h3><p class="salary-move-copy">选择单独添加员工，或从 Excel 工资表批量识别。</p>';
+    var h = '<h3>工资数据</h3><p class="salary-move-copy">识别结果先在核对页确认；每行可匹配已有员工、跳过，或添加到当前月份工资名单。</p>';
     h += '<div class="salary-add-options">';
     h += '<button type="button" class="salary-template-action primary" onclick="addSalaryEmployeeFromMenu()"><strong>添加空白员工</strong><span>新增一行后手动填写工资信息</span></button>';
-    h += '<button type="button" class="salary-template-action" onclick="importSalaryExcelFromMenu()"><strong>导入 Excel 工资表</strong><span>支持 .xlsx 和 .xls 文件</span></button>';
+    h += '<button type="button" class="salary-template-action" onclick="importSalaryExcelFromMenu()"><strong>识别 Excel 工资表</strong><span>匹配已有员工并填入工资数据</span></button>';
+    h += '<button type="button" class="salary-template-action" onclick="openSalaryImageImport()"><strong>识别工资表图片</strong><span>选择图片、粘贴截图或用手机拍照</span></button>';
     h += '</div><div class="salary-template-footer"><button type="button" class="btn" onclick="closeModal()">取消</button></div>';
     showModal(h, 500);
 }
@@ -2129,6 +2137,556 @@ function importSalaryExcelFromMenu() {
     closeModal();
 }
 
+function cleanupSalaryImagePaste() {
+    if (_salaryImagePasteHandler) {
+        document.removeEventListener('paste', _salaryImagePasteHandler);
+        _salaryImagePasteHandler = null;
+    }
+}
+
+function clearSalaryImageReviewState() {
+    _salaryImageImportState = null;
+}
+
+function openSalaryImageImport() {
+    _salaryImageImportState = null;
+    var h = '<h3>识别工资表图片</h3>';
+    h += '<p class="salary-move-copy">支持工资表截图和清晰的打印表照片。图片会发送到当前设置的 AI 识图服务；识别后先核对员工对应关系和工资数据，只填入已有员工，不新增或删除员工。</p>';
+    h += '<div class="salary-image-pick-actions">';
+    h += '<button type="button" class="salary-template-action primary" onclick="selectSalaryImage(false)"><strong>选择图片</strong><span>从设备中选择一张图片</span></button>';
+    h += '<button type="button" class="salary-template-action" onclick="selectSalaryImage(true)"><strong>手机拍照</strong><span>打开相机拍摄工资表</span></button>';
+    h += '</div><div id="salaryImagePasteZone" class="salary-image-paste-zone" tabindex="0" role="button" aria-label="粘贴工资表截图">';
+    h += '<strong>粘贴截图</strong><span>复制一张截图后，在这里按 Ctrl+V / ⌘V</span></div>';
+    h += '<div class="salary-template-footer"><button type="button" class="btn" onclick="closeModal()">取消</button></div>';
+    showModal(h, 560);
+    cleanupSalaryImagePaste();
+    _salaryImagePasteHandler = function(event) {
+        if (!$id('salaryImagePasteZone')) return;
+        var items = event.clipboardData && event.clipboardData.items;
+        if (!items) return;
+        for (var i = 0; i < items.length; i++) {
+            var item = items[i];
+            if (item.kind === 'file' && /^image\//i.test(item.type || '')) {
+                var file = item.getAsFile();
+                if (file) {
+                    event.preventDefault();
+                    handleSalaryImageFile(file);
+                    return;
+                }
+            }
+        }
+    };
+    document.addEventListener('paste', _salaryImagePasteHandler);
+}
+
+function selectSalaryImage(useCamera) {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    if (useCamera) input.setAttribute('capture', 'environment');
+    input.onchange = function() {
+        var file = input.files && input.files[0];
+        if (file) handleSalaryImageFile(file);
+    };
+    input.click();
+}
+
+function handleSalaryImageFile(file) {
+    var imageFile = file && ((file.type && /^image\//i.test(file.type)) || /\.(png|jpe?g|webp|gif|bmp|heic|heif)$/i.test(file.name || ''));
+    if (!imageFile) {
+        toast('请选择图片文件');
+        return;
+    }
+    cleanupSalaryImagePaste();
+    closeModal();
+    if (typeof prepareMimoImage !== 'function' || typeof requestConfiguredVisionAI !== 'function') {
+        toast('图片识别服务尚未加载，请刷新页面后重试');
+        return;
+    }
+    showAILoading('preparing');
+    prepareMimoImage(file, function(imageError, base64) {
+        if (imageError) {
+            hideAILoading(null);
+            var message = imageError.message || '图片处理失败';
+            if (message.indexOf('仍超过 2 MB') >= 0) message = '图片处理后仍然过大，请裁剪或降低分辨率后重试（一次只识别一张图片）';
+            toast(message);
+            return;
+        }
+        hideAILoading(null);
+        showAILoading();
+        requestConfiguredVisionAI(salaryImageRecognitionPrompt(), base64, function(requestError, reply) {
+            hideAILoading(null);
+            if (requestError) {
+                toast('工资表识别失败：' + (requestError.message || '请稍后重试'));
+                return;
+            }
+            try {
+                _salaryImageImportState = normalizeSalaryImageRecognition(reply);
+                showSalaryImageReview();
+            } catch (error) {
+                _salaryImageImportState = null;
+                toast(error.message || '无法读取工资表识别结果');
+            }
+        });
+    });
+}
+
+function salaryImageRecognitionPrompt() {
+    var fields = salaryRecognitionInputFields().map(function(field) {
+        return { id: field.key, label: field.label, aliases: field.aliases || [], type: field.numeric ? 'number' : 'text' };
+    });
+    return '你是工资表 OCR 助手。识别图片中的月份、表头、员工姓名/部门/职务/卡号和工资数值，以便与系统中已有员工匹配。只提取可见内容，不要推测缺失值；不要计算工资、创建员工或补造字段。\n'
+        + '可用工资字段（只能返回其中的 id，不允许创建字段）：' + JSON.stringify(fields) + '\n'
+        + '请只返回 JSON，格式：{"period":"YYYY-MM 或空字符串","columns":[{"header":"图片原表头","fieldId":"匹配的字段 id 或空字符串","confidence":0到1}],"rows":[{"values":[{"value":"单元格原文或空字符串","confidence":0到1}]}]}。'
+        + '每行 values 的顺序必须与 columns 完全一致。无法确认映射时 fieldId 留空；看不清的单元格 value 留空且 confidence 低于 0.5。月份无法识别时 period 留空。当前页面月份是 ' + _salaryPeriod + '。';
+}
+
+function salaryImageNormalizeMonth(value) {
+    var text = String(value || '').trim();
+    var match = text.match(/(20\d{2})\s*(?:年|[-/.])\s*(\d{1,2})/);
+    if (!match) return '';
+    var month = Number(match[2]);
+    return month >= 1 && month <= 12 ? match[1] + '-' + String(month).padStart(2, '0') : '';
+}
+
+function salaryImageConfidence(value) {
+    var confidence = Number(value);
+    if (!Number.isFinite(confidence)) return 0;
+    if (confidence > 1 && confidence <= 100) confidence /= 100;
+    return Math.max(0, Math.min(1, confidence));
+}
+
+function salaryRecognitionCardKey() {
+    var cardField = salaryInputFields(true).find(function(field) {
+        return field.key === 'bankCard' || field.label === '卡号' || (field.aliases || []).indexOf('卡号') >= 0;
+    });
+    return cardField ? cardField.key : 'bankCard';
+}
+
+function salaryRecognitionIdentityKeys() {
+    return ['employee', 'department', 'position', salaryRecognitionCardKey()];
+}
+
+function salaryRecognitionInputFields() {
+    var identityKeys = salaryRecognitionIdentityKeys();
+    return salaryInputFields(true).filter(function(field) {
+        return field.numeric || identityKeys.indexOf(field.key) >= 0;
+    });
+}
+
+function salaryRecognitionWritableFields() {
+    var identityKeys = salaryRecognitionIdentityKeys();
+    return salaryNumericFields(true).filter(function(field) {
+        return identityKeys.indexOf(field.key) < 0;
+    });
+}
+
+function salaryRecognitionText(value) {
+    return String(value == null ? '' : value).replace(/\s+/g, '').trim().toLowerCase();
+}
+
+function salaryRecognitionEmployeeLabel(row) {
+    return [row.employee, row.department, row.position, row[salaryRecognitionCardKey()]]
+        .map(function(value) { return String(value || '').trim(); })
+        .filter(Boolean).join(' · ');
+}
+
+function salaryRecognitionIdentityForRow(state, rowIndex) {
+    var identity = {};
+    var identityKeys = salaryRecognitionIdentityKeys();
+    (state.columns || []).forEach(function(column, columnIndex) {
+        if (identityKeys.indexOf(column.fieldId) < 0) return;
+        var cell = state.rows[rowIndex] && state.rows[rowIndex][columnIndex];
+        identity[column.fieldId] = String(cell && cell.value != null ? cell.value : '').trim();
+    });
+    return identity;
+}
+
+function salaryRecognitionMatchKey(row) {
+    var identityKeys = ['employee', 'department', 'position'];
+    if (!row || identityKeys.some(function(key) { return !Object.prototype.hasOwnProperty.call(row, key); })) return '';
+    return identityKeys.map(function(key) { return salaryRecognitionText(row[key]); }).join('\u0000');
+}
+
+function salaryRecognitionFindMatch(identity, rows) {
+    var cardKey = salaryRecognitionCardKey();
+    var incomingCard = String(identity[cardKey] || '').trim();
+    if (incomingCard) {
+        var cardMatches = rows.filter(function(row) {
+            var existingCard = String(row[cardKey] || '').trim();
+            return existingCard && salaryRecognitionText(existingCard) === salaryRecognitionText(incomingCard);
+        });
+        if (cardMatches.length === 1) return { status: 'matched', employeeId: cardMatches[0].id, reason: '按卡号匹配' };
+        if (cardMatches.length > 1) return { status: 'pending', reason: '多个员工使用相同卡号' };
+    }
+    var key = salaryRecognitionMatchKey(identity);
+    if (!key) return { status: 'pending', reason: '需要姓名、部门和职务才能自动匹配' };
+    var identityMatches = rows.filter(function(row) { return salaryRecognitionMatchKey(row) === key; });
+    if (incomingCard) {
+        if (identityMatches.length === 1 && !String(identityMatches[0][cardKey] || '').trim()) {
+            return { status: 'matched', employeeId: identityMatches[0].id, reason: '原员工未填写卡号，按姓名、部门和职务匹配' };
+        }
+        if (identityMatches.length) return { status: 'pending', reason: '卡号与同名员工不一致，请核对' };
+        return { status: 'pending', reason: '未匹配到已有员工' };
+    }
+    if (identityMatches.length === 1) return { status: 'matched', employeeId: identityMatches[0].id, reason: '按姓名、部门和职务匹配' };
+    if (identityMatches.length > 1) return { status: 'pending', reason: '存在多名相同姓名、部门和职务的员工' };
+    return { status: 'pending', reason: '未匹配到已有员工' };
+}
+
+function salaryRecognitionRefreshMatches() {
+    var state = _salaryImageImportState;
+    if (!state) return [];
+    var oldMatches = state.matches || [];
+    var existingRows = _salaryTableData.filter(function(row) { return !!String(row.employee || '').trim(); });
+    var reserved = {};
+    state.matches = state.rows.map(function(row, rowIndex) {
+        var previous = oldMatches[rowIndex];
+        var match;
+        if (previous && previous.manual) {
+            match = Object.assign({}, previous);
+            if (match.status === 'matched' && !existingRows.some(function(existing) { return String(existing.id) === String(match.employeeId); })) {
+                match = { status: 'pending', reason: '所选员工已不在当前月份名单中', manual: true };
+            }
+        } else {
+            match = salaryRecognitionFindMatch(salaryRecognitionIdentityForRow(state, rowIndex), existingRows);
+        }
+        if (match.status === 'matched') {
+            var id = String(match.employeeId || '');
+            if (!id || reserved[id]) return { status: 'pending', reason: '多条识别记录指向同一员工，请核对', manual: !!match.manual };
+            reserved[id] = true;
+        }
+        return match;
+    });
+    return state.matches;
+}
+
+function salaryRecognitionMatchChanged(select, rowIndex) {
+    if (!_salaryImageImportState || !_salaryImageImportState.rows[rowIndex]) return;
+    var value = select.value;
+    if (value === '__skip') {
+        _salaryImageImportState.matches[rowIndex] = { status: 'skipped', reason: '已选择跳过', manual: true };
+    } else if (value === '__add_new') {
+        _salaryImageImportState.matches[rowIndex] = { status: 'new_employee', reason: '最终确认后添加到当前月份', manual: true };
+    } else if (value) {
+        _salaryImageImportState.matches[rowIndex] = { status: 'matched', employeeId: value, reason: '手动匹配到现有员工', manual: true };
+    } else {
+        _salaryImageImportState.matches[rowIndex] = { status: 'pending', reason: '请选择已有员工、添加当前员工或跳过本行', manual: true };
+    }
+    updateSalaryImageReviewStatus();
+}
+
+function salaryImageResolveField(name) {
+    var normalized = String(name || '').replace(/\s+/g, '').toLowerCase();
+    if (!normalized) return null;
+    return salaryRecognitionInputFields().find(function(field) {
+        return [field.key, field.label].concat(field.aliases || []).some(function(value) {
+            return String(value || '').replace(/\s+/g, '').toLowerCase() === normalized;
+        });
+    }) || null;
+}
+
+function normalizeSalaryImageRecognition(reply) {
+    var text = String(reply || '').trim();
+    var fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fenced) text = fenced[1].trim();
+    else {
+        var first = text.indexOf('{'), last = text.lastIndexOf('}');
+        if (first >= 0 && last > first) text = text.slice(first, last + 1);
+    }
+    var result;
+    try { result = JSON.parse(text); } catch (error) { throw new Error('AI 返回格式无法解析，请换一张更清晰的图片重试'); }
+    if (!result || typeof result !== 'object') throw new Error('AI 返回内容不是有效的工资表数据');
+    var rawColumns = Array.isArray(result.columns) ? result.columns : [];
+    var columns = rawColumns.map(function(column, index) {
+        if (typeof column === 'string') column = { header: column };
+        column = column || {};
+        var header = String(column.header || column.name || '第 ' + (index + 1) + ' 列').trim();
+        var field = salaryRecognitionInputFields().find(function(item) { return item.key === String(column.fieldId || column.field || ''); })
+            || salaryImageResolveField(header);
+        return { header: header, fieldId: field ? field.key : '', confidence: salaryImageConfidence(column.confidence) };
+    });
+    var rawRows = Array.isArray(result.rows) ? result.rows : (Array.isArray(result.employees) ? result.employees : []);
+    if (!columns.length && rawRows.length && rawRows[0] && !Array.isArray(rawRows[0].values)) {
+        var firstRow = rawRows[0];
+        Object.keys(firstRow).forEach(function(key) {
+            if (key !== 'confidence' && key !== 'confidences') {
+                var field = salaryImageResolveField(key);
+                columns.push({ header: key, fieldId: field ? field.key : '', confidence: 0 });
+            }
+        });
+    }
+    if (!columns.length || !rawRows.length) throw new Error('没有识别到工资表表头或员工数据');
+    var rows = rawRows.map(function(row) {
+        row = row || {};
+        var rawValues = Array.isArray(row) ? row : (Array.isArray(row.values) ? row.values : (Array.isArray(row.cells) ? row.cells : null));
+        return columns.map(function(column, index) {
+            var cell = rawValues ? rawValues[index] : row[column.header];
+            if (!rawValues && cell === undefined && column.fieldId) cell = row[column.fieldId];
+            var value = cell && typeof cell === 'object' ? (cell.value !== undefined ? cell.value : cell.text) : cell;
+            var cellConfidence = cell && typeof cell === 'object' ? cell.confidence : null;
+            if (cellConfidence === null || cellConfidence === undefined) {
+                var confidenceList = row && row.confidences;
+                cellConfidence = confidenceList && confidenceList[index] !== undefined ? confidenceList[index] : column.confidence;
+            }
+            return { value: value == null ? '' : String(value).trim(), confidence: salaryImageConfidence(cellConfidence), low: salaryImageConfidence(cellConfidence) < 0.7 };
+        });
+    });
+    return {
+        source: 'image',
+        period: salaryImageNormalizeMonth(result.period || result.month),
+        columns: columns,
+        rows: rows,
+        periodChoice: ''
+    };
+}
+
+function salaryImageMappingError() {
+    var state = _salaryImageImportState;
+    if (!state) return '没有可核对的工资表识别结果';
+    salaryRecognitionRefreshMatches();
+    var used = {};
+    var fields = {};
+    salaryRecognitionInputFields().forEach(function(field) { fields[field.key] = field; });
+    var writableColumnCount = 0;
+    for (var i = 0; i < state.columns.length; i++) {
+        var key = state.columns[i].fieldId;
+        if (!key) return '请为每个未匹配列选择一个字段，或选择“跳过”';
+        if (key === '__skip') continue;
+        if (!fields[key]) return '识别列“' + state.columns[i].header + '”不是可用于匹配或工资填入的字段，请重新映射或跳过';
+        if (used[key]) return '同一个字段不能映射多个识别列';
+        used[key] = true;
+        if (fields[key].numeric && salaryRecognitionWritableFields().some(function(field) { return field.key === key; })) writableColumnCount++;
+    }
+    if (!writableColumnCount) return '请至少映射一个已配置的工资数值字段';
+    if (state.period && state.period !== _salaryPeriod && !state.periodChoice) return '请先选择填入当前月份，或切换到识别出的月份';
+    for (var rowIndex = 0; rowIndex < state.rows.length; rowIndex++) {
+        var match = state.matches[rowIndex];
+        if (match && match.status === 'skipped') continue;
+        if (match && match.status === 'new_employee') {
+            var identity = salaryRecognitionIdentityForRow(state, rowIndex);
+            if (!String(identity.employee || '').trim()) return '第 ' + (rowIndex + 1) + ' 行：请将员工姓名列映射到“姓名”后再添加当前员工';
+            continue;
+        }
+        if (!match || match.status !== 'matched') return '第 ' + (rowIndex + 1) + ' 行：' + ((match && match.reason) || '请选择已有员工、添加当前员工或跳过本行');
+    }
+    for (var columnIndex = 0; columnIndex < state.columns.length; columnIndex++) {
+        var field = fields[state.columns[columnIndex].fieldId];
+        if (!field || !field.numeric || !salaryRecognitionWritableFields().some(function(item) { return item.key === field.key; })) continue;
+        for (var numericRowIndex = 0; numericRowIndex < state.rows.length; numericRowIndex++) {
+            var numericMatch = state.matches[numericRowIndex];
+            if (numericMatch && numericMatch.status === 'skipped') continue;
+            var cell = state.rows[numericRowIndex][columnIndex] || { value: '', low: true };
+            var text = String(cell.value == null ? '' : cell.value).trim();
+            if (text && !salaryImageNumericIsValid(text)) return '第 ' + (numericRowIndex + 1) + ' 行的“' + field.label + '”不是有效数字，请修改标红单元格';
+        }
+    }
+    return '';
+}
+
+function salaryImageNumericIsValid(value) {
+    var text = String(value == null ? '' : value).trim();
+    if (!text) return true;
+    return Number.isFinite(Number(text.replace(/[\s,，￥¥元%]/g, '')));
+}
+
+function salaryImageMappingChanged(select, index) {
+    if (!_salaryImageImportState || !_salaryImageImportState.columns[index]) return;
+    _salaryImageImportState.columns[index].fieldId = select.value;
+    salaryRecognitionRefreshMatches();
+    updateSalaryImageReviewStatus();
+}
+
+function salaryImageCellChanged(input) {
+    var state = _salaryImageImportState;
+    if (!state) return;
+    var rowIndex = Number(input.dataset.row), columnIndex = Number(input.dataset.column);
+    if (!state.rows[rowIndex] || !state.rows[rowIndex][columnIndex]) return;
+    state.rows[rowIndex][columnIndex].value = input.value;
+    state.rows[rowIndex][columnIndex].low = false;
+    input.classList.remove('is-low-confidence');
+    input.title = '已手动核对';
+    salaryRecognitionRefreshMatches();
+    updateSalaryImageReviewStatus();
+}
+
+function salaryImageChoosePeriod(choice) {
+    var state = _salaryImageImportState;
+    if (!state) return;
+    state.periodChoice = choice;
+    if (choice === 'source' && state.period && state.period !== _salaryPeriod) changeSalaryPeriod(state.period);
+    salaryRecognitionRefreshMatches();
+    showSalaryImageReview();
+}
+
+function updateSalaryImageReviewStatus() {
+    salaryRecognitionRefreshMatches();
+    var error = salaryImageMappingError();
+    var status = $id('salaryImageReviewStatus');
+    var actions = document.querySelectorAll('.salary-recognition-apply');
+    var state = _salaryImageImportState;
+    document.querySelectorAll('.salary-image-cell').forEach(function(input) {
+        if (!state) return;
+        var rowIndex = Number(input.dataset.row), columnIndex = Number(input.dataset.column);
+        var column = state.columns[columnIndex];
+        var field = column && salaryRecognitionInputFields().find(function(item) { return item.key === column.fieldId; });
+        var cell = state.rows[rowIndex] && state.rows[rowIndex][columnIndex];
+        var rowMatch = state.matches[rowIndex];
+        var invalid = !!(rowMatch && rowMatch.status !== 'skipped' && field && field.numeric
+            && salaryRecognitionWritableFields().some(function(item) { return item.key === field.key; })
+            && cell && !salaryImageNumericIsValid(cell.value));
+        input.classList.toggle('is-invalid', invalid);
+        if (invalid) input.title = '数字格式无效，请修改';
+        else if (cell && cell.low) input.title = 'AI 标记为低置信度，请核对';
+        else input.title = '已手动核对';
+    });
+    document.querySelectorAll('.salary-recognition-match').forEach(function(select) {
+        if (!state) return;
+        var rowIndex = Number(select.dataset.row);
+        var match = state.matches[rowIndex];
+        var selectedId = match && match.status === 'skipped' ? '__skip'
+            : match && match.status === 'new_employee' ? '__add_new'
+                : (match && match.employeeId ? String(match.employeeId) : '');
+        if (select.value !== selectedId) select.value = selectedId;
+        var reason = select.parentNode && select.parentNode.querySelector('small');
+        if (reason) reason.textContent = match && match.reason || '';
+    });
+    if (status) {
+        var matches = state ? state.matches : [];
+        var matchedCount = matches.filter(function(match) { return match.status === 'matched'; }).length;
+        var newEmployeeCount = matches.filter(function(match) { return match.status === 'new_employee'; }).length;
+        var pendingCount = matches.filter(function(match) { return match.status === 'pending'; }).length;
+        var skippedCount = matches.filter(function(match) { return match.status === 'skipped'; }).length;
+        var summary = '更新现有员工 ' + matchedCount + ' 行，待添加 ' + newEmployeeCount + ' 人，待核对 ' + pendingCount + ' 行，跳过 ' + skippedCount + ' 行。';
+        status.textContent = summary + (error ? error : '确认后才会写入本月草稿；之后仍需手动保存工资。');
+        status.classList.toggle('is-error', !!error);
+        document.querySelectorAll('.salary-recognition-apply').forEach(function(button) {
+            button.textContent = newEmployeeCount ? '确认填入并添加 ' + newEmployeeCount + ' 位员工' : '填入工资数据';
+        });
+    }
+    actions.forEach(function(button) { button.disabled = !!error; });
+}
+
+function showSalaryImageReview() {
+    var state = _salaryImageImportState;
+    if (!state) return;
+    var fields = salaryRecognitionInputFields();
+    salaryRecognitionRefreshMatches();
+    var mismatch = !!(state.period && state.period !== _salaryPeriod);
+    if (!state.period) state.periodChoice = 'current';
+    else if (!mismatch) state.periodChoice = 'current';
+    var sourceLabel = state.source === 'excel' ? 'Excel 工资表' : '工资表图片';
+    var h = '<div class="salary-image-review"><h3>核对' + sourceLabel + '识别结果</h3>';
+    h += '<p class="salary-move-copy">共识别 ' + state.rows.length + ' 行。请核对工资数值和对应员工；未匹配行可选择现有员工、跳过，或标记为添加当前员工。橙色单元格为 AI 标记的低置信度内容。</p>';
+    if (mismatch) {
+        h += '<div class="salary-image-month-warning"><strong>图片月份为 ' + salaryEscape(state.period) + '，当前页面为 ' + salaryEscape(_salaryPeriod) + '</strong>';
+        h += '<div><button type="button" class="btn s" onclick="salaryImageChoosePeriod(\'current\')">填入当前月份</button>';
+        h += '<button type="button" class="btn s" onclick="salaryImageChoosePeriod(\'source\')">切换到 ' + salaryEscape(state.period) + '</button></div></div>';
+    } else if (!state.period) {
+        h += '<p class="salary-image-month-note">未识别到表格月份，将填入当前页面的 ' + salaryEscape(_salaryPeriod) + '。</p>';
+    }
+    h += '<div class="salary-image-review-wrap"><table class="salary-image-review-table"><thead><tr><th>行</th><th class="salary-recognition-match-head">对应员工</th>';
+    state.columns.forEach(function(column, columnIndex) {
+        h += '<th><div class="salary-image-column-head"><strong>' + salaryEscape(column.header) + '</strong><select class="inp salary-image-field-map" onchange="salaryImageMappingChanged(this,' + columnIndex + ')"><option value="">选择字段…</option><option value="__skip"' + (column.fieldId === '__skip' ? ' selected' : '') + '>跳过此列</option>';
+        fields.forEach(function(field) {
+            h += '<option value="' + salaryEscape(field.key) + '"' + (column.fieldId === field.key ? ' selected' : '') + '>' + salaryEscape(field.label) + '</option>';
+        });
+        h += '</select></div></th>';
+    });
+    h += '</tr></thead><tbody>';
+    state.rows.forEach(function(row, rowIndex) {
+        var match = state.matches[rowIndex] || { status: 'pending', reason: '请选择已有员工、添加当前员工或跳过本行' };
+        var selectedId = match.status === 'skipped' ? '__skip'
+            : match.status === 'new_employee' ? '__add_new'
+                : (match.employeeId || '');
+        h += '<tr><th>' + (rowIndex + 1) + '</th><td class="salary-recognition-match-cell"><select class="inp salary-recognition-match" data-row="' + rowIndex + '" aria-label="第 ' + (rowIndex + 1) + ' 行的员工处理方式" onchange="salaryRecognitionMatchChanged(this,' + rowIndex + ')">';
+        h += '<option value=""' + (!selectedId ? ' selected' : '') + '>选择员工…</option>';
+        h += '<option value="__add_new"' + (selectedId === '__add_new' ? ' selected' : '') + '>添加当前员工（确认后加入）</option>';
+        h += '<option value="__skip"' + (selectedId === '__skip' ? ' selected' : '') + '>跳过本行</option>';
+        _salaryTableData.filter(function(employee) { return !!String(employee.employee || '').trim(); }).forEach(function(employee) {
+            h += '<option value="' + salaryEscape(employee.id) + '"' + (String(selectedId) === String(employee.id) ? ' selected' : '') + '>' + salaryEscape(salaryRecognitionEmployeeLabel(employee)) + '</option>';
+        });
+        h += '</select><small>' + salaryEscape(match.reason || '') + '</small></td>';
+        state.columns.forEach(function(column, columnIndex) {
+            var cell = row[columnIndex] || { value: '', low: true };
+            h += '<td><input type="text" class="inp salary-image-cell' + (cell.low ? ' is-low-confidence' : '') + '" value="' + salaryEscape(cell.value) + '" data-row="' + rowIndex + '" data-column="' + columnIndex + '" title="' + (cell.low ? 'AI 标记为低置信度，请核对' : '点击编辑') + '" oninput="salaryImageCellChanged(this)"></td>';
+        });
+        h += '</tr>';
+    });
+    h += '</tbody></table></div><div id="salaryImageReviewStatus" class="salary-image-review-status"></div>';
+    h += '<div class="salary-template-footer split"><button type="button" class="btn" onclick="closeModal();_salaryImageImportState=null">取消</button>';
+    h += '<button type="button" class="btn d salary-recognition-apply" onclick="confirmSalaryImageRecognition()">填入工资数据</button></div></div>';
+    showModal(h, 980);
+    updateSalaryImageReviewStatus();
+}
+
+function salaryImageNumberValue(value, field, rowIndex) {
+    var text = String(value == null ? '' : value).trim();
+    if (!text) return null;
+    var number = Number(text.replace(/[\s,，￥¥元%]/g, ''));
+    if (!Number.isFinite(number)) throw new Error('第 ' + (rowIndex + 1) + ' 行的“' + field.label + '”不是有效数字，请先修正');
+    return number;
+}
+
+function confirmSalaryImageRecognition() {
+    var state = _salaryImageImportState;
+    var mappingError = salaryImageMappingError();
+    if (!state || mappingError) { toast(mappingError || '没有可核对的识别结果'); return; }
+    var fieldsByKey = {};
+    salaryRecognitionInputFields().forEach(function(field) { fieldsByKey[field.key] = field; });
+    var writableColumns = state.columns.map(function(column, index) {
+        return { field: fieldsByKey[column.fieldId], index: index };
+    }).filter(function(column) {
+        return column.field && column.field.numeric
+            && salaryRecognitionWritableFields().some(function(field) { return field.key === column.field.key; });
+    });
+    var rows = cloneSalaryRows(_salaryTableData);
+    var matchedCount = 0, addedCount = 0, writtenCount = 0, skippedCount = 0;
+    try {
+        state.rows.forEach(function(sourceRow, rowIndex) {
+            var match = state.matches[rowIndex];
+            if (!match || match.status === 'skipped') { skippedCount++; return; }
+            var target;
+            if (match.status === 'new_employee') {
+                var identity = salaryRecognitionIdentityForRow(state, rowIndex);
+                var employeeName = String(identity.employee || '').trim();
+                if (!employeeName) throw new Error('第 ' + (rowIndex + 1) + ' 行缺少员工姓名，无法添加当前员工');
+                target = createSalaryEmptyRow();
+                target.employee = employeeName;
+                target.department = String(identity.department || '').trim();
+                target.position = String(identity.position || '').trim();
+                var cardKey = salaryRecognitionCardKey();
+                target[cardKey] = String(identity[cardKey] || '').trim();
+                target._salaryRecognitionAdded = true;
+                rows.push(target);
+                addedCount++;
+            } else {
+                if (match.status !== 'matched') throw new Error('第 ' + (rowIndex + 1) + ' 行尚未匹配到员工');
+                target = rows.find(function(row) { return String(row.id) === String(match.employeeId); });
+                if (!target) throw new Error('第 ' + (rowIndex + 1) + ' 行对应的员工已不在当前月份，请重新核对');
+                matchedCount++;
+            }
+            writableColumns.forEach(function(column) {
+                var cell = sourceRow[column.index] || { value: '' };
+                var number = salaryImageNumberValue(cell.value, column.field, rowIndex);
+                if (number === null) return;
+                target[column.field.key] = number;
+                writtenCount++;
+            });
+        });
+    } catch (error) { toast(error.message || '请检查识别内容'); return; }
+    if (!writtenCount && !addedCount) {
+        toast(skippedCount === state.rows.length ? '所有行都已跳过，没有修改工资数据' : '没有可写入的工资数值');
+        return;
+    }
+    _salaryTableData = rows;
+    _salaryImageImportState = null;
+    cacheSalaryDraft();
+    renderSalaryTable();
+    closeModal();
+    toast('已更新现有员工 ' + matchedCount + ' 位，添加 ' + addedCount + ' 位，跳过 ' + skippedCount + ' 行；请检查后手动保存工资');
+}
+
 function handleSalaryExcel(event) {
     var file = event.target.files[0];
     if (!file) return;
@@ -2141,18 +2699,18 @@ function handleSalaryExcel(event) {
             var workbook = XLSX.read(data, { type: 'array' });
             var sheetName = workbook.SheetNames[0];
             var sheet = workbook.Sheets[sheetName];
-            var matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
-            prepareSalaryExcelImport(salaryExcelMatrixToObjects(matrix));
+            var matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' });
+            prepareSalaryExcelImport(salaryExcelMatrixToObjects(matrix, sheet));
         } catch (err) {
             console.error('Excel parse error:', err);
-            toast('Excel解析失败');
+            toast('Excel 工资表识别失败');
         }
     };
     reader.readAsArrayBuffer(file);
     event.target.value = '';
 }
 
-function salaryExcelMatrixToObjects(matrix) {
+function salaryExcelMatrixToObjects(matrix, sheet) {
     if (!Array.isArray(matrix) || !matrix.length) return [];
     var headerRow = matrix.findIndex(function(row) {
         return Array.isArray(row) && row.some(function(value) { return String(value).trim() === '姓名'; });
@@ -2172,99 +2730,96 @@ function salaryExcelMatrixToObjects(matrix) {
         return String(child || base || '').replace(/\s+/g, '').trim();
     });
     var startRow = childIsHeader ? childRow + 1 : headerRow + 1;
-    return matrix.slice(startRow).map(function(values) {
+    var departmentColumn = headers.findIndex(function(header) {
+        return ['部门', 'department'].indexOf(String(header || '').toLowerCase()) >= 0;
+    });
+    var merges = sheet && Array.isArray(sheet['!merges']) ? sheet['!merges'] : [];
+    return matrix.slice(startRow).map(function(values, rowOffset) {
+        var sourceRowIndex = startRow + rowOffset;
         var row = {};
         headers.forEach(function(header, index) {
             if (header) row[header] = values[index];
         });
+        if (departmentColumn >= 0 && (row['部门'] === '' || row['部门'] == null) && (row.department === '' || row.department == null)) {
+            var departmentMerge = merges.find(function(merge) {
+                return merge.s.r <= sourceRowIndex && merge.e.r >= sourceRowIndex
+                    && merge.s.c <= departmentColumn && merge.e.c >= departmentColumn;
+            });
+            if (departmentMerge) {
+                var mergeStartRow = matrix[departmentMerge.s.r] || [];
+                var departmentValue = mergeStartRow[departmentMerge.s.c];
+                if (departmentValue !== '' && departmentValue != null) row[headers[departmentColumn]] = departmentValue;
+            }
+        }
+        row.__sourceRow = sourceRowIndex + 1;
         return row;
     }).filter(function(row) {
-        return Object.keys(row).some(function(key) { return row[key] !== '' && row[key] !== null && row[key] !== undefined; });
+        return Object.keys(row).some(function(key) { return key !== '__sourceRow' && row[key] !== '' && row[key] !== null && row[key] !== undefined; });
     });
 }
 
 function salaryRowsFromExcel(jsonData) {
-    return jsonData.map(function(row) {
-        var mapped = {
-            period: _salaryPeriod,
-            department: row['部门'] || row['department'] || '',
-            note: row['备注'] || row['note'] || ''
-        };
-        salaryInputFields(true).forEach(function(field) {
-            var keys = [field.label, field.key].concat(field.aliases || []);
-            var value = '';
-            for (var i = 0; i < keys.length; i++) {
-                if (row[keys[i]] !== undefined && row[keys[i]] !== null && row[keys[i]] !== '') {
-                    value = row[keys[i]];
-                    break;
-                }
-            }
-            mapped[field.key] = field.numeric ? (parseFloat(value) || 0) : String(value || '');
+    var nameHeader = null;
+    (jsonData || []).some(function(row) {
+        nameHeader = Object.keys(row || {}).find(function(header) {
+            var field = salaryImageResolveField(header);
+            return field && field.key === 'employee';
+        }) || nameHeader;
+        return !!nameHeader;
+    });
+    return (jsonData || []).filter(function(row) {
+        return nameHeader && String(row[nameHeader] == null ? '' : row[nameHeader]).trim();
+    }).map(function(row) {
+        var clean = {};
+        Object.keys(row || {}).forEach(function(header) {
+            if (header !== '__sourceRow') clean[header] = row[header];
         });
-        return normalizeSalaryRow(mapped);
-    }).filter(function(row) { return !!String(row.employee || '').trim(); });
-}
-
-function salaryImportMatchKey(row) {
-    return [row.employee || '', row.department || '', row.position || ''].map(function(value) {
-        return String(value).trim();
-    }).join('\u0000');
-}
-
-function applySalaryExcelRows(rows, mode) {
-    if (mode === 'replace') {
-        _salaryTableData = cloneSalaryRows(rows);
-    } else {
-        var merged = cloneSalaryRows(_salaryTableData);
-        rows.forEach(function(imported) {
-            var key = salaryImportMatchKey(imported);
-            var existing = merged.find(function(row) { return salaryImportMatchKey(row) === key; });
-            if (!existing) {
-                merged.push(Object.assign({}, imported));
-                return;
-            }
-            var rowId = existing.id;
-            var employeeId = existing.employeeId;
-            salaryInputFields(true).forEach(function(field) { existing[field.key] = imported[field.key]; });
-            existing.note = imported.note || '';
-            existing.id = rowId;
-            existing.employeeId = employeeId;
-            existing.period = _salaryPeriod;
-        });
-        _salaryTableData = merged;
-    }
-    cacheSalaryDraft();
-    renderSalaryTable();
+        clean.__sourceRow = row.__sourceRow;
+        return clean;
+    });
 }
 
 function prepareSalaryExcelImport(jsonData) {
-    _pendingSalaryImportRows = salaryRowsFromExcel(jsonData);
-    if (!_pendingSalaryImportRows.length) {
-        toast('没有识别到含姓名的工资记录');
+    _salaryImageImportState = null;
+    var recognizedRows = salaryRowsFromExcel(jsonData);
+    if (!recognizedRows.length) {
+        toast('没有识别到含姓名的工资数据');
         return;
     }
-    var currentCount = _salaryTableData.filter(function(row) { return !!String(row.employee || '').trim(); }).length;
-    var h = '<h3>已识别 ' + _pendingSalaryImportRows.length + ' 位员工</h3>';
-    h += '<p class="salary-move-copy">当前草稿已有 <strong>' + currentCount + '</strong> 位员工。合并时按“姓名 + 部门 + 职务”匹配同一员工。</p>';
-    h += '<div class="salary-move-options"><button class="salary-move-option" type="button" onclick="confirmSalaryExcelImport(\'merge\')"><strong>合并到当前草稿</strong><span>更新匹配员工，并保留当前草稿中的其他员工。</span></button>';
-    h += '<button class="salary-move-option danger" type="button" onclick="confirmSalaryExcelImport(\'replace\')"><strong>覆盖当前草稿</strong><span>当前未保存内容将替换为 Excel 识别结果。</span></button></div>';
-    h += '<div class="salary-template-footer"><button type="button" class="btn" onclick="closeModal()">取消</button></div>';
-    showModal(h, 520);
+    var headers = [];
+    recognizedRows.forEach(function(row) {
+        Object.keys(row).forEach(function(header) {
+            if (header !== '__sourceRow' && headers.indexOf(header) < 0) headers.push(header);
+        });
+    });
+    _salaryImageImportState = {
+        source: 'excel',
+        period: '',
+        periodChoice: 'current',
+        columns: headers.map(function(header) {
+            var field = salaryImageResolveField(header);
+            return { header: header, fieldId: field ? field.key : '', confidence: 1 };
+        }),
+        rows: recognizedRows.map(function(row) {
+            return headers.map(function(header) {
+                var value = row[header];
+                return { value: value == null ? '' : String(value).trim(), confidence: 1, low: false };
+            });
+        }),
+        matches: []
+    };
+    salaryRecognitionRefreshMatches();
+    showSalaryImageReview();
 }
 
-function confirmSalaryExcelImport(mode) {
-    var rows = cloneSalaryRows(_pendingSalaryImportRows);
-    _pendingSalaryImportRows = [];
-    applySalaryExcelRows(rows, mode);
-    closeModal();
-    toast((mode === 'merge' ? '已合并 ' : '已导入 ') + rows.length + ' 条记录');
+function confirmSalaryExcelImport() {
+    if (!_salaryImageImportState || _salaryImageImportState.source !== 'excel') return;
+    confirmSalaryImageRecognition();
 }
 
-// 保留旧入口供测试和兼容调用；直接调用时按原有行为覆盖当前草稿。
+// 保留旧入口兼容调用；现在只打开核对流程，不直接写入或重建员工行。
 function parseSalaryExcelData(jsonData) {
-    var rows = salaryRowsFromExcel(jsonData);
-    applySalaryExcelRows(rows, 'replace');
-    toast('已导入 ' + rows.length + ' 条记录');
+    prepareSalaryExcelImport(jsonData);
 }
 
 // ------ 侧边栏生成 ------
