@@ -3,11 +3,46 @@ var _expPhotoData = null;
 // 当前编辑的费用ID（null 表示新建）
 var _editExpId = null;
 
-// 获取费用分类列表（从已有记录中提取，没有则返回默认分类）
-function getExpCats() {
-    var c = {};
-    DB.expenses.forEach(function(e) { if (e.category) c[e.category] = 1; });
-    return Object.keys(c).length ? Object.keys(c) : ['水费','电费','燃气费','物业费', '工资', '维修费', '其他'];
+// 获取费用分类列表。显式配置优先；旧配置尚未管理分类时沿用历史/默认列表。
+function getExpCats(keepCategory) {
+    var config = getAppConfig();
+    var configured = Array.isArray(config.expenseCategories) ? config.expenseCategories.slice() : [];
+    var categories = configured;
+
+    if (!config.expenseCategoriesConfigured && !configured.length) {
+        var legacy = {};
+        (DB.expenses || []).forEach(function(expense) {
+            if (expense && expense.category) legacy[expense.category] = 1;
+        });
+        categories = Object.keys(legacy).length
+            ? Object.keys(legacy)
+            : ['水费', '电费', '燃气费', '物业费', '工资', '维修费', '其他'];
+    }
+
+    if (keepCategory && categories.indexOf(keepCategory) < 0) categories.push(keepCategory);
+    return categories;
+}
+
+// 分类设置在遮罩弹窗中打开，底下的录入表单保持挂载；更新选项时保留当前草稿选择。
+function refreshExpenseCategoryOptions() {
+    var select = $id('expCatSel');
+    if (!select) return;
+
+    var selected = select.value;
+    var categories = getExpCats(selected && selected !== '__custom' ? selected : '');
+    select.textContent = '';
+
+    function addOption(value, label) {
+        var option = document.createElement('option');
+        option.value = value;
+        option.textContent = label;
+        select.appendChild(option);
+    }
+
+    addOption('', '请选择');
+    categories.forEach(function(category) { addOption(category, category); });
+    addOption('__custom', '自定义');
+    select.value = selected;
 }
 
 // ------ 费用主页 ------
@@ -27,8 +62,9 @@ function rExpense() {
     h += '<div class="hrow"><label>日期</label><input class="inp" id="expDate" type="text" readonly placeholder="选择日期" value="' + td() + '" onclick="_dpOpen(\'expDate\')" style="max-width:150px;cursor:pointer">';
     h += '<label>分类</label><select class="inp" id="expCatSel" data-ax-enhanced="true" style="max-width:120px" onchange="toggleCustomInput(this,\'expCatC\')">';
     h += '<option value="">请选择</option>';
-    cats.forEach(function(c) { h += '<option>' + c + '</option>'; });
+    cats.forEach(function(c) { h += '<option>' + axEscapeHtml(c) + '</option>'; });
     h += '<option value="__custom">自定义</option></select>';
+    h += '<button type="button" class="btn s" onclick="showExpenseCatConfig()">管理分类</button>';
     h += '<input class="inp" id="expCatC" style="display:none;max-width:120px" placeholder="输入分类">';
     h += '<label>金额</label><input class="inp" id="expAmt" type="number" step="0.01" style="max-width:100px">元</div>';
     h += '<div class="hrow"><label>备注</label><input class="inp" id="expNote"></div>';
@@ -118,11 +154,11 @@ function editExp(id) {
     if (!e) return;
     _editExpId = id;
 
-    var cats = getExpCats();
+    var cats = getExpCats(e.category);
     var h = '<h3>编辑费用</h3>';
     h += '<div class="hrow"><label>日期</label><input class="inp" id="eeDate" type="text" readonly value="' + e.date + '" onclick="_dpOpen(\'eeDate\')" style="max-width:150px;cursor:pointer">';
     h += '<label>分类</label><select class="inp" id="eeCat" style="max-width:120px">';
-    cats.forEach(function(c) { h += '<option' + (e.category === c ? ' selected' : '') + '>' + c + '</option>'; });
+    cats.forEach(function(c) { h += '<option' + (e.category === c ? ' selected' : '') + '>' + axEscapeHtml(c) + '</option>'; });
     h += '</select></div>';
     h += '<div class="hrow"><label>金额</label><input class="inp" id="eeAmt" type="number" step="0.01" value="' + e.amount + '" style="max-width:100px">';
     h += '<label>备注</label><input class="inp" id="eeNote" value="' + (e.note || '') + '"></div>';

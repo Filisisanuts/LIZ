@@ -20,6 +20,7 @@ function appConfigDefaults() {
         purchaseSections: [],
         purchaseCategories: {},
         expenseCategories: [],
+        expenseCategoriesConfigured: false,
         warehouseCategories: [],
         inventoryTypes: [],
         customInventoryTypes: [],
@@ -533,6 +534,7 @@ function normalizeSalaryTemplates(value, legacyRows) {
 
 function hasMeaningfulAppConfig(raw) {
     if (!raw || typeof raw !== 'object') return false;
+    if (raw.expenseCategoriesConfigured === true) return true;
     var fields = [
         'enabledModules', 'dailyLabels', 'purchaseSources', 'purchaseSections',
         'expenseCategories', 'warehouseCategories', 'inventoryTypes', 'customInventoryTypes'
@@ -571,6 +573,10 @@ function normalizeAppConfig(raw, legacy) {
     });
 
     config.expenseCategories = stringsWithLegacy(source.expenseCategories, legacy.expenseCategories, needsMigration);
+    // 空分类数组既可能是旧版本尚未配置，也可能是用户明确清空后的结果。
+    // 用独立标记区分两者，避免历史分类或默认值重新出现在录入选项中。
+    config.expenseCategoriesConfigured = source.expenseCategoriesConfigured === true
+        || config.expenseCategories.length > 0;
     config.warehouseCategories = stringsWithLegacy(source.warehouseCategories, legacy.warehouseCategories, needsMigration);
     config.inventoryTypes = uniqueStrings(source.inventoryTypes, []);
     config.customInventoryTypes = uniqueStrings(source.customInventoryTypes, []);

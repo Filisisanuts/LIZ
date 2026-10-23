@@ -59,6 +59,7 @@ let config: Partial<AppConfig> = {
   purchaseSections: [],
   purchaseCategories: {},
   expenseCategories: [],
+  expenseCategoriesConfigured: false,
   warehouseCategories: [],
 };
 
@@ -377,6 +378,7 @@ function initOnboardingGlobals(): void {
 
   (window as any).onboardRemoveExpCat = (cat: string) => {
     config.expenseCategories = (config.expenseCategories || []).filter((c) => c !== cat);
+    config.expenseCategoriesConfigured = true;
     refreshExpCatsList();
   };
 
@@ -440,6 +442,7 @@ function addSection(section: string): void {
 
 function addExpCat(cat: string): void {
   if (!config.expenseCategories) config.expenseCategories = [];
+  config.expenseCategoriesConfigured = true;
   if (!config.expenseCategories.includes(cat)) {
     config.expenseCategories.push(cat);
   }

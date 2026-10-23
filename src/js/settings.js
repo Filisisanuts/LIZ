@@ -1269,9 +1269,11 @@ function addExpenseCatFromConfig(cat) {
 
     var config = getAppConfig();
     if (!config.expenseCategories) config.expenseCategories = [];
+    config.expenseCategoriesConfigured = true;
     if (config.expenseCategories.indexOf(cat) < 0) {
         config.expenseCategories.push(cat);
         saveAppConfig(config);
+        refreshExpenseCategoryOptions();
     }
     showExpenseCatConfig();
 }
@@ -1279,7 +1281,9 @@ function addExpenseCatFromConfig(cat) {
 function removeExpenseCatFromConfig(cat) {
     var config = getAppConfig();
     config.expenseCategories = (config.expenseCategories || []).filter(function(c) { return c !== cat; });
+    config.expenseCategoriesConfigured = true;
     saveAppConfig(config);
+    refreshExpenseCategoryOptions();
     showExpenseCatConfig();
 }
 

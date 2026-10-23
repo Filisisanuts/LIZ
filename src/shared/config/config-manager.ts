@@ -41,6 +41,7 @@ export interface AppConfig {
 
   // 费用配置
   expenseCategories: string[];
+  expenseCategoriesConfigured?: boolean;
 
   // 仓库配置
   warehouseCategories: string[];
@@ -265,6 +266,7 @@ export function getExpenseCategories(): string[] {
 
 export function addExpenseCategory(category: string): void {
   const config = getConfig();
+  config.expenseCategoriesConfigured = true;
   if (!config.expenseCategories.includes(category)) {
     config.expenseCategories.push(category);
     saveConfig(config);
@@ -273,6 +275,7 @@ export function addExpenseCategory(category: string): void {
 
 export function removeExpenseCategory(category: string): void {
   const config = getConfig();
+  config.expenseCategoriesConfigured = true;
   config.expenseCategories = config.expenseCategories.filter((c) => c !== category);
   saveConfig(config);
 }

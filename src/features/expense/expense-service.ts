@@ -48,8 +48,9 @@ export function getMonthlyExpenses(yearMonth: string): Expense[] {
  * 从配置管理模块读取
  */
 export function getExpenseCategories(): string[] {
-  const configured = getConfig().expenseCategories;
-  if (configured.length > 0) return configured;
+  const config = getConfig();
+  const configured = config.expenseCategories;
+  if (configured.length > 0 || config.expenseCategoriesConfigured) return configured;
 
   // 从已有记录提取
   const categories: Record<string, boolean> = {};
