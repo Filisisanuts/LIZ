@@ -1327,7 +1327,7 @@ function renderPML() {
 
             // 品名
             h += '<td class="pm-name-cell"><div class="pm-name-wrap"><span class="pm-name-sizer" aria-hidden="true">' + axEscapeHtml(i.name) + '</span>';
-            h += '<input class="pm-edit pm-name-input" value="' + axEscapeHtml(i.name) + '" oninput="pmSyncNameSizer(this)" onchange="pmEdit(' + idx + ',\'name\',this.value)">';
+            h += '<input class="pm-edit pm-name-input" value="' + axEscapeHtml(i.name) + '" oninput="pmSyncNameSizer(this)" onchange="pmEdit(' + idx + ',\'name\',this.value)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();pmEdit(' + idx + ',\'name\',this.value)}">';
             h += getMatchSuggestionHTML(i);
             h += '</div></td>';
 
@@ -1383,6 +1383,62 @@ function renderPML() {
     el.innerHTML = h;
 }
 
+/**
+ * Rechecks a previously unmatched AI item after its edited name is committed.
+ * @param {number} idx Index of the changed item in `_pmItems`.
+ * @param {string} value Committed name from the current row's input.
+ * @returns {void}
+ */
+function pmRecheckAiHistoryName(idx, value) {
+    var item = _pmItems[idx];
+    if (!item) return;
+    var editedName = String(value == null ? '' : value);
+    if (item.name === editedName) return;
+
+    if (typeof item.aiHistoryWasMatchedBeforeEdit === 'undefined') {
+        item.aiHistoryWasMatchedBeforeEdit = !!item.historyMatch && !item.historyMatchAmbiguous;
+    }
+    var shouldRecheck = !item.aiHistoryWasMatchedBeforeEdit;
+    item.name = editedName;
+    delete item.historyMatch;
+    delete item.historyMatchAmbiguous;
+    delete item.originalName;
+    delete item.historyRecheckNoMatch;
+
+    if (shouldRecheck && editedName.trim()) {
+        var candidate = { name: editedName, aiHistoryReview: true };
+        addHistoryMatches([candidate]);
+        if (candidate.historyMatch && !candidate.historyMatchAmbiguous) {
+            var historySection = normalizePurchaseSource(candidate.historyMatch.section, '');
+            var historyCategory = normalizePurchaseSource(candidate.historyMatch.category, '');
+            var locationText = historySection && historyCategory
+                ? '\n最近记录位置：' + historySection + ' / ' + historyCategory
+                : '\n最近记录没有完整且当前仍有效的区域/分类。';
+            var prompt = '找到采购历史中的标准品名“' + candidate.name + '”。' + locationText + '\n是否复用到当前核对行？';
+            if (window.confirm(prompt)) {
+                item.name = candidate.name;
+                if (candidate.originalName) item.originalName = candidate.originalName;
+                item.historyMatch = candidate.historyMatch;
+
+                var currentSection = normalizePurchaseSource(item.section, '');
+                var currentCategory = normalizePurchaseSource(item.category, '');
+                var locationCompatible = !!historySection && !!historyCategory &&
+                    (!currentSection || currentSection === historySection) &&
+                    (!currentCategory || currentCategory === historyCategory);
+                if (locationCompatible) {
+                    if (!currentSection) item.section = candidate.historyMatch.section;
+                    if (!currentCategory) item.category = candidate.historyMatch.category;
+                }
+            }
+        } else if (candidate.historyMatchAmbiguous) {
+            item.historyMatchAmbiguous = true;
+        } else {
+            item.historyRecheckNoMatch = true;
+        }
+    }
+    renderPML();
+}
+
 // 表格单元格编辑：更新 _pmItems 中指定行的字段
 function pmEdit(idx, field, val) {
     if (!_pmItems[idx]) return;
@@ -1396,13 +1452,7 @@ function pmEdit(idx, field, val) {
         }
     }
     if (field === 'name' && _pmItems[idx].aiHistoryReview) {
-        _pmItems[idx].name = val;
-        delete _pmItems[idx].historyMatch;
-        delete _pmItems[idx].historyMatchAmbiguous;
-        delete _pmItems[idx].originalName;
-        _pmItems[idx].section = '';
-        _pmItems[idx].category = '';
-        renderPML();
+        pmRecheckAiHistoryName(idx, val);
         return;
     }
     if (field === 'qty' || field === 'total' || field === 'unitPrice') {

@@ -751,6 +751,8 @@ function getMatchSuggestionHTML(item) {
             message = '已匹配';
             statusClass = 'is-success';
         }
+    } else if (item.historyRecheckNoMatch) {
+        message = '已复核，未找到历史匹配';
     } else if (!item.section || !item.category) {
         message = '未匹配，请核对品名';
     }
@@ -863,16 +865,17 @@ function loadMimoModels() {
         if (xhr.status < 200 || xhr.status >= 300) { report('加载失败（HTTP ' + xhr.status + '），仍可使用当前模型'); return; }
         try {
             var response = JSON.parse(xhr.responseText);
-            var models = Array.isArray(response.data) ? response.data.map(function(model) { return String(model && model.id || '').trim(); }).filter(Boolean) : [];
+            var models = Array.isArray(response.data) ? response.data.map(function(model) {
+                return model && typeof model.id === 'string' ? model.id.trim() : '';
+            }).filter(Boolean) : [];
             models = Array.from(new Set(models)).sort();
             // 把已保存/手工输入模型保留在候选首位，再追加已去重排序的 API 结果。
             var current = select.value.trim() || (localStorage.getItem('ax_mimo_model') || '').trim();
             // 空列表响应不清空此前候选；有返回时才用当前结果刷新列表。
-            var previous = Array.from(list.options || []).map(function(option) { return String(option.value || '').trim(); });
+            var previous = Array.isArray(_mimoAvailableModels) ? _mimoAvailableModels.slice() : [];
             var options = Array.from(new Set([current].concat(models.length ? models : previous).filter(Boolean)));
-            list.innerHTML = '';
-            options.forEach(function(model) { var option = document.createElement('option'); option.value = model; list.appendChild(option); });
             select.value = current;
+            setMimoAvailableModels(options, true);
             report(models.length ? '已加载 ' + models.length + ' 个模型' : '接口未返回模型，仍可手动填写');
         } catch (error) { report('模型列表格式无法识别，仍可使用当前模型'); }
     };

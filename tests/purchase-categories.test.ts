@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 const sources = ['config-store', 'utils', 'category', 'purchase', 'sync', 'search'].map((name) =>
   readFileSync(new URL(`../src/js/${name}.js`, import.meta.url), 'utf8'),
 );
+const settingsSource = readFileSync(new URL('../src/js/settings.js', import.meta.url), 'utf8');
 
 function createStorage(initial: Record<string, string> = {}) {
   const values = new Map(Object.entries(initial));
@@ -102,15 +103,74 @@ function createHarness(categories: Record<string, string[]>, sections = ['厨房
   return { context, controls, database, key, localStorage, requests, get syncCount() { return syncCount; } };
 }
 
-/** Creates a DOM-like datalist whose options can be inspected after rendering. */
-function createDatalist(values: string[] = []) {
-  const options: any[] = values.map((value) => ({ value }));
-  return {
-    options,
-    get innerHTML() { return ''; },
-    set innerHTML(_value: string) { options.splice(0); },
-    appendChild(option: any) { options.push(option); },
+/** Creates the small DOM surface used by the custom AI model picker. */
+function createModelElement(tag: string, documentMock: any) {
+  const attributes: Record<string, string> = {};
+  const children: any[] = [];
+  const classes = new Set<string>();
+  const listeners: Record<string, (event?: any) => void> = {};
+  let html = '';
+  const element: any = {
+    tagName: tag.toUpperCase(),
+    attributes,
+    children,
+    listeners,
+    className: '',
+    id: '',
+    textContent: '',
+    value: '',
+    hidden: false,
+    type: '',
+    classList: {
+      toggle(name: string, force?: boolean) {
+        const enabled = typeof force === 'boolean' ? force : !classes.has(name);
+        if (enabled) classes.add(name);
+        else classes.delete(name);
+        return enabled;
+      },
+    },
+    setAttribute(name: string, value: string) {
+      attributes[name] = String(value);
+      if (name === 'id') element.id = String(value);
+    },
+    getAttribute(name: string) { return attributes[name] ?? null; },
+    removeAttribute(name: string) { delete attributes[name]; },
+    addEventListener(name: string, callback: (event?: any) => void) { listeners[name] = callback; },
+    appendChild(child: any) { children.push(child); return child; },
+    querySelectorAll(selector: string) {
+      return selector === '[role="option"]' ? children.filter((child) => child.attributes.role === 'option') : children;
+    },
+    querySelector(selector: string) {
+      return selector.startsWith('#') ? children.find((child) => child.id === selector.slice(1)) ?? null : null;
+    },
+    scrollIntoView() {},
+    focus() { documentMock.activeElement = element; },
+    get innerHTML() { return html; },
+    set innerHTML(value: string) {
+      html = String(value);
+      if (!html) children.splice(0);
+    },
   };
+  return element;
+}
+
+/** Loads settings code and installs mock controls for the AI model picker. */
+function setupModelPicker(harness: ReturnType<typeof createHarness>, currentModel: string, candidates: string[] = []) {
+  const documentMock = harness.context.document;
+  documentMock.activeElement = null;
+  documentMock.createElement = (tag: string) => createModelElement(tag, documentMock);
+  const input = createModelElement('input', documentMock);
+  input.value = currentModel;
+  const toggle = createModelElement('button', documentMock);
+  const list = createModelElement('div', documentMock);
+  const status = { textContent: '' };
+  harness.controls.set('mimoModel', input);
+  harness.controls.set('mimoModelToggle', toggle);
+  harness.controls.set('mimoModelOptions', list);
+  harness.controls.set('mimoModelStatus', status);
+  vm.runInContext(settingsSource, harness.context);
+  harness.context.setMimoAvailableModels([currentModel].concat(candidates), false);
+  return { input, toggle, list, status };
 }
 
 /** Creates a minimal select control for purchase source rendering and saving. */
@@ -634,14 +694,9 @@ describe('purchase category and section consistency', () => {
 
   it('loads model candidates while retaining the current custom model', () => {
     const harness = createHarness({ 厨房: [], 外场: [] });
-    const modelInput = { value: 'my-custom-vision' };
-    const modelList = createDatalist(['my-custom-vision']);
-    const status = { textContent: '' };
+    const { input: modelInput, toggle, list: modelList, status } = setupModelPicker(harness, 'my-custom-vision');
     harness.controls.set('mimoEndpoint', { value: 'https://api.example/v1/chat/completions' });
     harness.controls.set('mimoKey', { value: 'test-secret' });
-    harness.controls.set('mimoModel', modelInput);
-    harness.controls.set('mimoModelOptions', modelList);
-    harness.controls.set('mimoModelStatus', status);
 
     harness.context.loadMimoModels();
     const request = harness.requests[0];
@@ -653,21 +708,18 @@ describe('purchase category and section consistency', () => {
     request.onload();
 
     expect(modelInput.value).toBe('my-custom-vision');
-    expect(modelList.options.map((option: any) => option.value)).toEqual(['my-custom-vision', 'a-model', 'z-model']);
+    expect(modelList.children.map((option: any) => option.textContent)).toEqual(['my-custom-vision', 'a-model', 'z-model']);
+    expect(modelList.hidden).toBe(false);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
     expect(status.textContent).toBe('已加载 2 个模型');
     expect(status.textContent).not.toContain('test-secret');
   });
 
   it('keeps the custom model and existing model candidates after an empty or failed response', () => {
     const harness = createHarness({ 厨房: [], 外场: [] });
-    const modelInput = { value: 'custom-model' };
-    const modelList = createDatalist(['custom-model', 'existing-model']);
-    const status = { textContent: '' };
+    const { input: modelInput, list: modelList, status } = setupModelPicker(harness, 'custom-model', ['existing-model']);
     harness.controls.set('mimoEndpoint', { value: 'https://api.example/v1/chat/completions' });
     harness.controls.set('mimoKey', { value: 'test-secret' });
-    harness.controls.set('mimoModel', modelInput);
-    harness.controls.set('mimoModelOptions', modelList);
-    harness.controls.set('mimoModelStatus', status);
 
     harness.context.loadMimoModels();
     harness.requests[0].status = 200;
@@ -681,14 +733,60 @@ describe('purchase category and section consistency', () => {
     harness.requests[1].responseText = 'unauthorized';
     harness.requests[1].onload();
     expect(modelInput.value).toBe('custom-model');
-    expect(modelList.options.map((option: any) => option.value)).toEqual(['custom-model', 'existing-model']);
+    expect(modelList.children.map((option: any) => option.textContent)).toEqual(['custom-model', 'existing-model']);
     expect(status.textContent).toContain('HTTP 401');
 
     harness.context.loadMimoModels();
     harness.requests[2].onerror();
     expect(modelInput.value).toBe('custom-model');
-    expect(modelList.options.map((option: any) => option.value)).toEqual(['custom-model', 'existing-model']);
+    expect(modelList.children.map((option: any) => option.textContent)).toEqual(['custom-model', 'existing-model']);
     expect(status.textContent).toContain('网络或跨域限制');
+  });
+
+  it('opens, filters and selects a model from the custom picker', () => {
+    const harness = createHarness({ 厨房: [], 外场: [] });
+    const { input, toggle, list } = setupModelPicker(harness, 'custom-model', ['mimo-v2.6-pro', 'mimo-v2.5-asr']);
+
+    harness.context.toggleMimoModelList({ preventDefault() {} });
+    expect(list.hidden).toBe(false);
+    expect(input.getAttribute('aria-expanded')).toBe('true');
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+
+    harness.context.filterMimoModelList('pro');
+    expect(list.children.map((option: any) => option.textContent)).toEqual(['mimo-v2.6-pro']);
+    list.children[0].listeners.click();
+
+    expect(input.value).toBe('mimo-v2.6-pro');
+    expect(list.hidden).toBe(true);
+    expect(input.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('rechecks an edited AI item and only reuses a unique history match after confirmation', () => {
+    const harness = createHarness({ 厨房: ['干调'], 外场: ['香烟类'] });
+    harness.database.purchases.push({ items: [{ name: '纸杯', section: '厨房', category: '干调', unitPrice: 5 }] });
+    harness.context._pmItems = [{ name: '识别错名', section: '', category: '', aiHistoryReview: true }];
+    let confirmCount = 0;
+    harness.context.confirm = () => { confirmCount += 1; return true; };
+    harness.context.renderPML = () => {};
+
+    harness.context.pmEdit(0, 'name', '纸杯');
+
+    expect(confirmCount).toBe(1);
+    expect(harness.context._pmItems[0]).toMatchObject({ name: '纸杯', section: '厨房', category: '干调' });
+  });
+
+  it('keeps the edited name and does not reuse history when the user declines', () => {
+    const harness = createHarness({ 厨房: ['干调'], 外场: ['香烟类'] });
+    harness.database.purchases.push({ items: [{ name: '纸杯', section: '厨房', category: '干调', unitPrice: 5 }] });
+    harness.context._pmItems = [{ name: '识别错名', section: '', category: '', aiHistoryReview: true }];
+    harness.context.confirm = () => false;
+    harness.context.renderPML = () => {};
+
+    harness.context.pmEdit(0, 'name', '纸杯');
+
+    expect(harness.context._pmItems[0]).toMatchObject({ name: '纸杯', section: '', category: '' });
+    expect(harness.context._pmItems[0].historyMatch).toBeUndefined();
   });
 
   it('recognizes a colon-terminated outside heading instead of carrying over kitchen', () => {

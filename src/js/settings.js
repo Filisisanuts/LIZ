@@ -1,4 +1,195 @@
 // ---------- 设置主页面 ----------
+var _mimoAvailableModels = [];
+var _mimoVisibleModels = [];
+var _mimoActiveModelIndex = -1;
+
+/**
+ * Reads the model picker controls currently rendered on the settings page.
+ * @returns {{input: HTMLInputElement|null, list: HTMLElement|null, toggle: HTMLButtonElement|null}}
+ */
+function getMimoModelPickerControls() {
+    return {
+        input: document.getElementById('mimoModel'),
+        list: document.getElementById('mimoModelOptions'),
+        toggle: document.getElementById('mimoModelToggle')
+    };
+}
+
+/**
+ * Closes the visible model menu and clears its active keyboard option.
+ * @returns {void}
+ */
+function closeMimoModelList() {
+    var controls = getMimoModelPickerControls();
+    if (!controls.list || !controls.input) return;
+    controls.list.hidden = true;
+    controls.input.setAttribute('aria-expanded', 'false');
+    controls.input.removeAttribute('aria-activedescendant');
+    if (controls.toggle) controls.toggle.setAttribute('aria-expanded', 'false');
+    _mimoActiveModelIndex = -1;
+}
+
+/**
+ * Highlights one visible model option for keyboard navigation.
+ * @param {number} index Index in the filtered visible model list.
+ * @returns {void}
+ */
+function activateMimoModelOption(index) {
+    var controls = getMimoModelPickerControls();
+    if (!controls.input || !controls.list || !_mimoVisibleModels.length) return;
+    _mimoActiveModelIndex = (index + _mimoVisibleModels.length) % _mimoVisibleModels.length;
+    Array.prototype.forEach.call(controls.list.querySelectorAll('[role="option"]'), function(option, optionIndex) {
+        var active = optionIndex === _mimoActiveModelIndex;
+        option.classList.toggle('is-active', active);
+        option.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    controls.input.setAttribute('aria-activedescendant', 'mimoModelOption-' + _mimoActiveModelIndex);
+    var activeOption = controls.list.querySelector('#mimoModelOption-' + _mimoActiveModelIndex);
+    if (activeOption) activeOption.scrollIntoView({ block: 'nearest' });
+}
+
+/**
+ * Renders filtered model choices as safe text and optionally opens the menu.
+ * @param {string} query Text used to filter available model names.
+ * @param {boolean} open Whether the menu should be visible.
+ * @returns {void}
+ */
+function renderMimoModelList(query, open) {
+    var controls = getMimoModelPickerControls();
+    if (!controls.input || !controls.list) return;
+    var normalizedQuery = String(query || '').trim().toLowerCase();
+    _mimoVisibleModels = _mimoAvailableModels.filter(function(model) {
+        return !normalizedQuery || model.toLowerCase().indexOf(normalizedQuery) !== -1;
+    });
+    _mimoActiveModelIndex = -1;
+    controls.list.innerHTML = '';
+
+    if (!_mimoVisibleModels.length) {
+        var empty = document.createElement('div');
+        empty.className = 'mimo-model-empty';
+        empty.textContent = _mimoAvailableModels.length ? '没有匹配的模型，可继续手动输入' : '请填写模型名称，或先加载模型列表';
+        controls.list.appendChild(empty);
+    } else {
+        _mimoVisibleModels.forEach(function(model, index) {
+            var option = document.createElement('button');
+            option.type = 'button';
+            option.id = 'mimoModelOption-' + index;
+            option.className = 'mimo-model-option';
+            option.setAttribute('role', 'option');
+            option.setAttribute('aria-selected', 'false');
+            option.textContent = model;
+            option.addEventListener('click', function() { chooseMimoModel(model); });
+            controls.list.appendChild(option);
+        });
+    }
+
+    controls.list.hidden = !open;
+    controls.input.setAttribute('aria-expanded', open ? 'true' : 'false');
+    controls.input.removeAttribute('aria-activedescendant');
+    if (controls.toggle) controls.toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+/**
+ * Opens the model menu and installs a single outside-click closer.
+ * @returns {void}
+ */
+function openMimoModelList() {
+    if (window._mimoModelSuppressFocusOpen) return;
+    if (!window._mimoModelOutsideClickInstalled) {
+        document.addEventListener('pointerdown', function(event) {
+            var picker = document.getElementById('mimoModelPicker');
+            if (picker && !picker.contains(event.target)) closeMimoModelList();
+        });
+        window._mimoModelOutsideClickInstalled = true;
+    }
+    renderMimoModelList('', true);
+}
+
+/**
+ * Filters model choices as the user types without changing saved settings.
+ * @param {string} query Current input value.
+ * @returns {void}
+ */
+function filterMimoModelList(query) {
+    renderMimoModelList(query, true);
+}
+
+/**
+ * Toggles the model menu from its explicit chevron button.
+ * @param {Event} event Button click event.
+ * @returns {void}
+ */
+function toggleMimoModelList(event) {
+    if (event) event.preventDefault();
+    var controls = getMimoModelPickerControls();
+    if (!controls.list) return;
+    if (controls.list.hidden) {
+        openMimoModelList();
+        focusMimoModelInputWithoutOpening(controls.input);
+    } else closeMimoModelList();
+}
+
+/**
+ * Selects a model candidate while leaving persistence to the Save action.
+ * @param {string} model Selected model identifier.
+ * @returns {void}
+ */
+function chooseMimoModel(model) {
+    var controls = getMimoModelPickerControls();
+    if (!controls.input) return;
+    controls.input.value = model;
+    closeMimoModelList();
+    focusMimoModelInputWithoutOpening(controls.input);
+}
+
+/**
+ * Returns focus to the model input without reopening the menu after selection.
+ * @param {HTMLInputElement|null} input Model picker input.
+ * @returns {void}
+ */
+function focusMimoModelInputWithoutOpening(input) {
+    if (!input || document.activeElement === input) return;
+    window._mimoModelSuppressFocusOpen = true;
+    input.focus();
+    window._mimoModelSuppressFocusOpen = false;
+}
+
+/**
+ * Handles keyboard navigation in the model picker.
+ * @param {KeyboardEvent} event Keyboard event from the model input.
+ * @returns {void}
+ */
+function handleMimoModelListKeydown(event) {
+    var controls = getMimoModelPickerControls();
+    if (!controls.list) return;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (controls.list.hidden) openMimoModelList();
+        activateMimoModelOption(_mimoActiveModelIndex + (event.key === 'ArrowDown' ? 1 : -1));
+    } else if (event.key === 'Enter' && !controls.list.hidden && _mimoActiveModelIndex >= 0) {
+        event.preventDefault();
+        chooseMimoModel(_mimoVisibleModels[_mimoActiveModelIndex]);
+    } else if (event.key === 'Escape' && !controls.list.hidden) {
+        event.preventDefault();
+        closeMimoModelList();
+    }
+}
+
+/**
+ * Replaces the available model candidates after a successful API response.
+ * @param {Array<string>} models Model identifiers to show.
+ * @param {boolean} open Whether to display the refreshed choices.
+ * @returns {void}
+ */
+function setMimoAvailableModels(models, open) {
+    _mimoAvailableModels = Array.from(new Set((models || []).map(function(model) {
+        return String(model == null ? '' : model).trim();
+    }).filter(Boolean)));
+    var controls = getMimoModelPickerControls();
+    renderMimoModelList('', !!open);
+    if (controls.input && open) controls.input.focus();
+}
+
 function rData() {
     var h = '';
 
@@ -97,16 +288,21 @@ function rData() {
 
     h += '</div>';
 
-    // MiMo配置
-    h += '<div class="sec">MiMo配置</div>';
+    // AI配置
+    h += '<div class="sec">AI配置</div>';
     h += '<div style="background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:14px;margin-bottom:12px">';
-    h += '<p style="font-size:.74rem;color:var(--tx-s);margin-bottom:10px">用于采购单拍照识别，接入小米MiMo视觉API</p>';
+    h += '<p style="font-size:.74rem;color:var(--tx-s);margin-bottom:10px">当前仅用于采购单拍照识别与工资表图片识别。请选择支持图片识别的 AI 模型。</p>';
     h += '<div class="hrow"><label>API地址</label><input class="inp" id="mimoEndpoint" style="flex:2" placeholder="https://token-plan-cn.xiaomimimo.com/v1/chat/completions" value="' + (localStorage.getItem('ax_mimo_ep') || '') + '"></div>';
-    h += '<div class="hrow"><label>API Key</label><div style="flex:2;position:relative;display:flex;align-items:center"><input class="inp" id="mimoKey" type="password" style="width:100%;padding-right:30px" placeholder="sk-xxxx" value="' + (localStorage.getItem('ax_mimo_key') || '') + '"><span onclick="toggleKeyVisibility()" style="position:absolute;right:8px;cursor:pointer;opacity:0.5" id="keyEye"><i data-feather="eye"></i></span></div></div>';
+    h += '<div class="hrow"><label>API Key</label><div class="mimo-key-field"><input class="inp" id="mimoKey" type="password" placeholder="sk-xxxx" value="' + (localStorage.getItem('ax_mimo_key') || '') + '"><button type="button" onclick="toggleKeyVisibility()" class="mimo-key-toggle" id="keyEye" aria-label="显示 API Key" aria-pressed="false"><i data-feather="eye"></i></button></div></div>';
     h += '<div class="hrow"><label>模型</label>';
     var savedModel = localStorage.getItem('ax_mimo_model') || 'mimo-v2.5';
-    h += '<input class="inp" id="mimoModel" list="mimoModelOptions" style="max-width:240px" value="' + savedModel.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '">';
-    h += '<datalist id="mimoModelOptions"><option value="' + savedModel.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '"></datalist>';
+    var escapedModel = savedModel.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    if (!_mimoAvailableModels.length && savedModel) _mimoAvailableModels = [savedModel];
+    h += '<div class="mimo-model-picker" id="mimoModelPicker">';
+    h += '<input class="inp mimo-model-input" id="mimoModel" role="combobox" aria-label="模型名称" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="mimoModelOptions" autocomplete="off" value="' + escapedModel + '" onfocus="openMimoModelList()" oninput="filterMimoModelList(this.value)" onkeydown="handleMimoModelListKeydown(event)">';
+    h += '<button type="button" class="mimo-model-toggle" id="mimoModelToggle" aria-label="展开模型列表" aria-controls="mimoModelOptions" aria-expanded="false" onclick="toggleMimoModelList(event)"></button>';
+    h += '<div class="mimo-model-options" id="mimoModelOptions" role="listbox" aria-label="可选 AI 模型" hidden></div>';
+    h += '</div>';
     h += '<button class="btn" onclick="loadMimoModels()">加载模型</button></div>';
     h += '<div id="mimoModelStatus" role="status" style="font-size:.7rem;color:var(--tx-m);margin:4px 0 8px"></div>';
     h += '<div class="brow" style="margin-top:8px"><button class="btn p" onclick="saveMimoCfg()">保存配置</button></div>';
@@ -336,6 +532,8 @@ function toggleKeyVisibility() {
         input.type = 'password';
         eye.innerHTML = '<i data-feather="eye"></i>';
     }
+    eye.setAttribute('aria-label', input.type === 'text' ? '隐藏 API Key' : '显示 API Key');
+    eye.setAttribute('aria-pressed', input.type === 'text' ? 'true' : 'false');
     feather.replace();
 }
 
@@ -346,7 +544,7 @@ function saveMimoCfg() {
     if (ep) _syncSetting('ax_mimo_ep', ep);
     if (key) _syncSetting('ax_mimo_key', key);
     if (model) _syncSetting('ax_mimo_model', model);
-    toast('已保存MiMo配置');
+    toast('AI配置已保存');
 }
 
 // 应用主题颜色（从 localStorage 读取，写入 CSS 变量）
