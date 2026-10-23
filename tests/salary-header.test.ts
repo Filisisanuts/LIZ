@@ -7,6 +7,7 @@ const navSource = readFileSync(new URL('../src/js/nav.js', import.meta.url), 'ut
 function createHeaderContext(config: Record<string, any>) {
   const context: Record<string, any> = {
     console,
+    document: { addEventListener() {} },
     getAppConfig: () => config,
   };
   context.window = context;

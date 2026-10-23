@@ -18,6 +18,7 @@ describe('custom salary field calculations', () => {
     };
     const context: Record<string, any> = {
       console,
+      document: { addEventListener() {} },
       getAppConfig: () => config,
     };
     context.window = context;
@@ -49,7 +50,7 @@ describe('custom salary field calculations', () => {
         { id: 'actualSalary', label: '实发工资', category: 'computed', type: 'number', visible: true, order: 2 },
       ],
     };
-    const context: Record<string, any> = { console, getAppConfig: () => config };
+    const context: Record<string, any> = { console, document: { addEventListener() {} }, getAppConfig: () => config };
     context.window = context;
     vm.createContext(context);
     vm.runInContext(navSource, context);

@@ -679,8 +679,6 @@ function addHistoryMatches(items) {
     items.forEach(function(item) {
         if (!item.name) return;
         item.aiHistoryReview = true;
-        item.section = '';
-        item.category = '';
 
         var match = matchHistoricalItem(item.name, historyItems);
         if (!match) return;
@@ -693,34 +691,50 @@ function addHistoryMatches(items) {
         if (originalName !== match.item.name) item.originalName = originalName;
         item.name = match.item.name;
 
-        // 最新一笔采购作为区域/分类来源，再核对值是否仍存在于当前账号配置。
+        // AI 已提供且仍在当前账号配置中的区域优先；只有区域为空时才使用历史区域。
+        var aiSection = normalizePurchaseSource(item.section, '');
+        var configuredAiSection = aiSection
+            ? configuredSections.find(function(sectionName) {
+                return normalizePurchaseSource(sectionName, '') === aiSection;
+            }) || ''
+            : '';
         var historicalSection = normalizePurchaseSource(match.item.section, '');
-        var configuredSection = historicalSection
+        var configuredHistoricalSection = historicalSection
             ? configuredSections.find(function(sectionName) {
                 return normalizePurchaseSource(sectionName, '') === historicalSection;
             }) || ''
             : '';
+        var section = aiSection ? configuredAiSection : configuredHistoricalSection;
 
+        // 分类必须属于最终区域。保留有效 AI 分类；仅当 AI 分类为空时尝试历史分类。
+        var aiCategory = normalizePurchaseSource(item.category, '');
+        var availableCategories = section ? getPurCats(section) : [];
+        var configuredAiCategory = aiCategory
+            ? availableCategories.find(function(categoryName) {
+                return normalizePurchaseSource(categoryName, '') === aiCategory;
+            }) || ''
+            : '';
         var historicalCategory = normalizePurchaseSource(match.item.category, '');
-        var configuredCategory = historicalCategory
-            ? (configuredSection ? getPurCats(configuredSection) : []).find(function(categoryName) {
+        var configuredHistoricalCategory = historicalCategory
+            ? availableCategories.find(function(categoryName) {
                 return normalizePurchaseSource(categoryName, '') === historicalCategory;
             }) || ''
             : '';
-        // Area and category form one location choice; never partially apply an incomplete history row.
-        var locationReady = !!configuredSection && !!configuredCategory;
-        var section = locationReady ? configuredSection : '';
-        var category = locationReady ? configuredCategory : '';
-        if (section) item.section = section;
-        if (category) item.category = category;
+        var category = aiCategory ? configuredAiCategory : configuredHistoricalCategory;
+        item.section = section;
+        item.category = category;
+
+        var sectionUnavailable = !!((aiSection && !configuredAiSection) ||
+            (!aiSection && historicalSection && !configuredHistoricalSection));
+        var categoryUnavailable = !!((aiCategory && !configuredAiCategory) ||
+            (!aiCategory && historicalCategory && !configuredHistoricalCategory));
         item.historyMatch = {
             name: match.item.name,
             section: section,
             category: category,
             score: match.score,
-            locationUnavailable: !!((historicalSection && !configuredSection) ||
-                (historicalCategory && (!configuredSection || !configuredCategory))),
-            locationIncomplete: !locationReady
+            locationUnavailable: sectionUnavailable || categoryUnavailable,
+            locationIncomplete: !section || !category
         };
     });
 
@@ -739,10 +753,17 @@ function getMatchSuggestionHTML(item) {
         var nameCorrected = item.originalName && item.originalName !== item.name;
         var locationReady = !!item.section && !!item.category;
         if (!locationReady) {
-            message = item.historyMatch.locationUnavailable ? '区域/分类需重选' : '需补区域/分类';
-            detail = item.historyMatch.locationUnavailable
-                ? '最近记录区域/分类不可用，请重新选择'
-                : '最近记录缺区域/分类，请补选';
+            if (item.section) {
+                message = item.historyMatch.locationUnavailable ? '分类需重选' : '需补分类';
+                detail = item.historyMatch.locationUnavailable
+                    ? '识别或最近记录的分类不在当前区域配置中，请重新选择'
+                    : '最近记录缺少分类，请补选';
+            } else {
+                message = item.historyMatch.locationUnavailable ? '区域/分类需重选' : '需补区域/分类';
+                detail = item.historyMatch.locationUnavailable
+                    ? '识别或最近记录的区域/分类不在当前配置中，请重新选择'
+                    : '最近记录缺少区域/分类，请补选';
+            }
             statusClass += ' is-location-review';
         } else if (nameCorrected) {
             message = '名称已纠正';

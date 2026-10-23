@@ -6,7 +6,7 @@ const navSource = readFileSync(new URL('../src/js/nav.js', import.meta.url), 'ut
 
 function createContext(fields: Array<Record<string, any>>) {
   const config = { salaryFieldDefinitions: fields };
-  const context: Record<string, any> = { console, getAppConfig: () => config };
+  const context: Record<string, any> = { console, document: { addEventListener() {} }, getAppConfig: () => config };
   context.window = context;
   vm.createContext(context);
   vm.runInContext(navSource, context);

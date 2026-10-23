@@ -18,9 +18,10 @@ const fields = [
 ];
 
 describe('salary Excel two-row headers', () => {
-  it('imports employee fields and ignores subtotal rows', () => {
+  it('preserves source headers for review mapping and ignores subtotal rows', () => {
     const context: Record<string, any> = {
       console,
+      document: { addEventListener() {} },
       getAppConfig: () => ({ salaryFieldDefinitions: fields, salaryFieldGroups: [] }),
     };
     context.window = context;
@@ -41,16 +42,17 @@ describe('salary Excel two-row headers', () => {
 
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
-      department: '前厅',
-      employee: '测试员工',
-      position: '店长',
-      bankCard: '4015',
-      baseSalary: 5000,
-      positionSubsidy: 500,
-      attendanceDays: 30,
-      commission: 300,
-      socialInsurance: 453,
-      tax: 50,
+      部门: '前厅',
+      姓名: '测试员工',
+      职务: '店长',
+      卡号: '4015',
+      基本工资: 5000,
+      职务补贴: 500,
+      出勤天数: 30,
+      提成: 300,
+      社保: 453,
+      个税: 50,
     });
+    expect(rows[0].__sourceRow).toBe(5);
   });
 });

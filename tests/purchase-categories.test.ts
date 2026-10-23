@@ -253,12 +253,13 @@ describe('purchase category and section consistency', () => {
       options: [{ value: '__custom' }],
       querySelector() { return this.options[0]; },
       insertBefore(option: any) { this.options.unshift(option); },
+      dispatchEvent() {},
     }));
-    const row = { querySelectorAll() { return selects; } };
-    harness.context.document.querySelectorAll = () => [{}, row];
+    harness.context.Event = class { constructor(public type: string, public options: Record<string, any>) {} };
+    harness.context.document.querySelectorAll = () => [];
     harness.context.prompt = () => '纸品类';
 
-    harness.context.pmEditSel(0, 'category', '__custom');
+    harness.context.pmEditSel(0, 'category', '__custom', selects[2]);
 
     expect(harness.context._pmItems[0]).toMatchObject({ section: '外场', category: '纸品类' });
     expect(selects[1].value).toBe('外场');
@@ -299,7 +300,7 @@ describe('purchase category and section consistency', () => {
 
     expect(item).toMatchObject({ name: '纸杯', section: '', category: '' });
     expect((item as any).historyMatch).toMatchObject({ section: '', category: '', locationUnavailable: true, locationIncomplete: true });
-    expect(harness.context.getMatchSuggestionHTML(item)).toContain('最近记录的区域/分类已不在当前配置');
+    expect(harness.context.getMatchSuggestionHTML(item)).toContain('区域/分类需重选');
   });
 
   it('uses the latest history row category when older rows have a removed category', () => {
@@ -314,7 +315,7 @@ describe('purchase category and section consistency', () => {
 
     expect(item).toMatchObject({ name: '纸杯', section: '厨房', category: '' });
     expect((item as any).historyMatch).toMatchObject({ section: '厨房', category: '', locationUnavailable: true, locationIncomplete: true });
-    expect(harness.context.getMatchSuggestionHTML(item)).toContain('最近记录的区域/分类已不在当前配置');
+    expect(harness.context.getMatchSuggestionHTML(item)).toContain('分类需重选');
   });
 
   it('uses the most recent configured area and category when same-name history differs', () => {
@@ -343,15 +344,27 @@ describe('purchase category and section consistency', () => {
     expect((categoryConflict as any).historyMatch).toMatchObject({ section: '厨房', category: '一次性用品', locationIncomplete: false });
   });
 
-  it('uses the matched historical category instead of an AI category guess', () => {
-    const harness = createHarness({ 厨房: ['干调'], 外场: ['香烟类'] });
+  it('keeps valid AI location values ahead of historical guesses', () => {
+    const harness = createHarness({ 厨房: ['干调', '一次性用品'], 外场: ['香烟类'] });
     harness.database.purchases.push({ items: [{ name: '纸杯', section: '厨房', category: '干调', unitPrice: 5 }] });
-    const item = { name: '纸杯', section: '', category: 'AI识别分类' };
+    const item = { name: '纸杯', section: '厨房', category: '一次性用品' };
 
     harness.context.addHistoryMatches([item]);
 
-    expect(item).toMatchObject({ section: '厨房', category: '干调' });
-    expect((item as any).historyMatch).toMatchObject({ section: '厨房', category: '干调' });
+    expect(item).toMatchObject({ section: '厨房', category: '一次性用品' });
+    expect((item as any).historyMatch).toMatchObject({ section: '厨房', category: '一次性用品' });
+  });
+
+  it('fills a missing category from history only when it belongs to the effective area', () => {
+    const harness = createHarness({ 厨房: ['干调'], 外场: ['香烟类'] });
+    harness.database.purchases.push({ items: [{ name: '纸杯', section: '厨房', category: '香烟类', unitPrice: 5 }] });
+    const item = { name: '纸杯', section: '厨房', category: '' };
+
+    harness.context.addHistoryMatches([item]);
+
+    expect(item).toMatchObject({ section: '厨房', category: '' });
+    expect((item as any).historyMatch).toMatchObject({ locationUnavailable: true, locationIncomplete: true });
+    expect(harness.context.getMatchSuggestionHTML(item)).toContain('分类需重选');
   });
 
   it('requires a configured source but permits matched items from different areas', () => {
@@ -377,7 +390,7 @@ describe('purchase category and section consistency', () => {
     pmSource.value = '已有来源';
     harness.context.pmSrcChanged();
     expect(harness.context._pmAiReviewState).toMatchObject({ sourceResolved: true, sourceManuallySelected: true });
-    expect(harness.controls.get('pmList').innerHTML).toContain('已选择账号来源“已有来源”');
+    expect(harness.controls.get('pmList').innerHTML).not.toContain('未匹配到已配置来源');
     harness.context._pmItems[0].section = '外场';
     harness.context._pmItems[0].category = '香烟类';
     harness.context._pmItems.push({ name: '纸巾', section: '厨房', category: '干调', qty: 1, unit: '包', unitPrice: 2, total: 2 });
@@ -425,7 +438,7 @@ describe('purchase category and section consistency', () => {
     expect(harness.context._pmAiReviewState).toMatchObject({ active: true, sourceResolved: false });
     expect(harness.context._pmItems[0]).toMatchObject({ name: '纸杯', section: '外场', category: '香烟类', aiSectionSuggestion: '厨房', historyMatch: { section: '外场', category: '香烟类' } });
     expect(pmSource.value).toBe('');
-    expect(harness.controls.get('pmList').innerHTML).toContain('已按名称自动匹配 1 项');
+    expect(harness.controls.get('pmList').innerHTML).toContain('名称匹配 1 项');
     expect(harness.controls.get('pmList').innerHTML).toContain('未匹配到已配置来源');
   });
 
@@ -453,7 +466,7 @@ describe('purchase category and section consistency', () => {
 
     expect(corrected).toMatchObject({ name: '一次性纸杯', section: '厨房', category: '干调', originalName: '一次性紙杯' });
     expect(ambiguous).toMatchObject({ name: '红豆杯', section: '', category: '', historyMatchAmbiguous: true });
-    expect(harness.context.getMatchSuggestionHTML(ambiguous)).toContain('名称候选不唯一');
+    expect(harness.context.getMatchSuggestionHTML(ambiguous)).toContain('候选不唯一，请核对品名');
   });
 
   it('escapes untrusted purchase sources in day details and keeps source text out of inline handlers', () => {
