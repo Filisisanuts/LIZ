@@ -1083,6 +1083,7 @@ html {
   .btn.s { min-width: 38px; min-height: 38px; padding: 4px 8px; }
   .btn.s.pur-day-action { min-width: 34px; min-height: 34px; padding: 1px 4px; }
   .btn.p,.btn.g,.btn-primary { min-height: 44px; }
+  .brow > .btn:not(.p):not(.g):not(.btn-primary) { align-self: center; }
   .toolbar-btn,.hamburger,#syncInd { min-height: 44px; }
   .hamburger { width: 44px; height: 44px; }
   #syncInd { min-width: 44px; justify-content: center; }
