@@ -1500,3 +1500,36 @@ html {
 .mimo-model-option { display:block; width:100%; padding:8px 10px; border:0; border-radius:5px; background:transparent; color:var(--tx); font:inherit; font-size:.76rem; line-height:1.35; text-align:left; overflow-wrap:anywhere; cursor:pointer; }
 .mimo-model-option:hover, .mimo-model-option.is-active { background:var(--card-h); color:var(--ac); }
 .mimo-model-empty { padding:9px 10px; color:var(--tx-m); font-size:.72rem; line-height:1.4; }
+
+/* 采购价格涨幅详情 */
+.alert-item { display:block; min-height:44px; max-width:100%; flex:0 1 auto; color:inherit; font-family:inherit; text-align:left; }
+.alert-item-name, .alert-item-price { display:block; }
+.price-alert-badge { display:inline-flex; min-width:44px; min-height:44px; align-items:center; justify-content:center; margin-left:4px; padding:3px 7px; border:1px solid currentColor; border-radius:999px; appearance:none; font:inherit; font-size:.6rem; line-height:1.25; vertical-align:middle; cursor:pointer; }
+.price-alert-badge:focus-visible, .price-comparison-open:focus-visible, .price-comparison-actions .btn:focus-visible { outline:2px solid var(--ac); outline-offset:2px; }
+.price-comparison-dialog { max-width:100%; min-width:0; }
+.price-comparison-dialog > h3 { margin:0 0 14px; color:var(--ac); font-size:.92rem; overflow-wrap:anywhere; }
+.price-comparison-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.price-comparison-card { min-width:0; padding:12px; border:1px solid var(--bd-l); border-radius:10px; background:var(--card-h); }
+.price-comparison-head { display:flex; flex-wrap:wrap; justify-content:space-between; gap:4px 8px; color:var(--tx-m); font-size:.7rem; }
+.price-comparison-head strong { color:var(--tx); font-size:.76rem; }
+.price-comparison-value { margin:8px 0; color:var(--ac); font-size:1.1rem; font-weight:700; overflow-wrap:anywhere; }
+.price-comparison-value span { color:var(--tx-m); font-size:.7rem; font-weight:500; }
+.price-comparison-meta { color:var(--tx-m); font-size:.72rem; line-height:1.55; overflow-wrap:anywhere; }
+.price-comparison-open { min-height:44px; margin-top:8px; }
+.price-comparison-change, .price-comparison-status { display:flex; align-items:center; justify-content:center; gap:8px; margin-top:12px; padding:12px; border-radius:8px; background:var(--card-h); text-align:center; }
+.price-comparison-change { flex-wrap:wrap; }
+.price-comparison-change span, .price-comparison-change small { color:var(--tx-m); font-size:.72rem; }
+.price-comparison-change strong { font-size:1.08rem; }
+.price-comparison-status { display:block; color:var(--tx-s); font-size:.78rem; line-height:1.5; }
+.price-comparison-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:14px; }
+.price-purchase-record-list { max-height:48vh; overflow-y:auto; }
+.price-purchase-record-item { padding:10px; border-bottom:1px solid var(--bd-l); }
+.price-purchase-record-item.is-compared { border:1px solid var(--ac); border-radius:8px; background:var(--card-h); }
+.price-purchase-record-item > div:first-child { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-bottom:4px; }
+.price-purchase-record-tag { padding:2px 6px; border-radius:999px; background:rgba(139,105,20,.12); color:var(--ac); font-size:.65rem; }
+@media(max-width:520px) {
+  .price-comparison-grid { grid-template-columns:minmax(0,1fr); }
+  .price-comparison-card { padding:10px; }
+  .price-comparison-actions { justify-content:flex-start; }
+  .price-comparison-actions .btn { flex:1; min-height:44px; }
+}

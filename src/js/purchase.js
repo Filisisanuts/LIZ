@@ -2330,6 +2330,7 @@ function doEditPurItem(date, origName) {
 function renderPHist() {
     var el = $id('pHistArea');
     if (!el) return;
+    resetPriceComparisonDetails();
     var ym = $id('pHistM') ? $id('pHistM').value : curYM();
     if (!ym) ym = curYM();
 
@@ -2360,36 +2361,29 @@ function renderPHist() {
         });
     });
 
-    // 计算涨幅预警物品（仅显示最近一次采购）
-    var alertItems = {};
-    DB.purchases.filter(function(p) { return p.date.startsWith(ym); }).forEach(function(p) {
-        p.items.forEach(function(item) {
-            if (item.unitPrice <= 0) return;
-            var lastPrice = getLastMonthPrice(item.name, p.date);
-            if (lastPrice <= 0) return;
-            var priceChange = calcPriceChange(item.unitPrice, lastPrice);
-            var level = getAlertLevel(priceChange, item.unitPrice);
-            if (level === 'warning' || level === 'danger') {
-                // 只保留最近一次采购的预警
-                if (!alertItems[item.name] || p.date > alertItems[item.name].date) {
-                    alertItems[item.name] = {
-                        name: item.name,
-                        unitPrice: item.unitPrice,
-                        lastPrice: lastPrice,
-                        priceChange: priceChange,
-                        level: level,
-                        date: p.date
-                    };
-                }
-            }
+    // 每个商品先选出本月最新有效采购，再与上月同单位记录比较。
+    var alertNames = Object.create(null);
+    DB.purchases.filter(function(p) { return p.date && p.date.startsWith(ym); }).forEach(function(p) {
+        (p.items || []).forEach(function(item) {
+            if (item.name && isValidPricePurchase(p, item)) alertNames[item.name] = true;
         });
     });
+    var alertItems = Object.keys(alertNames).map(function(name) {
+        return getMonthlyPriceComparison(name, ym);
+    }).filter(function(comparison) {
+        return comparison && (comparison.state === 'incomparable' || comparison.level === 'warning' || comparison.level === 'danger');
+    });
 
-    // 按预警严重程度排序（danger > warning），然后按涨幅绝对值排序
-    alertItems = Object.values(alertItems).sort(function(a, b) {
-        if (a.level === 'danger' && b.level !== 'danger') return -1;
-        if (a.level !== 'danger' && b.level === 'danger') return 1;
-        return Math.abs(b.priceChange) - Math.abs(a.priceChange);
+    // 可比涨幅优先展示；单位不一致的记录保留为中性核对提示。
+    alertItems.sort(function(a, b) {
+        if (a.state === 'incomparable' && b.state !== 'incomparable') return 1;
+        if (a.state !== 'incomparable' && b.state === 'incomparable') return -1;
+        if (a.state === 'comparable' && b.state === 'comparable') {
+            if (a.level === 'danger' && b.level !== 'danger') return -1;
+            if (a.level !== 'danger' && b.level === 'danger') return 1;
+            return Math.abs(b.priceChange) - Math.abs(a.priceChange);
+        }
+        return a.name.localeCompare(b.name, 'zh-CN');
     });
 
     var h = '';
@@ -2452,19 +2446,26 @@ function renderPHist() {
     // 涨幅预警显示
     if (alertItems.length > 0) {
         h += '<div style="margin-bottom:14px">';
-        h += '<div style="font-size:.78rem;font-weight:600;color:var(--tx-s);margin-bottom:8px"><span class="alert-icon">' + axIcon('alert') + '</span>价格涨幅预警</div>';
+        h += '<div style="font-size:.78rem;font-weight:600;color:var(--tx-s);margin-bottom:8px"><span class="alert-icon">' + axIcon('alert') + '</span>价格变化提醒</div>';
         h += '<div style="display:flex;flex-wrap:wrap;gap:8px" id="alertList">';
         var showCount = Math.min(3, alertItems.length);
         for (var ai = 0; ai < alertItems.length; ai++) {
             var item = alertItems[ai];
-            var bgColor = item.level === 'danger' ? 'rgba(199,84,80,0.08)' : 'rgba(212,160,23,0.08)';
-            var borderColor = item.level === 'danger' ? 'var(--rd)' : 'var(--og)';
-            var textColor = item.level === 'danger' ? 'var(--rd)' : 'var(--og)';
+            var incomparable = item.state === 'incomparable';
+            var bgColor = incomparable ? 'var(--card-h)' : item.level === 'danger' ? 'rgba(199,84,80,0.08)' : 'rgba(212,160,23,0.08)';
+            var borderColor = incomparable ? 'var(--bd)' : item.level === 'danger' ? 'var(--rd)' : 'var(--og)';
+            var textColor = incomparable ? 'var(--tx-m)' : item.level === 'danger' ? 'var(--rd)' : 'var(--og)';
             var hideStyle = ai >= showCount ? 'display:none' : '';
-            h += '<div style="background:' + bgColor + ';border:1px solid ' + borderColor + ';border-radius:6px;padding:6px 10px;font-size:.72rem;cursor:pointer' + (hideStyle ? ';'+hideStyle : '') + '" class="alert-item" onclick="showPriceDetail(\'' + item.name.replace(/'/g, "\\'") + '\',' + item.lastPrice + ',\'' + item.date.substring(0, 7) + '\')">';
-            h += '<div style="font-weight:600;color:' + textColor + '">' + item.name + '</div>';
-            h += '<div style="font-size:.65rem;color:var(--tx-m);margin-top:2px">¥' + fmtC(item.lastPrice) + ' → ¥' + fmtC(item.unitPrice) + ' <span style="color:' + textColor + ';font-weight:600">' + (item.priceChange > 0 ? '+' : '') + item.priceChange.toFixed(1) + '%</span></div>';
-            h += '</div>';
+            var detailKey = storePriceComparison(item);
+            var detailLabel = axEscapeHtml(item.name + (incomparable ? '，单位待核对，打开价格详情' : '，打开价格详情'));
+            h += '<button type="button" aria-label="' + detailLabel + '" style="background:' + bgColor + ';border:1px solid ' + borderColor + ';border-radius:6px;padding:6px 10px;font-size:.72rem;cursor:pointer' + (hideStyle ? ';'+hideStyle : '') + '" class="alert-item" onclick="showPriceDetail(\'' + detailKey + '\')">';
+            h += '<span class="alert-item-name" style="font-weight:600;color:' + textColor + '">' + axEscapeHtml(item.name) + '</span>';
+            if (incomparable) {
+                h += '<span class="alert-item-price" style="font-size:.65rem;color:var(--tx-m);margin-top:2px">¥' + fmtC(item.previous.unitPrice) + (item.previous.unit ? '/' + axEscapeHtml(item.previous.unit) : '/单位未填') + ' → ¥' + fmtC(item.current.unitPrice) + (item.current.unit ? '/' + axEscapeHtml(item.current.unit) : '/单位未填') + ' · 单位待核对</span>';
+            } else {
+                h += '<span class="alert-item-price" style="font-size:.65rem;color:var(--tx-m);margin-top:2px">¥' + fmtC(item.previous.unitPrice) + (item.unit ? '/' + axEscapeHtml(item.unit) : '') + ' → ¥' + fmtC(item.current.unitPrice) + (item.unit ? '/' + axEscapeHtml(item.unit) : '') + ' <span style="color:' + textColor + ';font-weight:600">' + (item.priceChange > 0 ? '+' : '') + item.priceChange.toFixed(1) + '%</span></span>';
+            }
+            h += '</button>';
         }
         h += '</div>';
         if (alertItems.length > showCount) {
@@ -2521,11 +2522,12 @@ function showPurDayModal(date) {
 
     var allItems = [];
     dayPurchases.forEach(function(p) {
-        p.items.forEach(function(item) {
+        (p.items || []).forEach(function(item, itemIndex) {
             allItems.push({
                 name: item.name, section: item.section || '未分区', category: item.category || '未分类',
                 source: item.source || p.source || '外购', qty: item.qty || 0, unit: item.unit || '',
-                unitPrice: item.unitPrice || 0, total: item.total || 0, note: item.note || ''
+                unitPrice: getPriceSampleUnitPrice(item), total: item.total || 0, note: item.note || '',
+                purchaseId: p.id || '', purchaseIndex: DB.purchases.indexOf(p), itemIndex: itemIndex
             });
         });
     });
@@ -2669,10 +2671,9 @@ function showPurDayModal(date) {
 
                 // 物品列表
                 group.items.forEach(function(item) {
-                    // 计算涨幅
-                    var lastPrice = getLastMonthPrice(item.name, date);
-                    var priceChange = calcPriceChange(item.unitPrice, lastPrice);
-                    var alertBadge = getAlertBadgeHTML(priceChange, item.unitPrice, lastPrice, item.name, date);
+                    // 只在本月汇总预警采用的那一笔有效采购行上展示对应标记。
+                    var comparison = getMonthlyPriceComparison(item.name, date.substring(0, 7));
+                    var alertBadge = getAlertBadgeHTML(comparison, date, item);
 
                     h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;margin-bottom:2px;background:var(--card-h);border:1px solid var(--bd-l);border-radius:5px">';
                     h += '<div style="flex:1;min-width:0">';
@@ -3301,21 +3302,122 @@ function delPurByIdx(pid, idx) {
 
 // ========== 涨幅预警功能 ==========
 
-// 获取上月同物品的单价
-function getLastMonthPrice(name, currentDate) {
-    var date = new Date(currentDate);
-    date.setMonth(date.getMonth() - 1);
-    var lastYM = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
-    
-    var lastPrice = 0;
-    DB.purchases.filter(function(p) { return p.date.startsWith(lastYM); }).forEach(function(p) {
-        p.items.forEach(function(item) {
-            if (item.name === name && item.unitPrice > 0) {
-                lastPrice = item.unitPrice;
-            }
+// 将采购行转换为价格样本。退货、负数量和无有效单价的行不参与价格比较。
+function getPriceSampleUnitPrice(item) {
+    var unitPrice = parseFloat(item && item.unitPrice) || 0;
+    if (unitPrice > 0) return unitPrice;
+    var qty = parseFloat(item && item.qty) || 0;
+    var total = parseFloat(item && item.total) || 0;
+    return qty > 0 && total > 0 ? Math.round(total / qty * 100) / 100 : 0;
+}
+
+function isValidPricePurchase(purchase, item) {
+    if (!purchase || !item || purchase.recordType === 'return' || item.recordType === 'return') return false;
+    if (purchase.source === '退货' || item.source === '退货') return false;
+    var qty = parseFloat(item.qty) || 0;
+    var total = parseFloat(item.total) || 0;
+    return qty > 0 && total >= 0 && getPriceSampleUnitPrice(item) > 0;
+}
+
+function toPricePurchaseRecord(purchase, purchaseIndex, item, itemIndex) {
+    var qty = parseFloat(item.qty) || 0;
+    var unitPrice = getPriceSampleUnitPrice(item);
+    var total = parseFloat(item.total);
+    if (!Number.isFinite(total) || total <= 0) total = Math.round(qty * unitPrice * 100) / 100;
+    var unit = String(item.unit || '').trim();
+    return {
+        purchaseId: purchase.id || '',
+        purchaseIndex: purchaseIndex,
+        itemIndex: itemIndex,
+        date: purchase.date || '',
+        source: item.source || purchase.source || '外购',
+        qty: qty,
+        unit: unit,
+        unitKey: normalizePurchaseMatchText(unit),
+        unitPrice: unitPrice,
+        total: total
+    };
+}
+
+function getPreviousPurchaseMonth(ym) {
+    var match = String(ym || '').match(/^(\d{4})-(\d{1,2})$/);
+    if (!match) return '';
+    var date = new Date(Number(match[1]), Number(match[2]) - 2, 1);
+    return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
+}
+
+function isLaterPriceRecord(record, previous) {
+    if (!previous || record.date > previous.date) return true;
+    if (record.date < previous.date) return false;
+    if (record.purchaseIndex !== previous.purchaseIndex) return record.purchaseIndex > previous.purchaseIndex;
+    return record.itemIndex > previous.itemIndex;
+}
+
+function findLatestMonthlyPriceRecord(name, ym, unitKey) {
+    var best = null;
+    (DB.purchases || []).forEach(function(purchase, purchaseIndex) {
+        if (!purchase.date || !purchase.date.startsWith(ym)) return;
+        (purchase.items || []).forEach(function(item, itemIndex) {
+            if (item.name !== name || !isValidPricePurchase(purchase, item)) return;
+            var record = toPricePurchaseRecord(purchase, purchaseIndex, item, itemIndex);
+            if (unitKey !== undefined && (!unitKey || record.unitKey !== unitKey)) return;
+            if (isLaterPriceRecord(record, best)) best = record;
         });
     });
-    return lastPrice;
+    return best;
+}
+
+// 本月最新有效采购与上月最新同单位采购比较；无单位换算依据时明确返回不可比。
+function getMonthlyPriceComparison(name, ym) {
+    var current = findLatestMonthlyPriceRecord(name, ym);
+    if (!current) return null;
+    var previousYM = getPreviousPurchaseMonth(ym);
+    var previousAny = findLatestMonthlyPriceRecord(name, previousYM);
+    if (!previousAny) return null;
+
+    if (!current.unitKey) {
+        return { name: name, state: 'incomparable', reason: '本月采购未填写单位', current: current, previous: previousAny };
+    }
+
+    var previous = findLatestMonthlyPriceRecord(name, previousYM, current.unitKey);
+    if (!previous) {
+        return { name: name, state: 'incomparable', reason: '上月采购单位与本月不同', current: current, previous: previousAny };
+    }
+
+    var priceChange = calcPriceChange(current.unitPrice, previous.unitPrice);
+    return {
+        name: name,
+        state: 'comparable',
+        current: current,
+        previous: previous,
+        unit: current.unit,
+        priceChange: priceChange,
+        level: getAlertLevel(priceChange, current.unitPrice)
+    };
+}
+
+var _priceComparisonDetailSeq = 0;
+var _priceComparisonDetails = Object.create(null);
+
+function resetPriceComparisonDetails() {
+    _priceComparisonDetailSeq = 0;
+    _priceComparisonDetails = Object.create(null);
+}
+
+function storePriceComparison(comparison, backDate) {
+    var key = 'priceComparison' + (++_priceComparisonDetailSeq);
+    _priceComparisonDetails[key] = {
+        name: comparison.name,
+        state: comparison.state,
+        reason: comparison.reason || '',
+        current: comparison.current,
+        previous: comparison.previous,
+        unit: comparison.unit || '',
+        priceChange: comparison.priceChange,
+        level: comparison.level || '',
+        backDate: backDate || ''
+    };
+    return key;
 }
 
 // 计算涨幅百分比
@@ -3347,142 +3449,98 @@ function getAlertLevel(priceChange, unitPrice) {
     return 'danger';
 }
 
-// 获取涨幅徽章HTML
-function getAlertBadgeHTML(priceChange, unitPrice, lastPrice, itemName, currentDate) {
-    var level = getAlertLevel(priceChange, unitPrice);
-    var color, bgColor, text;
-
-    switch(level) {
-        case 'decrease':
-            color = '#3d8b5e';
-            bgColor = 'rgba(61,139,94,0.1)';
-            text = '↓' + Math.abs(priceChange).toFixed(1) + '%';
-            break;
-        case 'normal':
-            color = '#666';
-            bgColor = 'transparent';
-            text = '';
-            break;
-        case 'warning':
-            color = '#d4a017';
-            bgColor = 'rgba(212,160,23,0.1)';
-            text = '↑' + priceChange.toFixed(1) + '%';
-            break;
-        case 'danger':
-            color = '#c75450';
-            bgColor = 'rgba(199,84,80,0.1)';
-            text = '↑' + priceChange.toFixed(1) + '%';
-            break;
-    }
-
-    if (!text) return '';
-
-    // 计算上次采购日期
-    var lastDate = '';
-    if (lastPrice > 0) {
-        var date = new Date(currentDate);
-        date.setMonth(date.getMonth() - 1);
-        lastDate = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
-    }
-
-    return '<span style="font-size:.6rem;padding:1px 5px;border-radius:3px;color:' + color + ';background:' + bgColor + ';margin-left:4px;cursor:pointer" onclick="showBadgePriceDetail(\'' + itemName.replace(/'/g, "\\'") + '\',' + lastPrice + ',' + (lastPrice > 0 ? '\'' + lastDate + '\'' : 'null') + ',\'' + currentDate + '\')">' + text + '</span>';
+function priceRecordMatchesItem(record, item) {
+    if (!record || !item || record.itemIndex !== item.itemIndex) return false;
+    if (record.purchaseId && item.purchaseId) return record.purchaseId === item.purchaseId;
+    return record.purchaseIndex === item.purchaseIndex;
 }
 
-// 显示价格详情弹窗
-function showPriceDetail(itemName, lastPrice, lastDate) {
-    var item = null;
-    DB.purchases.forEach(function(p) {
-        p.items.forEach(function(i) {
-            if (i.name === itemName && i.unitPrice > 0) {
-                item = i;
-            }
-        });
-    });
-
-    if (!item) return;
-
-    var h = '<div style="max-width:300px">';
-    h += '<h3 style="margin:0 0 12px;color:var(--ac);font-size:.88rem">' + itemName + ' 价格详情</h3>';
-
-    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">';
-    h += '<div style="text-align:center;padding:12px;background:var(--card-h);border-radius:8px">';
-    h += '<div style="font-size:.65rem;color:var(--tx-m);margin-bottom:4px">上次采购</div>';
-    h += '<div style="font-size:1rem;font-weight:600;color:var(--tx)">¥' + fmtC(lastPrice) + '</div>';
-    if (lastDate) {
-        h += '<div style="font-size:.6rem;color:var(--tx-m);margin-top:4px">' + lastDate + '</div>';
-    }
-    h += '</div>';
-
-    h += '<div style="text-align:center;padding:12px;background:var(--card-h);border-radius:8px">';
-    h += '<div style="font-size:.65rem;color:var(--tx-m);margin-bottom:4px">本次采购</div>';
-    h += '<div style="font-size:1rem;font-weight:600;color:var(--ac)">¥' + fmtC(item.unitPrice) + '</div>';
-    h += '</div>';
-    h += '</div>';
-
-    var priceChange = calcPriceChange(item.unitPrice, lastPrice);
-    var level = getAlertLevel(priceChange, item.unitPrice);
-    var levelText = level === 'decrease' ? '降价' : level === 'warning' ? '小幅涨价' : level === 'danger' ? '大幅涨价' : '正常';
-    var levelColor = level === 'decrease' ? 'var(--gn)' : level === 'warning' ? 'var(--og)' : level === 'danger' ? 'var(--rd)' : 'var(--tx-s)';
-
-    h += '<div style="text-align:center;padding:12px;background:var(--card-h);border-radius:8px">';
-    h += '<div style="font-size:.65rem;color:var(--tx-m);margin-bottom:4px">涨幅</div>';
-    h += '<div style="font-size:1.1rem;font-weight:600;color:' + levelColor + '">' + (priceChange > 0 ? '+' : '') + priceChange.toFixed(1) + '%</div>';
-    h += '<div style="font-size:.6rem;color:' + levelColor + ';margin-top:4px">' + levelText + '</div>';
-    h += '</div>';
-
-    h += '<div style="margin-top:16px;text-align:right"><button class="btn" onclick="closeModal()">关闭</button></div>';
-    h += '</div>';
-
-    showModal(h, 350);
+// 获取采购明细中的价格变化标记；标记绑定月度汇总实际使用的采购记录。
+function getAlertBadgeHTML(comparison, backDate, item) {
+    if (!comparison || !priceRecordMatchesItem(comparison.current, item)) return '';
+    var incomparable = comparison.state === 'incomparable';
+    if (!incomparable && comparison.level !== 'warning' && comparison.level !== 'danger') return '';
+    var color = incomparable ? 'var(--tx-m)' : comparison.level === 'danger' ? 'var(--rd)' : 'var(--og)';
+    var bgColor = incomparable ? 'var(--card-h)' : comparison.level === 'danger' ? 'rgba(199,84,80,0.1)' : 'rgba(212,160,23,0.1)';
+    var text = incomparable ? '单位待核对' : '↑' + comparison.priceChange.toFixed(1) + '%';
+    var detailKey = storePriceComparison(comparison, backDate);
+    var label = axEscapeHtml(comparison.name + ' ' + text + '，打开价格详情');
+    return '<button type="button" aria-label="' + label + '" class="price-alert-badge" style="color:' + color + ';background:' + bgColor + ';border-color:' + color + '" onclick="showPriceDetail(\'' + detailKey + '\')">' + text + '</button>';
 }
 
-// 涨幅徽章点击弹窗（从采购明细弹窗中触发，含返回按钮）
-function showBadgePriceDetail(itemName, lastPrice, lastDate, backDate) {
-    var item = null;
-    DB.purchases.forEach(function(p) {
-        p.items.forEach(function(i) {
-            if (i.name === itemName && i.unitPrice > 0) {
-                item = i;
-            }
-        });
-    });
+function renderPricePurchaseCard(comparison, detailKey, slot, label) {
+    var record = comparison[slot];
+    var unitLabel = record.unit ? axEscapeHtml(record.unit) : '单位未填写';
+    var h = '<article class="price-comparison-card">';
+    h += '<div class="price-comparison-head"><strong>' + label + '</strong><time>' + axEscapeHtml(record.date || '日期未知') + '</time></div>';
+    h += '<div class="price-comparison-value">¥' + fmtC(record.unitPrice) + '<span>/' + unitLabel + '</span></div>';
+    h += '<div class="price-comparison-meta">来源：' + axEscapeHtml(record.source || '来源未记录') + '</div>';
+    h += '<div class="price-comparison-meta">数量：' + axEscapeHtml(String(record.qty)) + ' ' + unitLabel + '</div>';
+    h += '<div class="price-comparison-meta">金额：¥' + fmtC(record.total) + '</div>';
+    h += '<button type="button" class="btn s price-comparison-open" onclick="showPricePurchaseRecord(\'' + detailKey + '\',\'' + slot + '\')">查看这笔采购</button>';
+    h += '</article>';
+    return h;
+}
 
-    if (!item) return;
+// 显示价格详情弹窗，内容只使用触发入口时绑定的两笔采购记录。
+function showPriceDetail(detailKey) {
+    var comparison = _priceComparisonDetails[detailKey];
+    if (!comparison) return;
 
-    var h = '<div style="max-width:300px">';
-    h += '<h3 style="margin:0 0 12px;color:var(--ac);font-size:.88rem">' + itemName + ' 价格详情</h3>';
+    var h = '<div class="price-comparison-dialog">';
+    h += '<h3>' + axEscapeHtml(comparison.name) + ' 价格详情</h3>';
+    h += '<div class="price-comparison-grid">';
+    h += renderPricePurchaseCard(comparison, detailKey, 'previous', '上月采购记录');
+    h += renderPricePurchaseCard(comparison, detailKey, 'current', '本月采购记录');
+    h += '</div>';
 
-    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">';
-    h += '<div style="text-align:center;padding:12px;background:var(--card-h);border-radius:8px">';
-    h += '<div style="font-size:.65rem;color:var(--tx-m);margin-bottom:4px">上次采购</div>';
-    h += '<div style="font-size:1rem;font-weight:600;color:var(--tx)">\u00a5' + fmtC(lastPrice) + '</div>';
-    if (lastDate) {
-        h += '<div style="font-size:.6rem;color:var(--tx-m);margin-top:4px">' + lastDate + '</div>';
+    if (comparison.state === 'incomparable') {
+        h += '<div class="price-comparison-status" role="status">' + axEscapeHtml(comparison.reason || '采购单位不一致，暂不计算涨幅') + '，请核对单位后再比较。</div>';
+    } else {
+        var levelText = comparison.level === 'decrease' ? '降价' : comparison.level === 'warning' ? '小幅涨价' : comparison.level === 'danger' ? '大幅涨价' : '正常';
+        var levelColor = comparison.level === 'decrease' ? 'var(--gn)' : comparison.level === 'warning' ? 'var(--og)' : comparison.level === 'danger' ? 'var(--rd)' : 'var(--tx-s)';
+        h += '<div class="price-comparison-change" style="color:' + levelColor + '"><span>涨幅</span><strong>' + (comparison.priceChange > 0 ? '+' : '') + comparison.priceChange.toFixed(1) + '%</strong><small>' + levelText + '</small></div>';
     }
-    h += '</div>';
 
-    h += '<div style="text-align:center;padding:12px;background:var(--card-h);border-radius:8px">';
-    h += '<div style="font-size:.65rem;color:var(--tx-m);margin-bottom:4px">本次采购</div>';
-    h += '<div style="font-size:1rem;font-weight:600;color:var(--ac)">\u00a5' + fmtC(item.unitPrice) + '</div>';
-    h += '</div>';
-    h += '</div>';
+    h += '<div class="price-comparison-actions">';
+    if (comparison.backDate) h += '<button type="button" class="btn" onclick="backToPurDetail(\'' + comparison.backDate + '\')">返回明细</button>';
+    h += '<button type="button" class="btn" onclick="closeModal()">关闭</button></div></div>';
+    showModal(h, 460);
+}
 
-    var priceChange = calcPriceChange(item.unitPrice, lastPrice);
-    var level = getAlertLevel(priceChange, item.unitPrice);
-    var levelText = level === 'decrease' ? '降价' : level === 'warning' ? '小幅涨价' : level === 'danger' ? '大幅涨价' : '正常';
-    var levelColor = level === 'decrease' ? 'var(--gn)' : level === 'warning' ? 'var(--og)' : level === 'danger' ? 'var(--rd)' : 'var(--tx-s)';
+// 从价格详情按保存记录身份打开对应采购单；此视图只读，不提供按日期删除等操作。
+function showPricePurchaseRecord(detailKey, slot) {
+    var comparison = _priceComparisonDetails[detailKey];
+    var record = comparison && comparison[slot];
+    if (!record) return;
+    var purchase = record.purchaseId
+        ? (DB.purchases || []).find(function(p) { return p.id === record.purchaseId; })
+        : (DB.purchases || [])[record.purchaseIndex];
+    if (!purchase) { toast('这笔采购记录已不存在'); return; }
 
-    h += '<div style="text-align:center;padding:12px;background:var(--card-h);border-radius:8px">';
-    h += '<div style="font-size:.65rem;color:var(--tx-m);margin-bottom:4px">涨幅</div>';
-    h += '<div style="font-size:1.1rem;font-weight:600;color:' + levelColor + '">' + (priceChange > 0 ? '+' : '') + priceChange.toFixed(1) + '%</div>';
-    h += '<div style="font-size:.6rem;color:' + levelColor + ';margin-top:4px">' + levelText + '</div>';
-    h += '</div>';
-
-    h += '<div style="margin-top:16px;display:flex;justify-content:space-between">';
-    h += '<button class="btn" onclick="backToPurDetail(\'' + backDate + '\')">← 返回</button>';    h += '<button class="btn" onclick="closeModal()">关闭</button>';
-    h += '</div></div>';
-
-    showModal(h, 350);
+    var source = purchase.source || record.source || '外购';
+    var sameDayPurchases = (DB.purchases || []).filter(function(p) { return p.date === purchase.date; });
+    var sameDayIndex = sameDayPurchases.indexOf(purchase);
+    var sameDayOrder = sameDayIndex >= 0 ? sameDayIndex + 1 : (Number(record.purchaseIndex) || 0) + 1;
+    var h = '<div class="price-comparison-dialog price-purchase-record-dialog">';
+    h += '<h3>' + axEscapeHtml(purchase.date || record.date) + ' · ' + axEscapeHtml(source) + ' · 当日第' + sameDayOrder + '笔采购</h3>';
+    h += '<div class="price-purchase-record-list">';
+    (purchase.items || []).forEach(function(item, itemIndex) {
+        var focused = itemIndex === record.itemIndex;
+        var qty = parseFloat(item.qty) || 0;
+        var unit = String(item.unit || '').trim();
+        var unitPrice = getPriceSampleUnitPrice(item);
+        var total = parseFloat(item.total);
+        if (!Number.isFinite(total) || total <= 0) total = Math.round(qty * unitPrice * 100) / 100;
+        h += '<div class="price-purchase-record-item' + (focused ? ' is-compared' : '') + '">';
+        h += '<div><strong>' + axEscapeHtml(item.name || '未命名商品') + '</strong>' + (focused ? '<span class="price-purchase-record-tag">对比商品</span>' : '') + '</div>';
+        h += '<div class="price-comparison-meta">数量：' + axEscapeHtml(String(qty)) + ' ' + (unit ? axEscapeHtml(unit) : '单位未填写') + ' × ¥' + fmtC(unitPrice) + '</div>';
+        h += '<div class="price-comparison-meta">金额：¥' + fmtC(total) + '</div></div>';
+    });
+    h += '</div><div class="price-comparison-actions">';
+    h += '<button type="button" class="btn" onclick="showPriceDetail(\'' + detailKey + '\')">返回价格详情</button>';
+    h += '<button type="button" class="btn" onclick="closeModal()">关闭</button></div></div>';
+    showModal(h, 460);
 }
 
 // 平滑返回到采购明细
