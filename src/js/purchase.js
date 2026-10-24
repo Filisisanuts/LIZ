@@ -1853,127 +1853,317 @@ function saveMPur() {
 
 // ------ 采购入库联动 ------
 
-// 保存后检查采购物品是否匹配库存，弹窗让用户确认入库
-function checkPurInvLink(purItems, date) {
-    var matches = [];
-    var mapping = DB.settings.purchaseMapping || {};
-
-    purItems.forEach(function(pi) {
-        var name = pi.name.trim();
-        function matchList(list, type) {
-            list.forEach(function(item) {
-                var matched = false;
-                // 优先检查映射表
-                if (mapping[name]) {
-                    matched = item.name === mapping[name];
-                }
-                // 如果映射表未匹配，检查匹配关键词
-                if (!matched && item.matchKeyword && item.matchKeyword.trim()) {
-                    matched = name.indexOf(item.matchKeyword.trim()) >= 0;
-                }
-                // 如果都没有匹配，使用默认匹配逻辑
-                if (!matched) {
-                    matched = item.name === name || name.indexOf(item.name) >= 0 || item.name.indexOf(name) >= 0;
-                }
-                if (matched) {
-                    matches.push({ type: type, inv: item, pur: pi });
-                }
-            });
-        }
-        matchList(DB.teaItems, 'tea');
-        matchList(DB.cigItems, 'cig');
-        matchList(DB.alcItems, 'alc');
-        matchList(DB.whItems, 'wh');
-    });
-
-    if (!matches.length) { rPurchase(); return; }
-
-    // 去重
-    var seen = {};
-    var uniq = matches.filter(function(m) {
-        var key = m.type + '_' + m.inv.id + m.pur.name;
-        if (seen[key]) return false;
-        seen[key] = true;
-        return true;
-    });
-
-    var labels = { tea: '🍵茗茶', cig: '🚬香烟', alc: '🍺酒类', wh: '📦仓库' };
-    var h = '<h3>采购入库联动</h3>';
-    h += '<p style="font-size:.78rem;color:var(--tx-s);margin-bottom:10px">以下采购物品匹配到库存，可修改入库数量：</p>';
-
-    uniq.forEach(function(m, idx) {
-        var unit = { tea: '克', cig: '包', alc: '瓶', wh: m.inv.unit || '' }[m.type];
-        var stockQty = m.pur.qty;
-
-        // 单位换算
-        if (m.type === 'tea' && m.inv.calcMode === 'pack') {
-            unit = '包';
-            if (m.pur.unit === '斤') stockQty = Math.round(m.pur.qty * 500 / (m.inv.gramsPerPack || 250));
-        } else if (m.type === 'tea') {
-            if (m.pur.unit === '斤') stockQty = m.pur.qty * 500;
-        } else if (m.type === 'cig') {
-            if (m.pur.unit === '条') stockQty = m.pur.qty * (m.inv.purchaseConvRatio || 10);
-        } else if (m.type === 'alc') {
-            if (m.pur.unit === '箱') stockQty = m.pur.qty * (m.inv.purchaseConvRatio || 12);
-        }
-        stockQty = Math.round(stockQty * 100) / 100;
-
-        h += '<div class="item-card" style="flex-wrap:wrap;gap:6px">';
-        h += '<div style="display:flex;align-items:center;gap:6px;flex:1;min-width:200px">';
-        h += '<input type="checkbox" id="plink_' + idx + '" checked style="transform:scale(1.3)">';
-        h += '<span class="badge">' + labels[m.type] + '</span> <b>' + m.inv.name + '</b></div>';
-        h += '<div style="display:flex;align-items:center;gap:6px">';
-        h += '<span style="font-size:.72rem;color:var(--tx-m)">' + m.pur.qty + (m.pur.unit || '') + '</span>';
-        h += '<span style="font-size:.72rem;color:var(--ac)">→</span>';
-        h += '<input class="inp" id="plink_qty_' + idx + '" type="number" step="any" style="width:80px;padding:4px 6px;font-size:.82rem" value="' + stockQty + '">';
-        h += '<span style="font-size:.78rem">' + unit + '</span>';
-        h += '</div></div>';
-    });
-
-    h += '<div class="brow" style="margin-top:14px;justify-content:flex-end;gap:10px">';
-    h += '<button class="btn p" onclick="doPurInvLink()">确认入库</button>';
-    h += '<button class="btn" onclick="closeModal();rPurchase()">跳过</button></div>';
-
-    showModal(h);
-    window._purLinkUniq = uniq;
-    window._purLinkDate = date;
+function normalizePurchaseMatchText(value) {
+    var text = String(value == null ? '' : value).trim();
+    if (text.normalize) {
+        try { text = text.normalize('NFKC'); } catch (e) {}
+    }
+    return text.toLocaleLowerCase().replace(/\s+/g, ' ');
 }
 
-// 执行采购入库
-function doPurInvLink() {
-    var uniq = window._purLinkUniq;
-    var date = window._purLinkDate;
-    if (!uniq) return;
-    var count = 0;
+function purchaseInventoryTargets() {
+    var targets = [];
+    var legacy = [
+        { type: 'tea', key: 'teaItems', label: '茗茶', unit: '克' },
+        { type: 'cig', key: 'cigItems', label: '香烟', unit: '包' },
+        { type: 'alc', key: 'alcItems', label: '酒类', unit: '瓶' },
+        { type: 'other', key: 'otherItems', label: '贵重物品', unit: '' },
+        { type: 'wh', key: 'whItems', label: '仓库', unit: '' }
+    ];
 
-    uniq.forEach(function(m, idx) {
-        var cb = $id('plink_' + idx);
-        if (!cb || !cb.checked) return;
-
-        var qtyInput = $id('plink_qty_' + idx);
-        var stockQty = qtyInput ? parseFloat(qtyInput.value) || 0 : m.pur.qty;
-        if (stockQty <= 0) return;
-        stockQty = Math.round(stockQty * 100) / 100;
-
-        if (m.type === 'wh') {
-            upd(function(db) {
-                var it = db.whItems.find(function(i) { return i.id === m.inv.id; });
-                if (!it) return;
-                if (!it.movements) it.movements = [];
-                it.movements.push({ date: date, qty: stockQty, reason: '采购入库' });
-                it.stock = Math.max(0, it.stock + stockQty);
+    legacy.forEach(function(definition) {
+        (DB[definition.key] || []).forEach(function(item) {
+            if (!item || item.id == null || !item.name) return;
+            if (definition.type !== 'wh' && typeof inventoryLegacyActionEnabled === 'function' &&
+                !inventoryLegacyActionEnabled(definition.type, item, 'inbound')) return;
+            var group = definition.label;
+            if (definition.type === 'other' && item.category) {
+                var category = typeof inventoryTypeDefinitions === 'function'
+                    ? inventoryTypeDefinitions().find(function(type) { return type.preset === 'other-category' && type.legacyCategory === item.category && !type.deleted; })
+                    : null;
+                if (category) group += ' · ' + category.name;
+            }
+            targets.push({
+                type: definition.type,
+                typeId: '',
+                inv: item,
+                group: group,
+                filterType: definition.type,
+                baseUnit: definition.unit,
+                key: definition.type + '::' + encodeURIComponent(String(item.id))
             });
+        });
+    });
+
+    if (typeof inventoryTypeDefinitions === 'function' && typeof inventoryTypeItems === 'function') {
+        inventoryTypeDefinitions().forEach(function(type) {
+            if (type.preset !== 'generic' || type.archived || type.deleted || !type.actions || !type.actions.inbound) return;
+            inventoryTypeItems(type.id).forEach(function(item) {
+                if (!item || item.id == null || !item.name) return;
+                targets.push({
+                    type: 'custom',
+                    typeId: type.id,
+                    inv: item,
+                    group: '自定义库存 · ' + type.name,
+                    filterType: 'custom',
+                    baseUnit: item.unit || '',
+                    key: 'custom::' + encodeURIComponent(String(type.id)) + '::' + encodeURIComponent(String(item.id))
+                });
+            });
+        });
+    }
+    return targets;
+}
+
+function purchaseInventoryTargetByKey(key, targets) {
+    var list = targets || purchaseInventoryTargets();
+    return list.find(function(target) { return target.key === key; }) || null;
+}
+
+function purchaseResolveMappedTarget(value, targets) {
+    var list = targets || purchaseInventoryTargets();
+    if (value && typeof value === 'object') {
+        var byRef = list.filter(function(target) {
+            return target.type === value.type && String(target.inv.id) === String(value.id) &&
+                (target.type !== 'custom' || value.typeId == null || String(target.typeId) === String(value.typeId));
+        });
+        return { target: byRef.length === 1 ? byRef[0] : null, status: byRef.length === 1 ? 'matched' : 'stale' };
+    }
+    var legacyValue = String(value == null ? '' : value).trim();
+    var byKey = list.filter(function(target) { return target.key === legacyValue; });
+    if (byKey.length === 1) return { target: byKey[0], status: 'matched' };
+    var wanted = normalizePurchaseMatchText(legacyValue);
+    var byName = list.filter(function(target) { return normalizePurchaseMatchText(target.inv.name) === wanted; });
+    if (byName.length === 1) return { target: byName[0], status: 'matched' };
+    return { target: null, status: byName.length > 1 ? 'ambiguous' : 'stale' };
+}
+
+function purchaseMappingForName(mapping, name) {
+    var wanted = normalizePurchaseMatchText(name);
+    var entries = Object.keys(mapping || {}).filter(function(key) {
+        return normalizePurchaseMatchText(key) === wanted && mapping[key] !== '' && mapping[key] != null;
+    }).map(function(key) { return { key: key, value: mapping[key] }; });
+    if (!entries.length) return { found: false };
+    if (entries.length > 1) return { found: true, status: 'ambiguous' };
+    return { found: true, value: entries[0].value };
+}
+
+function purchaseResolveInventoryMatch(purchaseItem, mapping, targets) {
+    var name = String(purchaseItem && purchaseItem.name || '').trim();
+    var normalizedName = normalizePurchaseMatchText(name);
+    if (!normalizedName) return { status: 'none', candidates: [] };
+
+    var explicit = purchaseMappingForName(mapping, name);
+    if (explicit.found) {
+        if (explicit.status === 'ambiguous') return { status: 'stale', reason: '采购名称存在重复映射，请在本次确认中选择库存物品。', candidates: targets };
+        var mapped = purchaseResolveMappedTarget(explicit.value, targets);
+        if (mapped.target) return { status: 'matched', target: mapped.target, explicit: true };
+        return {
+            status: mapped.status === 'ambiguous' ? 'ambiguous' : 'stale',
+            reason: mapped.status === 'ambiguous' ? '旧映射名称对应多个库存物品，请手动选择。' : '已保存的映射目标已失效，请重新选择。',
+            candidates: mapped.status === 'ambiguous'
+                ? targets.filter(function(target) { return normalizePurchaseMatchText(target.inv.name) === normalizePurchaseMatchText(explicit.value); })
+                : targets
+        };
+    }
+
+    var exact = targets.filter(function(target) { return normalizePurchaseMatchText(target.inv.name) === normalizedName; });
+    if (exact.length === 1) return { status: 'matched', target: exact[0] };
+    if (exact.length > 1) return { status: 'ambiguous', reason: '同名库存物品不止一个。', candidates: exact };
+
+    var keyword = targets.filter(function(target) {
+        var value = normalizePurchaseMatchText(target.inv.matchKeyword);
+        return value && normalizedName.indexOf(value) >= 0;
+    });
+    if (keyword.length === 1) return { status: 'matched', target: keyword[0] };
+    if (keyword.length > 1) return { status: 'ambiguous', reason: '匹配关键词命中多个库存物品。', candidates: keyword };
+
+    var approximate = targets.filter(function(target) {
+        var itemName = normalizePurchaseMatchText(target.inv.name);
+        return itemName && (normalizedName.indexOf(itemName) >= 0 || itemName.indexOf(normalizedName) >= 0);
+    });
+    if (approximate.length === 1) return { status: 'matched', target: approximate[0] };
+    if (approximate.length > 1) return { status: 'ambiguous', reason: '名称近似命中多个库存物品。', candidates: approximate };
+    return { status: 'none', candidates: [] };
+}
+
+function purchaseInventoryUnit(target) {
+    if (target.type === 'tea' && target.inv.calcMode === 'pack') return '包';
+    return target.type === 'custom' || target.type === 'other' || target.type === 'wh'
+        ? (target.inv.unit || '') : target.baseUnit;
+}
+
+function purchaseInventoryQuantity(purchaseItem, target) {
+    var quantity = Number(purchaseItem.qty) || 0;
+    var unitMismatch = false;
+    if (target.type === 'tea' && target.inv.calcMode === 'pack') {
+        if (purchaseItem.unit === '斤') quantity = Math.round(quantity * 500 / (target.inv.gramsPerPack || 250));
+    } else if (target.type === 'tea' && purchaseItem.unit === '斤') {
+        quantity *= 500;
+    } else if (target.type === 'cig' && purchaseItem.unit === '条') {
+        quantity *= Number(target.inv.purchaseConvRatio) || 10;
+    } else if (target.type === 'alc' && purchaseItem.unit === '箱') {
+        quantity *= Number(target.inv.purchaseConvRatio) || 12;
+    } else if (target.type === 'custom' || target.type === 'other' || target.type === 'wh') {
+        unitMismatch = !!(purchaseItem.unit && target.inv.unit &&
+            normalizePurchaseMatchText(purchaseItem.unit) !== normalizePurchaseMatchText(target.inv.unit));
+    }
+    return { quantity: Math.round(quantity * 100) / 100, unit: purchaseInventoryUnit(target), unitMismatch: unitMismatch };
+}
+
+// 保存后按唯一优先级检查采购品名；歧义和旧映射失效时交由用户在确认窗处理。
+function checkPurInvLink(purItems, date) {
+    var targets = purchaseInventoryTargets();
+    var mapping = DB.settings && DB.settings.purchaseMapping || {};
+    var rows = [];
+    (purItems || []).forEach(function(item) {
+        var result = purchaseResolveInventoryMatch(item, mapping, targets);
+        if (result.status === 'none') return;
+        var row = { pur: item, status: result.status, reason: result.reason || '', targetKey: '', candidateKeys: [] };
+        if (result.target) row.targetKey = result.target.key;
+        if (result.candidates) row.candidateKeys = result.candidates.map(function(target) { return target.key; });
+        rows.push(row);
+    });
+
+    if (!rows.length) { rPurchase(); return; }
+    window._purLinkRows = rows;
+    window._purLinkDate = date;
+
+    var h = '<section class="purchase-link-dialog" aria-labelledby="purchaseLinkTitle">';
+    h += '<h3 id="purchaseLinkTitle" class="purchase-link-title">采购入库确认</h3>';
+    h += '<p class="purchase-link-description">已匹配项目默认勾选；需要核对的项目请先选择目标。只有点击“确认入库”后才会写入库存。</p>';
+    h += '<div class="purchase-link-list" role="list" aria-label="待确认的采购入库项目">';
+    rows.forEach(function(row, idx) {
+        var target = purchaseInventoryTargetByKey(row.targetKey, targets);
+        var quantity = target ? purchaseInventoryQuantity(row.pur, target) : { quantity: Number(row.pur.qty) || 0, unit: '', unitMismatch: false };
+        var checked = row.status === 'matched' && !quantity.unitMismatch;
+        var statusText = quantity.unitMismatch ? '核对单位' : target ? '已匹配' : (row.status === 'stale' ? '映射失效' : '需手动选择');
+        var statusClass = quantity.unitMismatch || row.status !== 'matched' ? 'is-review' : 'is-matched';
+        h += '<article class="purchase-link-card' + (checked ? ' is-selected' : '') + '" id="plink_card_' + idx + '" role="listitem">';
+        h += '<div class="purchase-link-card-heading">';
+        h += '<label class="purchase-link-toggle" for="plink_' + idx + '" title="选择此项入库">';
+        h += '<input type="checkbox" id="plink_' + idx + '" aria-label="将' + axEscapeHtml(row.pur.name || '') + '入库"' + (checked ? ' checked' : '') + ' onchange="togglePurLinkSelection(' + idx + ',this.checked)"></label>';
+        h += '<div class="purchase-link-product"><div class="purchase-link-product-title"><strong>' + axEscapeHtml(row.pur.name || '') + '</strong>';
+        h += '<span class="purchase-link-status ' + statusClass + '" id="plink_status_' + idx + '" role="status" aria-live="polite">' + statusText + '</span></div>';
+        h += '<div class="purchase-link-source-qty"><span>采购数量</span><b>' + axEscapeHtml(row.pur.qty) + axEscapeHtml(row.pur.unit || '') + '</b></div></div></div>';
+        h += '<div class="purchase-link-card-details"><div class="purchase-link-target-field"><span class="purchase-link-field-label">入库到</span>';
+        if (target) {
+            h += '<div class="purchase-link-target-value"><span class="purchase-link-target-group">' + axEscapeHtml(target.group) + '</span><strong>' + axEscapeHtml(target.inv.name) + '</strong></div>';
         } else {
-            upd(function(db) {
-                var it = db[INV[m.type].key].find(function(i) { return i.id === m.inv.id; });
-                if (it) it.purchases.push({ date: date, qty: stockQty, source: '采购入库', cost: m.pur.unitPrice || 0 });
+            var options = row.candidateKeys.map(function(key) { return purchaseInventoryTargetByKey(key, targets); }).filter(Boolean);
+            h += '<select class="inp purchase-link-target-select" id="plink_target_' + idx + '" aria-label="为' + axEscapeHtml(row.pur.name || '') + '选择入库目标" onchange="updatePurInvQty(' + idx + ')">';
+            h += '<option value="">' + (row.status === 'stale' ? '映射失效，请手动选择本次目标' : '请选择一个库存目标') + '</option>';
+            options.forEach(function(option) {
+                h += '<option value="' + axEscapeHtml(option.key) + '">' + axEscapeHtml(option.group + ' · ' + option.inv.name) + '</option>';
             });
+            h += '</select>';
+            h += '<div class="purchase-link-reason"' + (row.reason ? '' : ' hidden') + '>' + axEscapeHtml(row.reason) + '</div>';
         }
-        count++;
+        h += '</div><div class="purchase-link-quantity-field"><label class="purchase-link-field-label" for="plink_qty_' + idx + '">入库数量</label>';
+        h += '<div class="purchase-link-quantity-control"><input class="inp" id="plink_qty_' + idx + '" type="number" min="0" step="any" inputmode="decimal" aria-label="' + axEscapeHtml(row.pur.name || '') + '的入库数量" value="' + quantity.quantity + '">';
+        h += '<span class="purchase-link-unit" id="plink_unit_' + idx + '">' + axEscapeHtml(quantity.unit) + '</span></div></div></div>';
+        h += '<div class="purchase-link-warning" id="plink_warning_' + idx + '"' + (quantity.unitMismatch ? '' : ' hidden') + '>采购单位与库存单位不同，请核对换算数量后再勾选。</div>';
+        h += '</article>';
+    });
+    h += '</div><footer class="purchase-link-actions">';
+    h += '<button type="button" class="btn p" onclick="doPurInvLink()">确认入库</button>';
+    h += '<button type="button" class="btn" onclick="closeModal();rPurchase()">跳过</button></footer></section>';
+    showModal(h, 760);
+}
+
+function togglePurLinkSelection(index, selected) {
+    var card = $id('plink_card_' + index);
+    if (card) card.classList.toggle('is-selected', !!selected);
+}
+
+function updatePurInvQty(index) {
+    var row = (window._purLinkRows || [])[index];
+    var select = $id('plink_target_' + index);
+    var target = select && select.value ? purchaseInventoryTargetByKey(select.value) : null;
+    if (!row || !target) return;
+    var quantity = purchaseInventoryQuantity(row.pur, target);
+    var input = $id('plink_qty_' + index);
+    var unit = $id('plink_unit_' + index);
+    var warning = $id('plink_warning_' + index);
+    var status = $id('plink_status_' + index);
+    if (input) input.value = quantity.quantity;
+    if (unit) unit.textContent = quantity.unit;
+    if (warning) {
+        warning.hidden = !quantity.unitMismatch;
+        warning.textContent = quantity.unitMismatch ? '采购单位与库存单位不同，请核对换算数量后再勾选。' : '';
+    }
+    if (status) {
+        status.textContent = quantity.unitMismatch ? '核对单位' : '本次已手选';
+        status.className = 'purchase-link-status ' + (quantity.unitMismatch ? 'is-review' : 'is-manual');
+    }
+}
+
+// 用户确认后按当下库存状态再校验一次目标，避免弹窗期间目标失效。
+function doPurInvLink() {
+    var rows = window._purLinkRows;
+    var date = window._purLinkDate;
+    if (!rows) return;
+    var targets = purchaseInventoryTargets();
+    var selected = [];
+    rows.forEach(function(row, idx) {
+        var checkbox = $id('plink_' + idx);
+        if (!checkbox || !checkbox.checked) return;
+        var select = $id('plink_target_' + idx);
+        var key = select ? select.value : row.targetKey;
+        var target = purchaseInventoryTargetByKey(key, targets);
+        var qtyInput = $id('plink_qty_' + idx);
+        var quantity = Number(qtyInput && qtyInput.value);
+        if (!target || !Number.isFinite(quantity) || quantity <= 0) return;
+        selected.push({ target: target, pur: row.pur, quantity: Math.round(quantity * 100) / 100 });
+    });
+    if (!selected.length) {
+        closeModal();
+        toast('请先选择库存目标并勾选有效入库项');
+        rPurchase();
+        return;
+    }
+
+    var count = 0;
+    upd(function(db) {
+        selected.forEach(function(entry) {
+            var target = entry.target;
+            var item;
+            if (target.type === 'wh') {
+                item = (db.whItems || []).find(function(candidate) { return String(candidate.id) === String(target.inv.id); });
+                if (!item) return;
+                if (!item.movements) item.movements = [];
+                item.movements.push({ date: date, qty: entry.quantity, reason: '采购入库' });
+                item.stock = Math.max(0, (Number(item.stock) || 0) + entry.quantity);
+            } else if (target.type === 'custom') {
+                var type = typeof inventoryTypeById === 'function' ? inventoryTypeById(target.typeId) : null;
+                if (!type || type.archived || !type.actions || !type.actions.inbound) return;
+                item = (db.inventoryCustomItems || []).find(function(candidate) {
+                    return String(candidate.id) === String(target.inv.id) && String(candidate.typeId) === String(target.typeId);
+                });
+                if (!item) return;
+                if (!item.transactions) item.transactions = [];
+                var total = Number(entry.pur.total) || 0;
+                var sameUnit = !entry.pur.unit || !item.unit || normalizePurchaseMatchText(entry.pur.unit) === normalizePurchaseMatchText(item.unit);
+                var unitCost = total > 0 ? Math.round(total / entry.quantity * 100) / 100 : (sameUnit ? Number(entry.pur.unitPrice) || 0 : 0);
+                item.transactions.push({
+                    id: 'txn_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7),
+                    createdAt: Date.now(), kind: 'inbound', date: date, qty: entry.quantity,
+                    unitCost: unitCost, amount: total, note: '采购入库'
+                });
+            } else {
+                var definition = INV[target.type];
+                if (!definition) return;
+                item = (db[definition.key] || []).find(function(candidate) { return String(candidate.id) === String(target.inv.id); });
+                if (!item) return;
+                if (!item.purchases) item.purchases = [];
+                item.purchases.push({ date: date, qty: entry.quantity, source: '采购入库', cost: entry.pur.unitPrice || 0 });
+            }
+            count++;
+        });
     });
 
     closeModal();
-    toast(count > 0 ? '已入库 ' + count + ' 项' : '未入库');
+    toast(count > 0 ? '已入库 ' + count + ' 项' : '目标已失效，未写入库存');
     rPurchase();
 }
 

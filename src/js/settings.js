@@ -730,141 +730,146 @@ function impJSON(event) {
 }
 
 // ---------- 采购匹配映射 ----------
+function purchaseMappingRowHtml(key, value, targets) {
+    var resolved = value == null || value === '' ? null : purchaseResolveMappedTarget(value, targets);
+    var selected = resolved && resolved.target ? resolved.target.key : (value == null ? '' : 'legacy');
+    var display = value && typeof value === 'object'
+        ? String(value.type || '库存') + ' · ' + String(value.id || '')
+        : String(value == null ? '' : value);
+    var html = '<div class="purchase-mapping-row" style="display:flex;align-items:center;gap:6px;margin:6px 0;flex-wrap:wrap" data-legacy-value="' + axEscapeHtml(JSON.stringify(value == null ? null : value)) + '">';
+    html += '<input class="inp mapping-key" style="flex:1 1 140px;min-width:120px" maxlength="80" value="' + axEscapeHtml(key || '') + '" placeholder="采购名称">';
+    html += '<span aria-hidden="true">→</span><select class="inp mapping-target" style="flex:1 1 220px;min-width:180px">';
+    html += '<option value="">选择库存物品</option>';
+    if (selected === 'legacy') html += '<option value="legacy" selected>旧映射目标：' + axEscapeHtml(display || '无法识别') + '（选择新目标可修复）</option>';
+    targets.forEach(function(target) {
+        html += '<option value="' + axEscapeHtml(target.key) + '"' + (selected === target.key ? ' selected' : '') + '>' + axEscapeHtml(target.group + ' · ' + target.inv.name) + '</option>';
+    });
+    html += '</select><button type="button" class="btn s d" onclick="this.parentElement.remove()" aria-label="移除映射">移除</button></div>';
+    return html;
+}
+
 function addMappingRow() {
     var list = $id('mappingList');
     if (!list) return;
-    var div = document.createElement('div');
-    div.className = 'hrow';
-    div.style.marginBottom = '6px';
-    div.innerHTML = '<input class="inp mapping-key" style="flex:1" placeholder="采购名称">' +
-        '<span style="margin:0 6px">→</span>' +
-        '<input class="inp mapping-val" style="flex:1" placeholder="库存物品名称">' +
-        '<button class="btn s d" onclick="this.parentElement.remove()">×</button>';
-    list.appendChild(div);
+    list.insertAdjacentHTML('beforeend', purchaseMappingRowHtml('', null, purchaseInventoryTargets()));
 }
 
-function saveMapping() {
-    var keys = document.querySelectorAll('.mapping-key');
-    var vals = document.querySelectorAll('.mapping-val');
-    var mapping = {};
-    keys.forEach(function(k, i) {
-        var key = k.value.trim();
-        var val = vals[i] ? vals[i].value.trim() : '';
-        if (key && val) mapping[key] = val;
-    });
-    upd(function(db) {
-        if (!db.settings) db.settings = {};
-        db.settings.purchaseMapping = mapping;
-    });
-    toast('映射已保存');
-}
-
-// 显示物品映射配置弹窗
+// 显示精确映射和关键词配置，二者使用同一份运行时库存目录。
 function showMappingConfig() {
-    var h = '<h3>物品映射配置</h3>';
-    h += '<p style="font-size:.78rem;color:var(--tx-s);margin-bottom:12px">按分类配置匹配关键词，未配置的物品会高亮显示</p>';
+    var targets = purchaseInventoryTargets();
+    var mapping = DB.settings && DB.settings.purchaseMapping || {};
+    var h = '<h3>采购库存匹配映射</h3>';
+    h += '<p style="font-size:.78rem;color:var(--tx-s);margin-bottom:12px">先按采购名称精确映射，再按库存名称、关键词、唯一的名称近似匹配。存在歧义时，入库确认会要求手动选择。</p>';
+    h += '<div style="padding:10px;border:1px solid var(--bd);border-radius:8px;margin-bottom:12px">';
+    h += '<b style="font-size:.82rem">采购名称精确映射</b><div id="mappingList" style="max-height:24vh;overflow:auto;margin-top:5px">';
+    Object.keys(mapping).forEach(function(key) {
+        if (mapping[key] !== '' && mapping[key] != null) h += purchaseMappingRowHtml(key, mapping[key], targets);
+    });
+    h += '</div><button type="button" class="btn s" style="margin-top:6px" onclick="addMappingRow()">+ 添加映射</button></div>';
 
-    // 分类筛选
-    h += '<div class="hrow" style="margin-bottom:12px">';
-    h += '<button class="btn s" onclick="filterMapping(\'all\')" id="filterAll">全部</button>';
-    h += '<button class="btn s" onclick="filterMapping(\'cig\')" id="filterCig">🚬香烟</button>';
-    h += '<button class="btn s" onclick="filterMapping(\'alc\')" id="filterAlc">🍺酒类</button>';
-    h += '<button class="btn s" onclick="filterMapping(\'other\')" id="filterOther">📦其他</button>';
-    h += '<button class="btn s" onclick="filterMapping(\'wh\')" id="filterWh">🏠仓库</button>';
-    h += '</div>';
+    h += '<div style="font-size:.82rem;font-weight:600;margin:10px 0 6px">库存物品匹配关键词</div>';
+    h += '<div class="hrow" style="margin-bottom:8px;flex-wrap:wrap">';
+    h += '<button type="button" class="btn s active" onclick="filterMapping(\'all\')" id="filterAll">全部</button>';
+    h += '<button type="button" class="btn s" onclick="filterMapping(\'tea\')" id="filterTea">茗茶</button>';
+    h += '<button type="button" class="btn s" onclick="filterMapping(\'cig\')" id="filterCig">香烟</button>';
+    h += '<button type="button" class="btn s" onclick="filterMapping(\'alc\')" id="filterAlc">酒类</button>';
+    h += '<button type="button" class="btn s" onclick="filterMapping(\'other\')" id="filterOther">贵重物品</button>';
+    h += '<button type="button" class="btn s" onclick="filterMapping(\'custom\')" id="filterCustom">自定义库存</button>';
+    h += '<button type="button" class="btn s" onclick="filterMapping(\'wh\')" id="filterWh">仓库</button></div>';
+    h += '<div id="mappingItems" style="max-height:34vh;overflow-y:auto;padding-right:4px">';
 
-    // 物品列表
-    h += '<div id="mappingItems" style="max-height:50vh;overflow-y:auto;padding-right:4px">';
-
-    // 按分类分组
-    var categories = [
-        { type: 'cig', label: '🚬香烟', items: DB.cigItems || [] },
-        { type: 'alc', label: '🍺酒类', items: DB.alcItems || [] },
-        { type: 'other', label: '📦其他贵重物品', items: DB.otherItems || [] },
-        { type: 'wh', label: '🏠仓库', items: DB.whItems || [] }
-    ];
-
-    categories.forEach(function(cat) {
-        if (!cat.items.length) return;
-        h += '<div class="mapping-category" data-type="' + cat.type + '">';
-        h += '<div style="font-size:.82rem;font-weight:600;color:var(--ac);margin:10px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--bd-l)">' + cat.label + ' (' + cat.items.length + ')</div>';
-        cat.items.forEach(function(item) {
-            var hasKeyword = item.matchKeyword && item.matchKeyword.trim();
-            var bgStyle = hasKeyword ? '' : 'background:var(--card-h);';
-            h += '<div class="mapping-item" data-type="' + cat.type + '" style="display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:4px;border-radius:6px;' + bgStyle + '">';
-            h += '<span style="flex:1;font-size:.8rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + item.name + '</span>';
-            h += '<input class="inp mapping-kw" data-id="' + item.id + '" data-type="' + cat.type + '" style="width:120px;font-size:.76rem" value="' + (item.matchKeyword || '').replace(/"/g, '&quot;') + '" placeholder="' + (hasKeyword ? '' : '未设置') + '">';
-            if (!hasKeyword) {
-                h += '<span style="font-size:.7rem;color:var(--rd)">⚠️</span>';
-            }
+    var groups = {};
+    targets.forEach(function(target) {
+        if (!groups[target.group]) groups[target.group] = { filterType: target.filterType, items: [] };
+        groups[target.group].items.push(target);
+    });
+    var totalItems = targets.length;
+    var configuredItems = 0;
+    Object.keys(groups).forEach(function(group) {
+        var category = groups[group];
+        h += '<div class="mapping-category" data-type="' + axEscapeHtml(category.filterType) + '">';
+        h += '<div style="font-size:.8rem;font-weight:600;color:var(--ac);margin:8px 0 5px;padding-bottom:4px;border-bottom:1px solid var(--bd-l)">' + axEscapeHtml(group) + ' (' + category.items.length + ')</div>';
+        category.items.forEach(function(target) {
+            var keyword = String(target.inv.matchKeyword || '');
+            var hasKeyword = !!keyword.trim();
+            if (hasKeyword) configuredItems++;
+            h += '<div class="mapping-item" style="display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:4px;border-radius:6px;' + (hasKeyword ? '' : 'background:var(--card-h);') + '">';
+            h += '<span style="flex:1;font-size:.78rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + axEscapeHtml(target.inv.name) + '">' + axEscapeHtml(target.inv.name) + '</span>';
+            h += '<input class="inp mapping-kw" data-target-key="' + axEscapeHtml(target.key) + '" style="width:130px;font-size:.76rem" value="' + axEscapeHtml(keyword) + '" placeholder="' + (hasKeyword ? '' : '未设置') + '">';
+            if (!hasKeyword) h += '<span aria-label="未配置" style="font-size:.7rem;color:var(--rd)">⚠️</span>';
             h += '</div>';
         });
         h += '</div>';
     });
-
     h += '</div>';
+    h += '<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--bd-l);font-size:.76rem;color:var(--tx-m)">';
+    h += '已配置关键词：<span style="color:var(--gn);font-weight:600">' + configuredItems + '</span> / ' + totalItems + ' 个可入库物品';
+    h += '</div><div class="brow" style="margin-top:12px;justify-content:flex-end">';
+    h += '<button type="button" class="btn p" onclick="saveMappingConfig()">保存配置</button><button type="button" class="btn" onclick="closeModal()">关闭</button></div>';
+    showModal(h, 760);
+}
 
-    // 统计和按钮
-    var totalItems = (DB.cigItems || []).length + (DB.alcItems || []).length + (DB.otherItems || []).length + (DB.whItems || []).length;
-    var configuredItems = 0;
-    ['cigItems', 'alcItems', 'otherItems', 'whItems'].forEach(function(key) {
-        (DB[key] || []).forEach(function(item) {
-            if (item.matchKeyword && item.matchKeyword.trim()) configuredItems++;
+function filterMapping(type) {
+    document.querySelectorAll('.mapping-category').forEach(function(el) {
+        el.style.display = type === 'all' || el.dataset.type === type ? '' : 'none';
+    });
+    ['All', 'Tea', 'Cig', 'Alc', 'Other', 'Custom', 'Wh'].forEach(function(name) {
+        var button = $id('filter' + name);
+        if (button) button.classList.toggle('active', type === name.toLowerCase());
+    });
+}
+
+function saveMappingConfig() {
+    var targets = purchaseInventoryTargets();
+    var mapping = Object.create(null);
+    var normalizedKeys = Object.create(null);
+    var rows = document.querySelectorAll('.purchase-mapping-row');
+    for (var i = 0; i < rows.length; i++) {
+        var row = rows[i];
+        var key = String(row.querySelector('.mapping-key').value || '').trim();
+        var selected = row.querySelector('.mapping-target').value;
+        if (!key && !selected) continue;
+        if (!key || !selected) { toast('请填写采购名称并选择库存目标'); return; }
+        var normalized = normalizePurchaseMatchText(key);
+        if (normalizedKeys[normalized]) { toast('采购名称重复，请合并或修改重复映射'); return; }
+        normalizedKeys[normalized] = true;
+        if (selected === 'legacy') {
+            try { mapping[key] = JSON.parse(row.dataset.legacyValue); }
+            catch (e) { toast('旧映射无法读取，请重新选择库存目标'); return; }
+        } else {
+            var target = purchaseInventoryTargetByKey(selected, targets);
+            if (!target) { toast('所选库存目标已失效，请重新选择'); return; }
+            mapping[key] = { type: target.type, id: target.inv.id, typeId: target.typeId || '' };
+        }
+    }
+
+    var keywords = {};
+    document.querySelectorAll('.mapping-kw').forEach(function(input) {
+        var target = purchaseInventoryTargetByKey(input.dataset.targetKey, targets);
+        if (target) keywords[target.key] = String(input.value || '').trim();
+    });
+    var saved = false;
+    upd(function(db) {
+        saved = true;
+        if (!db.settings) db.settings = {};
+        db.settings.purchaseMapping = mapping;
+        targets.forEach(function(target) {
+            if (!(target.key in keywords)) return;
+            var keyword = keywords[target.key];
+            if (target.type === 'custom') {
+                var custom = (db.inventoryCustomItems || []).find(function(item) {
+                    return String(item.id) === String(target.inv.id) && String(item.typeId) === String(target.typeId);
+                });
+                if (custom) custom.matchKeyword = keyword;
+            } else {
+                var definition = target.type === 'wh' ? { key: 'whItems' } : INV[target.type];
+                var item = definition && (db[definition.key] || []).find(function(entry) { return String(entry.id) === String(target.inv.id); });
+                if (item) item.matchKeyword = keyword;
+            }
         });
     });
-    var unconfigured = totalItems - configuredItems;
-
-    h += '<div style="margin-top:12px;padding-top:8px;border-top:1px solid var(--bd-l);font-size:.76rem;color:var(--tx-m)">';
-    h += '已配置: <span style="color:var(--gn);font-weight:600">' + configuredItems + '</span> / ' + totalItems + ' 个物品';
-    if (unconfigured > 0) {
-        h += ' · <span style="color:var(--rd);font-weight:600">' + unconfigured + '</span> 个未配置';
-    }
-    h += '</div>';
-
-    h += '<div class="brow" style="margin-top:12px;justify-content:flex-end">';
-    h += '<button class="btn p" onclick="saveMappingConfig()">保存配置</button>';
-    h += '<button class="btn" onclick="closeModal()">关闭</button>';
-    h += '</div>';
-
-    showModal(h, 600);
-}
-
-// 筛选映射配置
-function filterMapping(type) {
-    var items = document.querySelectorAll('.mapping-category');
-    items.forEach(function(el) {
-        if (type === 'all' || el.dataset.type === type) {
-            el.style.display = '';
-        } else {
-            el.style.display = 'none';
-        }
-    });
-
-    // 更新按钮状态
-    ['filterAll', 'filterCig', 'filterAlc', 'filterOther', 'filterWh'].forEach(function(id) {
-        var btn = $id(id);
-        if (btn) {
-            btn.classList.toggle('active', id === 'filter' + type.charAt(0).toUpperCase() + type.slice(1) || (type === 'all' && id === 'filterAll'));
-        }
-    });
-}
-
-// 保存映射配置
-function saveMappingConfig() {
-    var inputs = document.querySelectorAll('.mapping-kw');
-    inputs.forEach(function(inp) {
-        var id = inp.dataset.id;
-        var type = inp.dataset.type;
-        var keyword = inp.value.trim();
-        var key = type === 'cig' ? 'cigItems' : type === 'alc' ? 'alcItems' : type === 'other' ? 'otherItems' : 'whItems';
-        var item = DB[key].find(function(i) { return i.id === id; });
-        if (item) {
-            item.matchKeyword = keyword;
-        }
-    });
-    saveDB(DB);
-    sbScheduleSave();
-    toast('配置已保存');
+    if (!saved) return;
+    toast('采购匹配配置已保存');
     closeModal();
 }
 
