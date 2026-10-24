@@ -1,6 +1,7 @@
 var _sb = { client: null, ready: false, saving: false };
 var _sbSyncing = false;
 var _sbPendingSave = false;
+var _sbPendingNotifySuccess = false;
 
 // Supabase 配置（内置）
 var _SB_URL = 'https://aahvuwdifuqhwyanrvwj.supabase.co';
@@ -89,22 +90,36 @@ async function sbLoadAppConfig() {
     }
 }
 
-// 上传当前用户的数据到云端（同时写入共享行供报表页读取）
-async function sbSave() {
-    if (!_sb.ready) { console.log('跳过保存: Supabase未就绪'); return; }
+/**
+ * 上传当前用户的数据到云端，并按需提示本次上传结果。
+ * @param {{notifySuccess?: boolean, manual?: boolean}} [options]
+ * @returns {Promise<{status: string, accountSuccess?: boolean, sharedSuccess?: boolean}>}
+ */
+async function sbSave(options) {
+    options = options || {};
+    var notifySuccess = options.notifySuccess === true;
+    if (!_sb.ready) { console.log('跳过保存: Supabase未就绪'); return { status: 'unavailable' }; }
+    var dataId = _sbDataId();
+    if (!dataId) { console.log('跳过保存: 未登录'); return { status: 'unauthenticated' }; }
+    if (options.manual && _sbTimer) {
+        clearTimeout(_sbTimer);
+        _sbTimer = null;
+        _sbTimerNotifySuccess = false;
+    }
     if (_sb.saving) {
         _sbPendingSave = true;
-        return;
+        _sbPendingNotifySuccess = _sbPendingNotifySuccess || notifySuccess;
+        return { status: 'queued' };
     }
-    var dataId = _sbDataId();
-    if (!dataId) { console.log('跳过保存: 未登录'); return; }
     _sb.saving = true;
     DB._ts = Date.now();
     console.log('开始上传数据...', '数据ID:', dataId, '数据大小:', JSON.stringify(DB).length);
+    var accountWriteSucceeded = false;
     try {
         var payload = { id: dataId, data: DB, updated_at: new Date().toISOString() };
         var result1 = await _sb.client.from('cafe_data').upsert(payload);
         console.log('用户数据上传结果:', result1);
+        accountWriteSucceeded = !result1.error;
         // 同时写入共享行，供 dashboard.html 读取
         var result2 = await _sb.client.from('cafe_data').upsert({ id: 'shop_data', data: DB, updated_at: new Date().toISOString() });
         console.log('共享行上传结果:', result2);
@@ -112,31 +127,61 @@ async function sbSave() {
         if (result1.error) {
             toast('上传失败: ' + (result1.error.message || '未知错误'));
         } else if (result2.error) {
-            toast('共享行上传失败: ' + (result2.error.message || '未知错误'));
+            toast('账号数据已上传；共享行上传失败: ' + (result2.error.message || '未知错误'));
+        } else if (notifySuccess && !_sbPendingNotifySuccess) {
+            toast('云端已上传');
         }
-        // 上传成功不显示提示，避免频繁打扰用户
+        return {
+            status: result1.error ? 'account-error' : result2.error ? 'shared-error' : 'uploaded',
+            accountSuccess: !result1.error,
+            sharedSuccess: !result2.error
+        };
     } catch (e) {
         console.error('Supabase 保存异常:', e);
-        toast('上传异常: ' + e.message);
+        var errorMessage = e && e.message ? e.message : '未知错误';
+        toast(accountWriteSucceeded
+            ? '账号数据已上传；共享行同步异常: ' + errorMessage
+            : '上传异常: ' + errorMessage);
+        return { status: accountWriteSucceeded ? 'shared-error' : 'account-error', accountSuccess: accountWriteSucceeded, sharedSuccess: false };
     } finally {
         _sb.saving = false;
         updSyncInd();
         if (_sbPendingSave) {
+            var notifyPendingSave = _sbPendingNotifySuccess;
             _sbPendingSave = false;
-            sbScheduleSave();
+            _sbPendingNotifySuccess = false;
+            if (_sbTimer) clearTimeout(_sbTimer);
+            _sbTimer = null;
+            sbScheduleSave({ notifySuccess: notifyPendingSave });
         }
     }
 }
 
 // 防抖保存（数据变更后2秒自动上传）
 var _sbTimer = null;
-function sbScheduleSave() {
+var _sbTimerNotifySuccess = false;
+/**
+ * 合并短时间内的多次本地变更，并在防抖结束后上传。
+ * @param {{notifySuccess?: boolean}} [options]
+ */
+function sbScheduleSave(options) {
     if (!_sb.ready) return;
+    options = options || {};
+    if (_sb.saving) {
+        _sbPendingSave = true;
+        _sbPendingNotifySuccess = _sbPendingNotifySuccess || options.notifySuccess !== false;
+    }
     if (_sbTimer) clearTimeout(_sbTimer);
-    _sbTimer = setTimeout(sbSave, 2000);
+    _sbTimerNotifySuccess = _sbTimerNotifySuccess || options.notifySuccess !== false;
+    _sbTimer = setTimeout(function() {
+        _sbTimer = null;
+        var shouldNotify = _sbTimerNotifySuccess;
+        _sbTimerNotifySuccess = false;
+        sbSave({ notifySuccess: shouldNotify });
+    }, 2000);
 }
 
-// 启动时同步：下载用户数据，同时同步到共享行
+/** 启动时下载用户数据并同步共享行。 */
 async function sbSyncOnStart() {
     if (!_sb.ready || _sbSyncing) return;
     _sbSyncing = true;

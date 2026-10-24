@@ -615,7 +615,14 @@ function getAppConfig() {
     return normalizeAppConfig(mergeAppConfigCandidates(appConfigCandidates()), legacy);
 }
 
-function storeAppConfig(nextConfig) {
+/**
+ * 保存合并后的应用配置。
+ * @param {Object} nextConfig 配置字段。
+ * @param {{notifySuccess?: boolean}} [options] 是否在云端同步后显示上传成功提醒。
+ * @returns {Object} 保存后的配置。
+ */
+function storeAppConfig(nextConfig, options) {
+    options = options || {};
     var legacy = legacyAppConfig(typeof DB !== 'undefined' ? DB : null);
     var merged = Object.assign({}, getAppConfig(), nextConfig || {});
     merged.schemaVersion = APP_CONFIG_SCHEMA_VERSION;
@@ -631,11 +638,12 @@ function storeAppConfig(nextConfig) {
         DB.areaCats = copyAppConfigValue(config.purchaseCategories) || {};
         DB.whCats = copyAppConfigValue(config.warehouseCategories) || [];
         if (typeof saveDB === 'function') saveDB(DB);
-        if (typeof sbScheduleSave === 'function') sbScheduleSave();
+        if (typeof sbScheduleSave === 'function') sbScheduleSave({ notifySuccess: options.notifySuccess !== false });
     }
     return config;
 }
 
+/** 迁移历史应用配置；迁移写入不作为用户编辑上传成功提醒。 */
 function migrateAppConfig() {
     var config = getAppConfig();
     var key = getConfigKey();
@@ -659,7 +667,7 @@ function migrateAppConfig() {
     var needsConfigWrite = hasPersistedConfig && (!localStorage.getItem(key)
         || Number(raw.schemaVersion || 0) < APP_CONFIG_SCHEMA_VERSION
         || JSON.stringify(raw) !== JSON.stringify(config));
-    return needsConfigWrite ? storeAppConfig(config) : config;
+    return needsConfigWrite ? storeAppConfig(config, { notifySuccess: false }) : config;
 }
 
 function saveAppConfig(config) {
