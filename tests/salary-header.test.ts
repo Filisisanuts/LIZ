@@ -68,4 +68,17 @@ describe('salary grouped table header', () => {
     expect(html).toContain('<th rowspan="2" class="salary-span-header nr">餐补</th>');
     expect(html).not.toContain('salary-field-label-row');
   });
+
+  it('renders a read-only month header without edit-only columns', () => {
+    const context = createHeaderContext({
+      salaryFieldGroups: groups,
+      salaryFieldDefinitions: fields,
+    });
+    const html = context.salaryTableHeaderHtml(true);
+
+    expect(html).toContain('<th class="salary-name-column" rowspan="2">姓名</th>');
+    expect(html).toContain('<th colspan="2" class="salary-group-header">应付基本工资项目</th>');
+    expect(html).not.toContain('salary-drag-column');
+    expect(html).not.toContain('>操作</th>');
+  });
 });

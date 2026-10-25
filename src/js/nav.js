@@ -118,14 +118,15 @@ function salaryFieldGroups() {
 
 // 双行分组表头：span 分组（或未配置分组）的字段各自 rowspan=2，
 // 普通分组第一行显示分组标题（colspan），第二行显示字段名，结构对齐原版 Excel 工资表。
-function salaryTableHeaderHtml() {
+function salaryTableHeaderHtml(readOnly) {
+    readOnly = readOnly === true;
     var visibleFields = salaryVisibleFields();
     var employeeField = visibleFields.find(function(field) { return field.key === 'employee'; });
     var fields = visibleFields.filter(function(field) { return field.key !== 'employee'; });
     var groupMap = {};
     salaryFieldGroups().forEach(function(group) { groupMap[group.id] = group; });
 
-    var row1 = '<th class="salary-drag-column" rowspan="2"></th>';
+    var row1 = readOnly ? '' : '<th class="salary-drag-column" rowspan="2"></th>';
     row1 += '<th class="salary-name-column" rowspan="2">' + salaryEscape(employeeField ? employeeField.label : '姓名') + '</th>';
     var row2 = '';
 
@@ -150,7 +151,7 @@ function salaryTableHeaderHtml() {
             });
         }
     });
-    row1 += '<th rowspan="2">操作</th>';
+    if (!readOnly) row1 += '<th rowspan="2">操作</th>';
     return '<tr class="salary-group-row">' + row1 + '</tr>'
         + (row2 ? '<tr class="salary-field-label-row">' + row2 + '</tr>' : '');
 }
@@ -529,17 +530,84 @@ function renderSalaryDetailView() {
 
 function renderSalaryMonthDetail(period) {
     var records = salaryMonthRecords(period);
-    var total = records.reduce(function(sum, record) { return sum + salaryRecordActual(record); }, 0);
+    var visibleFields = salaryVisibleFields();
+    var employeeField = visibleFields.find(function(field) { return field.key === 'employee'; });
+    var fields = visibleFields.filter(function(field) { return field.key !== 'employee'; });
     var h = '<div class="salary-month-detail">';
-    h += '<div class="salary-month-detail-head"><button class="btn s" onclick="closeSalaryMonthDetail()">← 明细</button><div class="salary-month-detail-title"><strong>' + salaryEscape(period) + ' 工资明细</strong><span>' + records.length + ' 人 · 实发工资总额</span></div><div style="flex:1"></div><button class="btn" onclick="openSalaryMonthMove(\'' + period + '\')">修改月份</button><button class="btn" onclick="openSalaryInEntry(\'' + period + '\')">在录入中编辑</button><button class="btn d" onclick="trashSalaryMonth(\'' + period + '\')">删除本月</button></div>';
-    h += '<div class="salary-month-total-card"><span>实发工资总额</span><strong>¥' + fmtC(total) + '</strong></div>';
-    h += '<div class="salary-person-list">';
+    h += '<div class="salary-month-detail-head"><button class="btn s" onclick="closeSalaryMonthDetail()">← 明细</button><div class="salary-month-detail-title"><strong>' + salaryEscape(period) + ' 工资明细</strong><span>' + records.length + ' 人 · 整月工资表</span></div><div class="salary-month-detail-actions"><button class="btn" onclick="openSalaryMonthMove(\'' + period + '\')">修改月份</button><button class="btn" onclick="openSalaryInEntry(\'' + period + '\')">在录入中编辑</button><button class="btn d" onclick="trashSalaryMonth(\'' + period + '\')">删除本月</button></div></div>';
+    h += '<div class="tw salary-table-wrap salary-month-table-wrap" role="region" tabindex="0" aria-label="' + salaryEscape(period) + ' 工资明细表，可横向滚动">';
+    h += '<table id="salaryMonthTable" class="salary-month-table" aria-label="' + salaryEscape(period) + ' 工资明细表"><thead>' + salaryTableHeaderHtml(true) + '</thead><tbody>';
+    if (!records.length) {
+        h += '<tr class="salary-month-empty"><td colspan="' + (fields.length + 1) + '">该月暂无工资记录</td></tr>';
+    } else {
+        salaryMonthDepartments(records).forEach(function(department) {
+            var departmentRecords = salaryMonthDepartmentRows(records, department);
+            if (!departmentRecords.length) return;
+            h += '<tr class="salary-department-row"><td class="salary-department-label salary-name-column">' + salaryEscape(department) + ' · ' + departmentRecords.length + ' 人</td>';
+            if (fields.length) h += '<td class="salary-summary-spacer" colspan="' + fields.length + '"></td>';
+            h += '</tr>';
+            departmentRecords.forEach(function(record) {
+                h += '<tr class="salary-month-employee-row" data-salary-record-id="' + salaryEscape(record.id) + '"><td class="salary-name-column">' + salaryEscape(record.employee || '未命名员工') + '</td>';
+                fields.forEach(function(field) { h += salaryMonthFieldCellHtml(record, field); });
+                h += '</tr>';
+            });
+            h += salaryMonthSummaryRow('部门小计', departmentRecords, fields, 'salary-department-subtotal', 'salary-subtotal-label');
+        });
+    }
+    h += '</tbody>';
+    if (records.length) h += '<tfoot>' + salaryMonthSummaryRow('全店总计', records, fields, 'salary-grand-total', 'salary-total-label') + '</tfoot>';
+    return h + '</table></div></div>';
+}
+
+function salaryMonthDepartments(records) {
+    var config = getAppConfig();
+    var departments = uniqueStrings(config.salaryDepartments || [], []);
     records.forEach(function(record) {
-        h += '<button type="button" class="salary-person-row" onclick="openSalaryRecordDetail(\'' + period + '\',\'' + salaryEscape(record.id) + '\')">';
-        h += '<span class="salary-person-avatar">' + salaryEscape((record.employee || '?').slice(0, 1)) + '</span><span class="salary-person-name"><strong>' + salaryEscape(record.employee || '未命名员工') + '</strong><small>' + salaryEscape(record.department || '未分部门') + (record.position ? ' · ' + salaryEscape(record.position) : '') + '</small></span>';
-        h += '<strong class="salary-person-total">¥' + fmtC(salaryRecordActual(record)) + '</strong><span class="salary-month-arrow">›</span></button>';
+        var department = String(record.department || '').trim() || '未分部门';
+        if (departments.indexOf(department) < 0) departments.push(department);
     });
-    return h + '</div></div>';
+    if (departments.indexOf('未分部门') < 0) departments.unshift('未分部门');
+    return departments.filter(function(department) {
+        return records.some(function(record) { return (String(record.department || '').trim() || '未分部门') === department; });
+    });
+}
+
+function salaryMonthDepartmentRows(records, department) {
+    return records.filter(function(record) {
+        return (String(record.department || '').trim() || '未分部门') === department;
+    });
+}
+
+function salaryMonthFieldValue(record, field) {
+    var value = record[field.key];
+    if (field.category === 'computed') {
+        return value !== undefined && value !== null && value !== '' && Number.isFinite(Number(value))
+            ? Number(value)
+            : salaryCalculatedValue(record, field.key);
+    }
+    if (field.key === 'attendanceDays' && (value === undefined || value === null || value === '')) return 31;
+    return field.numeric ? (Number(value) || 0) : (value || '');
+}
+
+function salaryMonthFieldCellHtml(record, field) {
+    var value = salaryMonthFieldValue(record, field);
+    if (field.category === 'computed') return '<td class="nr salary-computed-cell">' + fmtC(value) + '</td>';
+    if (field.numeric) return '<td class="nr">' + salaryEscape(value) + '</td>';
+    return '<td>' + (value ? salaryEscape(value) : '<span class="salary-month-empty-value">—</span>') + '</td>';
+}
+
+function salaryMonthSummaryRow(label, records, fields, rowClass, labelClass) {
+    var totals = {};
+    fields.filter(function(field) { return field.numeric; }).forEach(function(field) {
+        totals[field.key] = records.reduce(function(sum, record) { return sum + salaryMonthFieldValue(record, field); }, 0);
+    });
+    var h = '<tr class="' + rowClass + '"><td class="' + labelClass + ' salary-name-column">' + label + '</td>';
+    fields.forEach(function(field) {
+        h += field.numeric
+            ? '<td class="nr">' + fmtC(totals[field.key] || 0) + '</td>'
+            : '<td class="salary-summary-spacer"></td>';
+    });
+    return h + '</tr>';
 }
 
 function openSalaryMonthDetail(period) {
@@ -615,55 +683,6 @@ function moveSalaryMonth(sourcePeriod, targetPeriod, mode) {
     closeModal();
     renderSalaryPage();
     toast(mode === 'merge' ? '已合并到 ' + targetPeriod : '工资表已迁移至 ' + targetPeriod);
-}
-
-function openSalaryRecordDetail(period, recordId) {
-    var record = salaryMonthRecords(period).find(function(item) { return item.id === recordId; });
-    if (!record) { toast('未找到这条工资记录'); return; }
-    var h = '<h3>' + salaryEscape(record.employee || '工资条') + '<span style="font-size:.72rem;color:var(--tx-m);font-weight:400"> · ' + salaryEscape(period) + '</span></h3>';
-    h += '<div class="salary-record-editor">';
-    h += '<label>部门<input class="inp" id="salaryRecord_department" type="text" value="' + salaryEscape(record.department || '') + '"></label>';
-    salaryVisibleFields().forEach(function(field) {
-        var value = field.numeric ? (Number(record[field.key]) || 0) : (record[field.key] || '');
-        h += '<label>' + salaryEscape(field.label) + '<input class="inp" id="salaryRecord_' + field.key + '" type="' + (field.numeric ? 'number' : 'text') + '" value="' + salaryEscape(value) + '"' + (field.category === 'computed' ? ' readonly' : '') + '></label>';
-    });
-    h += '<label class="salary-record-note">备注<textarea class="inp" id="salaryRecord_note">' + salaryEscape(record.note || '') + '</textarea></label></div>';
-    h += '<div class="salary-record-editor-actions"><button class="btn d" onclick="trashSalaryRecord(\'' + salaryEscape(period) + '\',\'' + salaryEscape(recordId) + '\')">删除此人</button><div style="flex:1"></div><button class="btn" onclick="closeModal()">取消</button><button class="btn p" onclick="saveSalaryRecordDetail(\'' + salaryEscape(period) + '\',\'' + salaryEscape(recordId) + '\')">保存修改</button></div>';
-    showModal(h, 760);
-}
-
-function saveSalaryRecordDetail(period, recordId) {
-    if (!salaryRequireAuth()) return;
-    var changes = { department: (($id('salaryRecord_department') || {}).value || '').trim() };
-    salaryVisibleFields().forEach(function(field) {
-        var input = $id('salaryRecord_' + field.key);
-        changes[field.key] = field.numeric ? (parseFloat(input && input.value) || 0) : (input ? input.value.trim() : '');
-    });
-    changes.note = ($id('salaryRecord_note') || {}).value || '';
-    if (!changes.employee) { toast('请填写姓名'); return; }
-    upd(function(db) {
-        var record = (db.salaryRecords || []).find(function(item) { return item.period === period && item.id === recordId; });
-        if (!record) return;
-        Object.assign(record, changes);
-        applySalaryCalculations(record);
-    });
-    closeModal();
-    renderSalaryPage();
-    toast('工资条已更新');
-}
-
-function trashSalaryRecord(period, recordId) {
-    if (!salaryRequireAuth()) return;
-    var record = salaryMonthRecords(period).find(function(item) { return item.id === recordId; });
-    if (!record || !confirm('将“' + (record.employee || '该员工') + '”的工资条移入回收站？')) return;
-    upd(function(db) {
-        salaryPruneTrash(db);
-        db.salaryTrash.push({ id: 'sal_trash_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8), kind: 'record', period: period, recordName: record.employee || '工资条', records: [Object.assign({}, record)], deletedAt: Date.now(), expiresAt: Date.now() + SALARY_TRASH_RETENTION_DAYS * 86400000 });
-        db.salaryRecords = db.salaryRecords.filter(function(item) { return item.id !== recordId; });
-    });
-    closeModal();
-    renderSalaryPage();
-    toast('已移入回收站，可在 30 天内恢复');
 }
 
 function trashSalaryMonth(period) {

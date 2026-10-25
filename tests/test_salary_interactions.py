@@ -79,8 +79,8 @@ def test_salary_table_keeps_drafts_and_limits_drag_to_handle():
         browser.close()
 
 
-def test_salary_detail_tab_edits_and_restores_monthly_payroll():
-    """明细按月汇总，单人编辑与整月回收站恢复均须保留记录。"""
+def test_salary_detail_month_table_is_readonly_and_restores_monthly_payroll():
+    """明细按录入表结构展示整月记录，查看不写入且整月回收站流程保持可用。"""
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
@@ -92,6 +92,21 @@ def test_salary_detail_tab_edits_and_restores_monthly_payroll():
         page.evaluate(
             """() => {
                 window.requireAuth = () => true;
+                const config = getAppConfig();
+                config.salaryFieldGroups = [
+                    {id:'info',label:'信息项',order:0,span:true},
+                    {id:'basePay',label:'应付基本工资项目',order:1,span:false},
+                    {id:'actual',label:'实发工资',order:2,span:true}
+                ];
+                config.salaryFieldDefinitions = [
+                    {id:'employee',key:'employee',label:'姓名',category:'info',numeric:false,visible:true,order:0,group:'info'},
+                    {id:'department',key:'department',label:'部门',category:'info',numeric:false,visible:true,order:1,group:'info'},
+                    {id:'position',key:'position',label:'职务',category:'info',numeric:false,visible:true,order:2,group:'info'},
+                    {id:'baseSalary',key:'baseSalary',label:'基本工资',category:'earning',numeric:true,visible:true,order:3,group:'basePay'},
+                    {id:'performance',key:'performance',label:'绩效',category:'earning',numeric:true,visible:true,order:4,group:'basePay'},
+                    {id:'actualSalary',key:'actualSalary',label:'实发工资',category:'computed',numeric:true,visible:true,order:5,group:'actual'}
+                ];
+                storeAppConfig(config);
                 DB.salaryRecords = [
                     {id:'salary-aug-a', period:'2026-08', department:'前厅', employee:'小艾', position:'助理', baseSalary:4000, performance:500, socialInsurance:100, tax:0, actualSalary:4400},
                     {id:'salary-aug-b', period:'2026-08', department:'厨房', employee:'小周', position:'领班', baseSalary:5000, performance:0, socialInsurance:0, tax:0, actualSalary:5000},
@@ -108,12 +123,38 @@ def test_salary_detail_tab_edits_and_restores_monthly_payroll():
 
         page.locator(".salary-month-row").first.click()
         assert page.get_by_text("2026-08 工资明细").count() == 1
-        assert page.locator(".salary-person-row").count() == 2
-
-        page.locator(".salary-person-row").first.click()
-        page.locator("#salaryRecord_performance").fill("700")
-        page.get_by_role("button", name="保存修改").click()
-        assert page.evaluate("DB.salaryRecords.find(r => r.id === 'salary-aug-a').actualSalary") == 4600
+        assert page.locator("#salaryMonthTable .salary-month-employee-row").count() == 2
+        assert page.locator("#salaryMonthTable .salary-department-row").count() == 2
+        assert page.locator("#salaryMonthTable .salary-department-subtotal").count() == 2
+        assert page.locator("#salaryMonthTable .salary-grand-total").count() == 1
+        assert page.locator("#salaryMonthTable .salary-group-header", has_text="应付基本工资项目").count() == 1
+        assert page.locator("#salaryMonthTable .salary-name-column", has_text="小艾").count() == 1
+        assert page.locator("#salaryMonthTable input, #salaryMonthTable button, #salaryMonthTable select, #salaryMonthTable textarea").count() == 0
+        assert "9,400.00" in page.locator("#salaryMonthTable .salary-grand-total").inner_text()
+        assert page.locator(".salary-person-row").count() == 0
+        before = page.evaluate("JSON.stringify(DB.salaryRecords)")
+        for width in (375, 390, 1440):
+            page.set_viewport_size({"width": width, "height": 800})
+            metrics = page.evaluate("""() => {
+                const wrap = document.querySelector('.salary-month-table-wrap');
+                const name = document.querySelector('#salaryMonthTable tbody .salary-name-column');
+                return {
+                    bodyOverflow: document.documentElement.scrollWidth > window.innerWidth,
+                    tableScrolls: wrap.scrollWidth > wrap.clientWidth,
+                    stickyName: getComputedStyle(name).position === 'sticky' && getComputedStyle(name).left === '0px',
+                    stickyHeader: getComputedStyle(document.querySelector('#salaryMonthTable thead th')).position === 'sticky'
+                };
+            }""")
+            assert not metrics["bodyOverflow"], (width, metrics)
+            if width <= 768:
+                assert metrics["tableScrolls"], (width, metrics)
+            assert metrics["stickyName"], (width, metrics)
+            assert metrics["stickyHeader"], (width, metrics)
+        assert page.evaluate("JSON.stringify(DB.salaryRecords)") == before
+        page.get_by_role("button", name="在录入中编辑").click()
+        assert page.get_by_role("tab", name="录入").get_attribute("aria-selected") == "true"
+        assert page.locator("#salTableBody input").count() > 0
+        page.evaluate("switchSalaryView('detail'); openSalaryMonthDetail('2026-08')")
 
         page.once("dialog", lambda dialog: dialog.accept())
         page.get_by_role("button", name="删除本月").click()
@@ -123,7 +164,7 @@ def test_salary_detail_tab_edits_and_restores_monthly_payroll():
 
         page.evaluate(f"restoreSalaryTrash('{trash_id}')")
         assert page.evaluate("DB.salaryRecords.filter(r => r.period === '2026-08').length") == 2
-        assert page.evaluate("DB.salaryRecords.find(r => r.id === 'salary-aug-a').actualSalary") == 4600
+        assert page.evaluate("DB.salaryRecords.find(r => r.id === 'salary-aug-a').actualSalary") == 4400
         assert page.evaluate("DB.salaryTrash.length") == 0
         assert not errors, errors
         browser.close()
