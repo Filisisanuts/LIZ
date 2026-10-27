@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -41,6 +41,9 @@ const legacyRuntimeAssets = {
 
 export default defineConfig({
   plugins: [legacyRuntimeAssets],
+  test: {
+    include: ['tests/**/*.{test,spec}.{js,jsx,ts,tsx}'],
+  },
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
