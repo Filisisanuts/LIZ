@@ -80,6 +80,7 @@ function rWH() {
 
             catItems.forEach(function(item) {
                 var isLow = item.safeStock > 0 && item.stock <= item.safeStock;
+                var itemActionName = axEscapeHtml(item.name || '物品');
                 var status = '-';
                 if (item.safeStock > 0) {
                     status = isLow ? '<span class="badge rd">低</span>' : '<span class="badge gn">正常</span>';
@@ -92,9 +93,9 @@ function rWH() {
                 h += '<td class="nr">' + (item.safeStock || '-') + '</td>';
                 h += '<td>' + status + '</td>';
                 h += '<td>';
-                h += '<button class="btn s" onclick="showEditWH(\'' + item.id + '\')">编</button> ';
-                h += '<button class="btn s" onclick="whDetail(\'' + item.id + '\')">详</button> ';
-                h += '<button class="btn s d" onclick="delWH(\'' + item.id + '\')">×</button>';
+                h += '<button class="btn s" aria-label="编辑' + itemActionName + '" onclick="showEditWH(\'' + item.id + '\')">编</button> ';
+                h += '<button class="btn s" aria-label="查看' + itemActionName + '详情" onclick="whDetail(\'' + item.id + '\')">详</button> ';
+                h += '<button class="btn s d" aria-label="删除' + itemActionName + '" onclick="delWH(\'' + item.id + '\')">×</button>';
                 h += '</td></tr>';
             });
 
@@ -184,14 +185,15 @@ function showWHCats() {
     h += '<div style="max-height:50vh;overflow-y:auto;padding-right:4px">';
     cats.forEach(function(c, i) {
         var count = (DB.whItems || []).filter(function(item) { return (item.category || '未分类') === c; }).length;
+        var categoryActionName = axEscapeHtml(c);
         h += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:4px;background:var(--card-h);border:1px solid var(--bd);border-radius:6px">';
         h += '<span style="font-size:.72rem;color:var(--tx-m);width:20px">' + (i + 1) + '</span>';
         h += '<span style="flex:1;font-size:.84rem;font-weight:600">' + c + '</span>';
         h += '<span class="badge">' + count + '项</span>';
-        if (i > 0) h += '<button class="btn s" onclick="moveWHCat(' + i + ',-1)">▲</button>';
-        if (i < cats.length - 1) h += '<button class="btn s" onclick="moveWHCat(' + i + ',1)">▼</button>';
-        h += '<button class="btn s" onclick="editWHCat(' + i + ')">编</button>';
-        h += '<button class="btn s d" onclick="delWHCat(' + i + ')">×</button>';
+        if (i > 0) h += '<button class="btn s" aria-label="上移' + categoryActionName + '分类" onclick="moveWHCat(' + i + ',-1)">▲</button>';
+        if (i < cats.length - 1) h += '<button class="btn s" aria-label="下移' + categoryActionName + '分类" onclick="moveWHCat(' + i + ',1)">▼</button>';
+        h += '<button class="btn s" aria-label="编辑' + categoryActionName + '分类" onclick="editWHCat(' + i + ')">编</button>';
+        h += '<button class="btn s d" aria-label="删除' + categoryActionName + '分类" onclick="delWHCat(' + i + ')">×</button>';
         h += '</div>';
     });
     h += '</div>';
@@ -395,14 +397,15 @@ function whDetail(id) {
         moves.forEach(function(m, idx) {
             var isIn = m.qty > 0;
             var origIdx = item.movements.indexOf(m);
+            var movementActionName = axEscapeHtml((item.name || '物品') + ' ' + (m.date || '未知日期') + ' ' + (isIn ? '入库' : '出库') + Math.abs(m.qty) + (item.unit || ''));
             h += '<tr>';
             h += '<td>' + m.date + '</td>';
             h += '<td><span class="badge ' + (isIn ? 'gn' : 'rd') + '">' + (isIn ? '入库' : '出库') + '</span></td>';
             h += '<td class="nr">' + Math.abs(m.qty) + item.unit + '</td>';
             h += '<td>' + (m.reason || '-') + '</td>';
             h += '<td>';
-            h += '<button class="btn s" onclick="editWHMove(\'' + id + '\',' + origIdx + ')">编</button> ';
-            h += '<button class="btn s d" onclick="delWHMove(\'' + id + '\',' + origIdx + ')">×</button>';
+            h += '<button class="btn s" aria-label="编辑' + movementActionName + '记录" onclick="editWHMove(\'' + id + '\',' + origIdx + ')">编</button> ';
+            h += '<button class="btn s d" aria-label="删除' + movementActionName + '记录" onclick="delWHMove(\'' + id + '\',' + origIdx + ')">×</button>';
             h += '</td>';
             h += '</tr>';
         });

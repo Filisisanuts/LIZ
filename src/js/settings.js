@@ -558,9 +558,11 @@ function applyTheme() {
         root.style.setProperty('--card', '#1e1e1e');
         root.style.setProperty('--card-h', '#252525');
         root.style.setProperty('--ac', '#c9a84c');
+        root.style.setProperty('--ac-ink', '#d4a574');
         root.style.setProperty('--tx', '#f0ece4');
-        root.style.setProperty('--tx-m', '#8a8580');
-        root.style.setProperty('--tx-s', '#6a6560');
+        root.style.setProperty('--tx-m', '#b0b0b0');
+        root.style.setProperty('--tx-s', '#c0bdb8');
+        root.style.setProperty('--tx-disabled', '#808080');
         root.style.setProperty('--bd', '#2d2d2d');
         root.style.setProperty('--bd-l', '#222');
         root.style.setProperty('--gn', '#34d399');
@@ -572,9 +574,11 @@ function applyTheme() {
         root.style.setProperty('--card', '#ffffff');
         root.style.setProperty('--card-h', '#f0ece4');
         root.style.setProperty('--ac', '#8b6914');
+        root.style.setProperty('--ac-ink', '#8b6914');
         root.style.setProperty('--tx', '#2c2c2c');
-        root.style.setProperty('--tx-m', '#888');
-        root.style.setProperty('--tx-s', '#aaa');
+        root.style.setProperty('--tx-m', '#6a6a6a');
+        root.style.setProperty('--tx-s', '#666');
+        root.style.setProperty('--tx-disabled', '#aaa');
         root.style.setProperty('--bd', '#e0dbd0');
         root.style.setProperty('--bd-l', '#eae5da');
         root.style.setProperty('--gn', '#2d8b5e');

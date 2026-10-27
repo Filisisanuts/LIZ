@@ -94,9 +94,9 @@ function rInv(type, customCategory, displayName, unclassifiedOnly) {
 
     // ===== 共享月份选择器 =====
     h += '<div class="hrow" style="margin-bottom:10px"><label>月份</label>';
-    h += '<button class="btn s" onclick="invCalNav(\'' + type + '\',-1)">◀</button>';
+    h += '<button type="button" class="btn s" aria-label="上一月" onclick="invCalNav(\'' + type + '\',-1)">◀</button>';
     h += '<input class="inp" id="invMonth" type="text" readonly placeholder="选择月份" value="' + ym + '" onclick="_mpOpen(\'invMonth\')" onchange="invCalPickYM(\'' + type + '\',this.value)" style="max-width:180px;cursor:pointer">';
-    h += '<button class="btn s" onclick="invCalNav(\'' + type + '\',1)">▶</button>';
+    h += '<button type="button" class="btn s" aria-label="下一月" onclick="invCalNav(\'' + type + '\',1)">▶</button>';
     h += '</div>';
 
     // ===== 标签栏（明细优先） =====
@@ -124,16 +124,17 @@ function rInv(type, customCategory, displayName, unclassifiedOnly) {
 
             stats.forEach(function(st) {
                 var unit = st.item.calcMode === 'pack' ? '包' : '克';
+                var itemActionName = axEscapeHtml(st.item.name || '物品');
                 h += '<tr data-inv="' + type + '_' + st.item.id + '">';
                 h += '<td style="font-weight:600">' + st.item.name + '</td>';
                 h += '<td class="nr">' + inventoryStockText(st.stock, unit);
-                h += ' <button class="btn s" onclick="editOpeningStock(\'' + type + '\',\'' + st.item.id + '\',\'' + ym + '\')" title="修改期初" style="font-size:.6rem;padding:1px 4px">✏️</button></td>';
+                h += ' <button class="btn s" onclick="editOpeningStock(\'' + type + '\',\'' + st.item.id + '\',\'' + ym + '\')" title="修改' + itemActionName + '期初" aria-label="修改' + itemActionName + '期初" style="font-size:.6rem;padding:1px 4px">✏️</button></td>';
                 h += '<td class="nr" style="color:var(--gn);font-weight:600">' + fmtC(st.actual) + '</td>';
                 h += '<td class="nr" style="color:var(--rd);font-weight:600">' + fmtC(st.cost) + '</td>';
                 h += '<td class="nr" style="color:' + (st.profit >= 0 ? 'var(--gn)' : 'var(--rd)') + ';font-weight:600">' + fmtC(st.profit) + '</td>';
-                h += '<td><button class="btn s" data-act="edit">编</button> ';
-                h += '<button class="btn s" onclick="invDetail(\'' + type + '\',\'' + st.item.id + '\')">详</button> ';
-                h += '<button class="btn s d" data-act="del">×</button></td></tr>';
+                h += '<td><button class="btn s" data-act="edit" aria-label="编辑' + itemActionName + '">编</button> ';
+                h += '<button class="btn s" onclick="invDetail(\'' + type + '\',\'' + st.item.id + '\')" aria-label="查看' + itemActionName + '详情">详</button> ';
+                h += '<button class="btn s d" data-act="del" aria-label="删除' + itemActionName + '">×</button></td></tr>';
 
                 // 次行
                 h += '<tr>';
@@ -158,18 +159,19 @@ function rInv(type, customCategory, displayName, unclassifiedOnly) {
 
             stats.forEach(function(st) {
                 var margin = st.actual > 0 ? fmtP(st.profit / st.actual * 100) : '0%';
+                var itemActionName = axEscapeHtml(st.item.name || '物品');
 
                 // 主行：结存、销售总额、销售成本、毛利
                 h += '<tr data-inv="' + type + '_' + st.item.id + '">';
                 h += '<td style="font-weight:600">' + st.item.name + '</td>';
                 h += '<td class="nr">' + inventoryStockText(st.stock, '包');
-                h += ' <button class="btn s" onclick="editOpeningStock(\'' + type + '\',\'' + st.item.id + '\',\'' + ym + '\')" title="修改期初" style="font-size:.6rem;padding:1px 4px">✏️</button></td>';
+                h += ' <button class="btn s" onclick="editOpeningStock(\'' + type + '\',\'' + st.item.id + '\',\'' + ym + '\')" title="修改' + itemActionName + '期初" aria-label="修改' + itemActionName + '期初" style="font-size:.6rem;padding:1px 4px">✏️</button></td>';
                 h += '<td class="nr" style="color:var(--gn);font-weight:600">' + fmtC(st.actual) + '</td>';
                 h += '<td class="nr" style="color:var(--rd);font-weight:600">' + fmtC(st.cost) + '</td>';
                 h += '<td class="nr" style="color:' + (st.profit >= 0 ? 'var(--gn)' : 'var(--rd)') + ';font-weight:600">' + fmtC(st.profit) + '</td>';
-                h += '<td><button class="btn s" data-act="edit">编</button> ';
-                h += '<button class="btn s" onclick="invDetail(\'' + type + '\',\'' + st.item.id + '\')">详</button> ';
-                h += '<button class="btn s d" data-act="del">×</button></td></tr>';
+                h += '<td><button class="btn s" data-act="edit" aria-label="编辑' + itemActionName + '">编</button> ';
+                h += '<button class="btn s" onclick="invDetail(\'' + type + '\',\'' + st.item.id + '\')" aria-label="查看' + itemActionName + '详情">详</button> ';
+                h += '<button class="btn s d" data-act="del" aria-label="删除' + itemActionName + '">×</button></td></tr>';
 
                 // 次行：单价、销售数量、毛利率
                 h += '<tr>';
@@ -211,18 +213,19 @@ function rInv(type, customCategory, displayName, unclassifiedOnly) {
                 categories[cat].forEach(function(st) {
                     var margin = st.actual > 0 ? fmtP(st.profit / st.actual * 100) : '0%';
                     var unit = st.item.unit || (st.item.calcMode === 'pack' ? '包' : st.item.calcMode === 'gram' ? '克' : '个');
+                    var itemActionName = axEscapeHtml(st.item.name || '物品');
 
                     // 主行
                     h += '<tr data-inv="' + type + '_' + st.item.id + '">';
                     h += '<td style="font-weight:600">' + st.item.name + '</td>';
                     h += '<td class="nr">' + inventoryStockText(st.stock, unit);
-                    h += ' <button class="btn s" onclick="editOpeningStock(\'' + type + '\',\'' + st.item.id + '\',\'' + ym + '\')" title="修改期初" style="font-size:.6rem;padding:1px 4px">✏️</button></td>';
+                    h += ' <button class="btn s" onclick="editOpeningStock(\'' + type + '\',\'' + st.item.id + '\',\'' + ym + '\')" title="修改' + itemActionName + '期初" aria-label="修改' + itemActionName + '期初" style="font-size:.6rem;padding:1px 4px">✏️</button></td>';
                     h += '<td class="nr" style="color:var(--gn);font-weight:600">' + fmtC(st.actual) + '</td>';
                     h += '<td class="nr" style="color:var(--rd);font-weight:600">' + fmtC(st.cost) + '</td>';
                     h += '<td class="nr" style="color:' + (st.profit >= 0 ? 'var(--gn)' : 'var(--rd)') + ';font-weight:600">' + fmtC(st.profit) + '</td>';
-                    h += '<td><button class="btn s" data-act="edit">编</button> ';
-                    h += '<button class="btn s" onclick="invDetail(\'' + type + '\',\'' + st.item.id + '\')">详</button> ';
-                    h += '<button class="btn s d" data-act="del">×</button></td></tr>';
+                    h += '<td><button class="btn s" data-act="edit" aria-label="编辑' + itemActionName + '">编</button> ';
+                    h += '<button class="btn s" onclick="invDetail(\'' + type + '\',\'' + st.item.id + '\')" aria-label="查看' + itemActionName + '详情">详</button> ';
+                    h += '<button class="btn s d" data-act="del" aria-label="删除' + itemActionName + '">×</button></td></tr>';
 
                     // 次行
                     h += '<tr>';
@@ -249,18 +252,19 @@ function rInv(type, customCategory, displayName, unclassifiedOnly) {
 
             stats.forEach(function(st) {
                 var margin = st.actual > 0 ? fmtP(st.profit / st.actual * 100) : '0%';
+                var itemActionName = axEscapeHtml(st.item.name || '物品');
 
                 // 主行
                 h += '<tr data-inv="' + type + '_' + st.item.id + '">';
                 h += '<td style="font-weight:600">' + st.item.name + '</td>';
                 h += '<td class="nr">' + inventoryStockText(st.stock, '瓶');
-                h += ' <button class="btn s" onclick="editOpeningStock(\'' + type + '\',\'' + st.item.id + '\',\'' + ym + '\')" title="修改期初" style="font-size:.6rem;padding:1px 4px">✏️</button></td>';
+                h += ' <button class="btn s" onclick="editOpeningStock(\'' + type + '\',\'' + st.item.id + '\',\'' + ym + '\')" title="修改' + itemActionName + '期初" aria-label="修改' + itemActionName + '期初" style="font-size:.6rem;padding:1px 4px">✏️</button></td>';
                 h += '<td class="nr" style="color:var(--gn);font-weight:600">' + fmtC(st.actual) + '</td>';
                 h += '<td class="nr" style="color:var(--rd);font-weight:600">' + fmtC(st.cost) + '</td>';
                 h += '<td class="nr" style="color:' + (st.profit >= 0 ? 'var(--gn)' : 'var(--rd)') + ';font-weight:600">' + fmtC(st.profit) + '</td>';
-                h += '<td><button class="btn s" data-act="edit">编</button> ';
-                h += '<button class="btn s" onclick="invDetail(\'' + type + '\',\'' + st.item.id + '\')">详</button> ';
-                h += '<button class="btn s d" data-act="del">×</button></td></tr>';
+                h += '<td><button class="btn s" data-act="edit" aria-label="编辑' + itemActionName + '">编</button> ';
+                h += '<button class="btn s" onclick="invDetail(\'' + type + '\',\'' + st.item.id + '\')" aria-label="查看' + itemActionName + '详情">详</button> ';
+                h += '<button class="btn s d" data-act="del" aria-label="删除' + itemActionName + '">×</button></td></tr>';
 
                 // 次行
                 h += '<tr>';

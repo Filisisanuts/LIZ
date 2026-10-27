@@ -60,9 +60,9 @@ function rDaily() {
     // 明细页
     h += '<div id="dHist" style="display:none">';
     h += '<div class="hrow"><label>月份</label>';
-    h += '<button class="btn s" onclick="dailyCalNav(-1)">◀</button>';
+    h += '<button type="button" class="btn s" aria-label="上一月" onclick="dailyCalNav(-1)">◀</button>';
     h += '<input class="inp" id="dhM" type="text" readonly placeholder="选择月份" value="' + curYM() + '" onclick="_mpOpen(\'dhM\')" onchange="dailyCalPickYM(this.value)" style="max-width:180px;cursor:pointer">';
-    h += '<button class="btn s" onclick="dailyCalNav(1)">▶</button>';
+    h += '<button type="button" class="btn s" aria-label="下一月" onclick="dailyCalNav(1)">▶</button>';
     h += '</div>';
     h += '<div id="dhArea"></div>';
     h += '</div>';

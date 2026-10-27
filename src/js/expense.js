@@ -257,9 +257,9 @@ function renderExpCalendar(){
 
     // 1. 月份切换
     h+='<div class="hrow" style="margin-bottom:10px">';
-    h+='<button class="btn s" onclick="expCalNav(-1)">◀</button>';
+    h+='<button type="button" class="btn s" aria-label="上一月" onclick="expCalNav(-1)">◀</button>';
     h+='<input class="inp" id="expCalPicker" type="text" readonly value="'+ym+'" onclick="_mpOpen(\'expCalPicker\')" style="max-width:130px;cursor:pointer;text-align:center;font-weight:700" onchange="expCalPickYM(this.value)">';
-    h+='<button class="btn s" onclick="expCalNav(1)">▶</button>';
+    h+='<button type="button" class="btn s" aria-label="下一月" onclick="expCalNav(1)">▶</button>';
     h+='<button class="btn s" onclick="showExpPDFDialog()" style="margin-left:auto"><span class="button-icon">'+axIcon('fileDownload')+'</span>导出PDF</button></div>';
 
     // 2. 本月汇总

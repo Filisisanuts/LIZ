@@ -263,13 +263,14 @@ function rCustomInventory(typeId) {
         stats.rows.forEach(function(row) {
             var entry = row.entry;
             var kind = { inbound: '入库', sale: '销售', adjust: '盘点调整', loss: '报损' }[entry.kind] || entry.kind;
+            var rowActionName = inventoryHtml((row.item.name || '物品') + ' ' + (entry.date || '未知日期') + ' ' + kind);
             var qty = Number(entry.qty) || 0;
             var cost = entry.kind === 'sale' ? fmtC(row.result.cost) + (row.result.pendingQty ? ' · 待结转 ' + row.result.pendingQty + inventoryHtml(row.item.unit) : '') : '—';
             var profit = entry.kind === 'sale' ? (row.result.pendingQty ? '待结转' : fmtC(row.result.profit)) : '—';
             h += '<tr><td>' + inventoryHtml(entry.date) + '</td><td>' + inventoryHtml(row.item.name) + '</td><td>' + kind + '</td>';
             h += '<td class="nr">' + qty + inventoryHtml(row.item.unit) + '</td><td class="nr">' + (entry.kind === 'sale' ? fmtC(Number(entry.amount) || 0) : '—') + '</td>';
-            h += '<td class="nr">' + cost + '</td><td class="nr">' + profit + '</td><td><button class="btn s" onclick="showInventoryTransaction(\'' + typeId + '\',\'' + entry.kind + '\',\'' + row.item.id + '\',\'' + entry.id + '\')">编辑</button> ';
-            h += '<button class="btn s d" onclick="deleteInventoryTransaction(\'' + row.item.id + '\',\'' + entry.id + '\',\'' + typeId + '\')">删除</button></td></tr>';
+            h += '<td class="nr">' + cost + '</td><td class="nr">' + profit + '</td><td><button class="btn s" aria-label="编辑' + rowActionName + '记录" onclick="showInventoryTransaction(\'' + typeId + '\',\'' + entry.kind + '\',\'' + row.item.id + '\',\'' + entry.id + '\')">编辑</button> ';
+            h += '<button class="btn s d" aria-label="删除' + rowActionName + '记录" onclick="deleteInventoryTransaction(\'' + row.item.id + '\',\'' + entry.id + '\',\'' + typeId + '\')">删除</button></td></tr>';
         });
         h += '</table></div>';
     } else h += '<div class="inventory-empty">本月暂无库存明细</div>';
@@ -279,10 +280,11 @@ function rCustomInventory(typeId) {
         h += '<div class="tw tw-viewport-scroll inventory-viewport-table"><table><tr><th>物品</th><th>单位</th><th>结存</th><th>售价</th><th>提醒</th><th>操作</th></tr>';
         items.forEach(function(item) {
             var stock = inventoryLedger(item).stock;
+            var itemActionName = inventoryHtml(item.name || '物品');
             h += '<tr><td>' + inventoryHtml(item.name) + '</td><td>' + inventoryHtml(item.unit) + '</td><td class="nr">' + stock + '</td>';
             h += '<td class="nr">' + fmtC(Number(item.pricePerUnit) || 0) + '</td><td>' + (Number(item.restockAlert) > 0 && stock <= Number(item.restockAlert) ? '需要补货' : '—') + '</td>';
-            h += '<td><button class="btn s" onclick="showInventoryItemModal(\'' + typeId + '\',\'' + item.id + '\')">编辑</button> ';
-            if (!(item.transactions || []).length) h += '<button class="btn s d" onclick="deleteInventoryItem(\'' + typeId + '\',\'' + item.id + '\')">删除</button>';
+            h += '<td><button class="btn s" aria-label="编辑' + itemActionName + '" onclick="showInventoryItemModal(\'' + typeId + '\',\'' + item.id + '\')">编辑</button> ';
+            if (!(item.transactions || []).length) h += '<button class="btn s d" aria-label="删除' + itemActionName + '" onclick="deleteInventoryItem(\'' + typeId + '\',\'' + item.id + '\')">删除</button>';
             h += '</td></tr>';
         });
         h += '</table></div>';

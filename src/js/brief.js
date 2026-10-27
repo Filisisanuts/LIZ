@@ -2,9 +2,9 @@
 // ---------- 汇报主页面 ----------
 function rGen() {
     var h = '<div class="hrow"><label>月份</label>';
-    h += '<button class="btn s" onclick="briefCalNav(-1)">◀</button>';
+    h += '<button type="button" class="btn s" aria-label="上一月" onclick="briefCalNav(-1)">◀</button>';
     h += '<input class="inp" id="genM" type="text" readonly placeholder="选择月份" value="' + curYM() + '" onclick="_mpOpen(\'genM\')" onchange="briefCalPickYM(this.value)" style="max-width:180px;cursor:pointer">';
-    h += '<button class="btn s" onclick="briefCalNav(1)">▶</button>';
+    h += '<button type="button" class="btn s" aria-label="下一月" onclick="briefCalNav(1)">▶</button>';
     h += '</div>';
 
     h += '<div class="sec">选择报告周期</div>';

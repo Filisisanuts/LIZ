@@ -393,9 +393,9 @@ function rPurchase() {
     // 明细页
     h += '<div id="pHist" style="display:none">';
     h += '<div class="hrow"><label>月份</label>';
-    h += '<button class="btn s" onclick="purchaseCalNav(-1)">◀</button>';
+    h += '<button type="button" class="btn s" aria-label="上一月" onclick="purchaseCalNav(-1)">◀</button>';
     h += '<input class="inp" id="pHistM" type="text" readonly placeholder="选择月份" value="' + curYM() + '" onclick="_mpOpen(\'pHistM\')" onchange="purchaseCalPickYM(this.value)" style="max-width:180px;cursor:pointer">';
-    h += '<button class="btn s" onclick="purchaseCalNav(1)">▶</button>';
+    h += '<button type="button" class="btn s" aria-label="下一月" onclick="purchaseCalNav(1)">▶</button>';
     h += '<button class="btn" onclick="openPurchaseTrash()">回收站</button>';
     h += '</div>';
     h += '<div id="pHistArea"></div>';

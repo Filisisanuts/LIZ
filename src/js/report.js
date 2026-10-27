@@ -22,9 +22,9 @@ function rReport() {
     if (!_isDashboard) {
         // 月份选择器 + 分享链接
         h += '<div class="hrow" style="flex-wrap:wrap;gap:8px;align-items:center"><label>月份</label>';
-        h += '<button class="btn s" onclick="reportCalNav(-1)">◀</button>';
+        h += '<button type="button" class="btn s" aria-label="上一月" onclick="reportCalNav(-1)">◀</button>';
         h += '<input class="inp" id="repM" type="text" readonly placeholder="选择月份" value="' + ym + '" onclick="_mpOpen(\'repM\')" onchange="reportCalPickYM(this.value)" style="max-width:180px;cursor:pointer">';
-        h += '<button class="btn s" onclick="reportCalNav(1)">▶</button>';
+        h += '<button type="button" class="btn s" aria-label="下一月" onclick="reportCalNav(1)">▶</button>';
         h += '<button class="btn s" onclick="copyDashLink()" style="font-size:.7rem">📋 分享</button>';
         h += '</div>';
     }
@@ -315,7 +315,7 @@ function renderProfitTable(net, gross, discount, kitC, barC, outC, otherC, netPu
     // 标题摘要
     var h = '<div class="sec-head">';
     h += '<h4 style="font-size:.88rem;color:var(--ac);margin-bottom:6px">一、利润表</h4>';
-    h += '<div style="font-size:.72rem;color:var(--tx-m);margin-bottom:14px">';
+    h += '<div style="font-size:.8rem;color:var(--tx-m);margin-bottom:14px">';
     h += mm + '月实现营收' + fmtC(net) + '元，营业成本' + fmtC(netPur) + '元，';
     h += '毛利' + fmtC(gp) + '元（' + gm.toFixed(1) + '%）。';
     h += '扣除费用' + fmtC(expTotal) + '元' + (salTotal > 0 ? '、工资' + fmtC(salTotal) + '元' : '') + '后，营业利润' + fmtC(op) + '元，利润率' + om.toFixed(1) + '%。';
@@ -331,7 +331,7 @@ function renderProfitTable(net, gross, discount, kitC, barC, outC, otherC, netPu
         h += '<tr' + (isTotal ? ' style="background:var(--card-h)"' : isMemo ? ' class="rep-memo-row"' : '') + '>';
         h += '<td' + (isTotal ? ' style="font-weight:600"' : '') + '>' + r.l + '</td>';
         h += '<td class="nr" style="' + (isTotal ? 'font-weight:600;color:' + (r.v >= 0 ? 'var(--gn)' : 'var(--rd)') : '') + '">' + fmtC(r.v) + '</td>';
-        h += '<td style="font-size:.72rem;color:var(--tx-m)">' + r.n + '</td></tr>';
+        h += '<td style="font-size:.8rem;color:var(--tx-m)">' + r.n + '</td></tr>';
     });
     h += '</table></div>';
     h += '<div style="background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:14px">';
@@ -349,7 +349,7 @@ function renderRevenueSection(net, gross, discount, kit, bar, del, cig, alc, oth
 
     var h = '<div class="sec-head">';
     h += '<h4 style="font-size:.88rem;color:var(--ac);margin-bottom:6px">二、营收总表</h4>';
-    h += '<div style="font-size:.72rem;color:var(--tx-m);margin-bottom:14px">';
+    h += '<div style="font-size:.8rem;color:var(--tx-m);margin-bottom:14px">';
     h += '总流水' + fmtC(gross) + '元，折扣' + fmtC(discount) + '元（' + (gross > 0 ? (discount / gross * 100).toFixed(1) : '0') + '%），实收' + fmtC(net) + '元。';
     h += '厨房' + (net > 0 ? (kit / net * 100).toFixed(1) : '0') + '%、';
     h += '吧台' + (net > 0 ? (bar / net * 100).toFixed(1) : '0') + '%、';
@@ -406,7 +406,7 @@ function renderCostSection(purBySec, netPur, kitC, barC, outC, teaC, cigC, alcC,
 
     var h = '<div class="sec-head">';
     h += '<h4 style="font-size:.88rem;color:var(--ac);margin-bottom:6px">成本费用</h4>';
-    h += '<div style="font-size:.72rem;color:var(--tx-m);margin-bottom:14px">';
+    h += '<div style="font-size:.8rem;color:var(--tx-m);margin-bottom:14px">';
     h += '净采购' + fmtC(netPur) + '元，贵重物品已售成本观察' + fmtC(saleCostTotal) + '元（不重复计入），期间费用（含工资）' + fmtC(periodCostTotal) + '元。';
     h += '</div></div>';
 
@@ -494,7 +494,7 @@ function renderCostSection(purBySec, netPur, kitC, barC, outC, teaC, cigC, alcC,
 function renderCatGPSection(kit, bar, barNoTea, tea, del, cig, alc, kitC, barC, teaC, cigC, alcC, kitGP, barGP, teaGP, delGP, cigGP, alcGP) {
     var h = '<div class="sec-head">';
     h += '<h4 style="font-size:.88rem;color:var(--ac);margin-bottom:6px">四、分类毛利分析</h4>';
-    h += '<div style="font-size:.72rem;color:var(--tx-m);margin-bottom:14px">';
+    h += '<div style="font-size:.8rem;color:var(--tx-m);margin-bottom:14px">';
     h += '用于观察各业务项目的收入与成本；厨房、吧台、外卖来自日报，贵重物品来自进销存。因口径不同，本表不与利润表毛利做加总比较。';
     h += '</div></div>';
 
@@ -507,7 +507,7 @@ function renderCatGPSection(kit, bar, barNoTea, tea, del, cig, alc, kitC, barC, 
         var invBased = ['茗茶', '香烟', '酒类'].indexOf(it[0]) >= 0;
         h += '<tr>';
         h += '<td>' + it[0] + '</td>';
-        h += '<td style="font-size:.72rem;color:var(--tx-m)">' + (invBased ? '进销存' : '日报') + '</td>';
+        h += '<td style="font-size:.8rem;color:var(--tx-m)">' + (invBased ? '进销存' : '日报') + '</td>';
         h += '<td class="nr">' + fmtC(it[1]) + '</td>';
         h += '<td class="nr">' + fmtC(it[2]) + '</td>';
         h += '<td class="nr" style="color:' + (it[3] >= 0 ? 'var(--gn)' : 'var(--rd)') + ';font-weight:600">' + fmtC(it[3]) + '</td>';
@@ -528,7 +528,7 @@ function renderCigSection(stats, rev, cost, profit, ym) {
 
     var h = '<div class="sec-head">';
     h += '<h4 style="font-size:.88rem;color:var(--ac);margin-bottom:6px">五、香烟进销存及毛利</h4>';
-    h += '<div style="font-size:.72rem;color:var(--tx-m);margin-bottom:14px">';
+    h += '<div style="font-size:.8rem;color:var(--tx-m);margin-bottom:14px">';
     h += '本月销售' + totalSold + '包，销售额' + fmtC(rev) + '元，成本' + fmtC(cost) + '元，';
     h += '毛利' + fmtC(profit) + '元（' + (rev > 0 ? (profit / rev * 100).toFixed(1) : '0') + '%）。';
     h += '</div></div>';
@@ -582,7 +582,7 @@ function renderTeaSection(stats, rev, cost, profit, ym) {
 
     var h = '<div class="sec-head">';
     h += '<h4 style="font-size:.88rem;color:var(--ac);margin-bottom:6px">六、茗茶进销存及毛利</h4>';
-    h += '<div style="font-size:.72rem;color:var(--tx-m);margin-bottom:14px">';
+    h += '<div style="font-size:.8rem;color:var(--tx-m);margin-bottom:14px">';
     h += '本月销售' + totalCups + '杯+' + totalPots + '壶，实收' + fmtC(rev) + '元，';
     h += '库存价值' + fmtC(cost) + '元，毛利' + fmtC(profit) + '元（' + (rev > 0 ? (profit / rev * 100).toFixed(1) : '0') + '%）。';
     h += '</div></div>';
@@ -622,7 +622,7 @@ function renderAlcSection(stats, rev, cost, profit, ym) {
 
     var h = '<div class="sec-head">';
     h += '<h4 style="font-size:.88rem;color:var(--ac);margin-bottom:6px">七、酒类进销存及毛利</h4>';
-    h += '<div style="font-size:.72rem;color:var(--tx-m);margin-bottom:14px">';
+    h += '<div style="font-size:.8rem;color:var(--tx-m);margin-bottom:14px">';
     h += '本月销售' + totalQty + '瓶，销售额' + fmtC(rev) + '元，成本' + fmtC(cost) + '元，';
     h += '毛利' + fmtC(profit) + '元（' + (rev > 0 ? (profit / rev * 100).toFixed(1) : '0') + '%）。';
     h += '</div></div>';
@@ -671,7 +671,7 @@ function renderDailySection(mr, net, guests, days) {
 
     var h = '<div class="sec-head">';
     h += '<h4 style="font-size:.88rem;color:var(--ac);margin-bottom:6px">八、每日营收速览</h4>';
-    h += '<div style="font-size:.72rem;color:var(--tx-m);margin-bottom:14px">';
+    h += '<div style="font-size:.8rem;color:var(--tx-m);margin-bottom:14px">';
     h += '日均实收' + fmtC(avgNet) + '元，日均客流' + avgGuests.toFixed(1) + '人，月均人均' + (guests > 0 ? (net / guests).toFixed(2) : '0') + '元。';
     h += '</div></div>';
 
@@ -705,7 +705,7 @@ function renderDailySection(mr, net, guests, days) {
 function renderGuestSection(mr, guests, ym) {
     var h = '<div class="sec-head">';
     h += '<h4 style="font-size:.88rem;color:var(--ac);margin-bottom:6px">九、客情与包厢</h4>';
-    h += '<div style="font-size:.72rem;color:var(--tx-m);margin-bottom:14px">';
+    h += '<div style="font-size:.8rem;color:var(--tx-m);margin-bottom:14px">';
     h += '累计到店' + guests + '人，日均' + (mr.length > 0 ? (guests / mr.length).toFixed(1) : '0') + '人。';
     h += '500元以上包厢累计' + mr.reduce(function(s, r) { return s + (r.guest.premiumRoomsToday || 0); }, 0) + '个。';
     h += '</div></div>';
@@ -910,7 +910,7 @@ function renderPurchaseSection(ym) {
     });
 
     var h = '<div class="sec-head"><h4 style="font-size:.88rem;color:var(--ac);margin-bottom:6px">采购明细</h4>';
-    h += '<div style="font-size:.72rem;color:var(--tx-m);margin-bottom:14px">本月采购' + fmtC(grandTotal) + '元，' + Object.keys(dayTotals).length + '天有采购，日均' + fmtC(grandTotal / daysInMonth) + '元。</div></div>';
+    h += '<div style="font-size:.8rem;color:var(--tx-m);margin-bottom:14px">本月采购' + fmtC(grandTotal) + '元，' + Object.keys(dayTotals).length + '天有采购，日均' + fmtC(grandTotal / daysInMonth) + '元。</div></div>';
 
     // 汇总卡片
     if (grandTotal > 0) {

@@ -39,7 +39,7 @@ body {
 }
 .login-logo .sub {
     font-size: .78rem;
-    color: #aaa;
+    color: #6d6d6d;
     margin-top: 4px;
     letter-spacing: .1em;
 }
@@ -60,14 +60,19 @@ body {
     flex: 1;
     text-align: center;
     padding: 10px 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    appearance: none;
+    font-family: inherit;
     font-size: .88rem;
-    color: #aaa;
+    color: #6d6d6d;
     cursor: pointer;
     position: relative;
     transition: color .2s;
 }
 .tab.active {
-    color: #b08d57;
+    color: #8b6914;
     font-weight: 600;
 }
 .tab.active::after {
@@ -85,8 +90,8 @@ body {
 }
 .form-group label {
     display: block;
-    font-size: .72rem;
-    color: #888;
+    font-size: .8rem;
+    color: #626262;
     margin-bottom: 5px;
     letter-spacing: .03em;
 }
@@ -107,12 +112,12 @@ body {
     box-shadow: 0 0 0 3px rgba(176,141,87,.1);
 }
 .form-group input::placeholder {
-    color: #ccc;
+    color: #707070;
 }
 .btn-primary {
     width: 100%;
     padding: 12px 0;
-    background: #b08d57;
+    background: #8b6914;
     color: #fff;
     border: none;
     border-radius: 8px;
@@ -124,7 +129,7 @@ body {
     margin-top: 6px;
 }
 .btn-primary:hover {
-    background: #c9a86c;
+    background: #765710;
 }
 .btn-primary:active {
     transform: scale(.98);
@@ -145,17 +150,28 @@ body {
 }
 .skip-link {
     font-size: .78rem;
-    color: #aaa;
+    color: #6d6d6d;
     text-decoration: none;
     cursor: pointer;
     transition: color .2s;
 }
 .skip-link:hover {
-    color: #b08d57;
+    color: #8b6914;
+}
+.skip-link:focus-visible {
+    outline: 2px solid #8b6914;
+    outline-offset: 3px;
+    border-radius: 2px;
+}
+.skip-link-button {
+    padding: 0;
+    border: 0;
+    background: none;
+    font-family: inherit;
 }
 .skip-hint {
-    font-size: .65rem;
-    color: #ccc;
+    font-size: .76rem;
+    color: #6d6d6d;
     margin-top: 6px;
 }
 .spinner {
@@ -198,48 +214,48 @@ body {
         <!-- 登录表单 -->
         <div id="formLogin">
             <div class="form-group">
-                <label>邮箱</label>
+                <label for="loginEmail">邮箱</label>
                 <input type="email" id="loginEmail" placeholder="请输入邮箱" autocomplete="email">
             </div>
             <div class="form-group">
-                <label>密码</label>
+                <label for="loginPass">密码</label>
                 <input type="password" id="loginPass" placeholder="请输入密码" autocomplete="current-password">
             </div>
             <div style="text-align:right;margin-bottom:12px">
-                <a class="skip-link" style="font-size:.72rem" onclick="switchTab('reset')">忘记密码？</a>
+                <button type="button" class="skip-link skip-link-button" style="font-size:.72rem" onclick="switchTab('reset')">忘记密码？</button>
             </div>
-            <div class="error-msg" id="loginError"></div>
+            <div class="error-msg" id="loginError" role="alert"></div>
             <button class="btn-primary" id="loginBtn" onclick="doLogin()">登录</button>
         </div>
 
         <!-- 忘记密码 -->
         <div id="formReset" style="display:none">
             <div class="form-group">
-                <label>注册邮箱</label>
-                <input type="email" id="resetEmail" placeholder="请输入注册时的邮箱">
+                <label for="resetEmail">注册邮箱</label>
+                <input type="email" id="resetEmail" placeholder="请输入注册时的邮箱" autocomplete="email">
             </div>
-            <div class="error-msg" id="resetError"></div>
+            <div class="error-msg" id="resetError" role="alert"></div>
             <button class="btn-primary" id="resetBtn" onclick="doResetPass()">发送重置邮件</button>
             <div style="text-align:center;margin-top:12px">
-                <a class="skip-link" style="font-size:.72rem" onclick="switchTab('login')">返回登录</a>
+                <button type="button" class="skip-link skip-link-button" style="font-size:.72rem" onclick="switchTab('login')">返回登录</button>
             </div>
         </div>
 
         <!-- 注册表单 -->
         <div id="formReg" style="display:none">
             <div class="form-group">
-                <label>邮箱</label>
+                <label for="regEmail">邮箱</label>
                 <input type="email" id="regEmail" placeholder="请输入邮箱" autocomplete="email">
             </div>
             <div class="form-group">
-                <label>密码</label>
+                <label for="regPass">密码</label>
                 <input type="password" id="regPass" placeholder="至少6位" autocomplete="new-password">
             </div>
             <div class="form-group">
-                <label>确认密码</label>
+                <label for="regPass2">确认密码</label>
                 <input type="password" id="regPass2" placeholder="再次输入密码" autocomplete="new-password">
             </div>
-            <div class="error-msg" id="regError"></div>
+            <div class="error-msg" id="regError" role="alert"></div>
             <button class="btn-primary" id="regBtn" onclick="doRegister()">注册</button>
         </div>
     </div>
@@ -312,6 +328,7 @@ function switchTab(tab) {
         document.getElementById('tabLogin').className = 'tab active';
     }
     hideError();
+    document.getElementById(tab === 'reset' ? 'resetEmail' : tab === 'reg' ? 'regEmail' : 'loginEmail').focus();
 }
 
 function showError(id, msg) {

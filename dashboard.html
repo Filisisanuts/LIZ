@@ -16,16 +16,16 @@
 <link rel="stylesheet" href="src/css/style.css?v=3">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#f7f4ee;--card:#fff;--card-h:#faf8f3;--bd:#e5dfd4;--bd-l:#ece8df;--ac:#b08d57;--ac-h:#c9a86c;--tx:#2c2c2c;--tx-s:#666;--tx-m:#aaa;--gn:#3d8b5e;--gn-b:rgba(61,139,94,.06);--rd:#c75450;--rd-b:rgba(199,84,80,.06);--og:#d4a017;--og-b:rgba(212,160,23,.07);--r:8px;--sh:0 1px 4px rgba(0,0,0,.04);--sh2:0 4px 16px rgba(0,0,0,.06)}
+:root{--bg:#f7f4ee;--card:#fff;--card-h:#faf8f3;--bd:#e5dfd4;--bd-l:#ece8df;--ac:#b08d57;--ac-h:#c9a86c;--ac-ink:#8b6914;--tx:#2c2c2c;--tx-s:#666;--tx-m:#6a6a6a;--tx-disabled:#aaa;--gn:#3d8b5e;--gn-b:rgba(61,139,94,.06);--rd:#c75450;--rd-b:rgba(199,84,80,.06);--og:#d4a017;--og-b:rgba(212,160,23,.07);--r:8px;--sh:0 1px 4px rgba(0,0,0,.04);--sh2:0 4px 16px rgba(0,0,0,.06)}
 body{background:var(--bg);color:var(--tx);font-family:'Noto Serif SC',Georgia,serif;min-height:100vh}
 .wrap{max-width:900px;margin:0 auto;padding:24px 20px 70px}
-.sec{font-size:.7rem;color:var(--tx-m);letter-spacing:.08em;text-transform:uppercase;margin:22px 0 12px;padding-bottom:7px;border-bottom:1px solid var(--bd-l)}
+.sec{font-size:.8rem;color:var(--tx-m);letter-spacing:.08em;text-transform:uppercase;margin:22px 0 12px;padding-bottom:7px;border-bottom:1px solid var(--bd-l)}
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:18px}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:15px;box-shadow:var(--sh);overflow:hidden;min-width:0}
-.card-l{font-size:.65rem;color:var(--tx-m);margin-bottom:2px;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card-l{font-size:.8rem;color:var(--tx-m);margin-bottom:2px;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .card-v{font-family:'DM Mono','Lexend',monospace;font-size:1rem;font-weight:500;word-break:break-all}
-.card-v.gn{color:var(--gn)}.card-v.rd{color:var(--rd)}.card-v.ac{color:var(--ac)}.card-v.og{color:var(--og)}
-@media(max-width:600px){.cards{grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:6px}.card{padding:8px}.card-l{font-size:.6rem}.card-v{font-size:.82rem;word-break:break-word}}
+.card-v.gn{color:var(--gn)}.card-v.rd{color:var(--rd)}.card-v.ac{color:var(--ac-ink)}.card-v.og{color:var(--og)}
+@media(max-width:600px){.cards{grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:6px}.card{padding:8px}.card-l{font-size:.8rem}.card-v{font-size:.82rem;word-break:break-word}}
 .tw{overflow-x:auto;border:1px solid var(--bd);border-radius:var(--r);background:var(--card);margin-bottom:14px}
 table{width:100%;border-collapse:collapse}
 th{background:var(--card-h);font-size:.66rem;color:var(--tx-s);text-align:left;padding:9px 10px;border-bottom:1px solid var(--bd);font-weight:600;white-space:nowrap}
@@ -47,7 +47,7 @@ tr:hover td{background:var(--card-h)}
 .empty{text-align:center;padding:30px;color:var(--tx-m);font-size:.78rem}
 .refresh-bar{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--bd);padding:8px 20px;text-align:center;font-size:.68rem;color:var(--tx-m);display:flex;align-items:center;justify-content:center;gap:10px}
 .refresh-btn{background:none;border:1px solid var(--bd);border-radius:6px;padding:4px 12px;font-size:.68rem;color:var(--tx-s);cursor:pointer;font-family:inherit}
-.refresh-btn:hover{background:var(--card-h);border-color:var(--ac);color:var(--ac)}
+.refresh-btn:hover{background:var(--card-h);border-color:var(--ac);color:var(--ac-ink)}
 .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:500}
 .overlay.show{display:block}
 .modal{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:22px;width:92%;max-width:600px;z-index:501;box-shadow:var(--sh2);cursor:default}
@@ -60,12 +60,12 @@ tr:hover td{background:var(--card-h)}
 @media(max-width:768px){.rep-grid,.rep-grid-wide{display:flex;flex-direction:column;gap:14px}.rep-grid .tw{overflow-x:auto;width:100%}.rep-grid .tw table{min-width:100%}}
 @media(max-width:600px){.cards{grid-template-columns:repeat(2,1fr)}.wrap{padding:16px 12px 70px}.rep-grid .tw{width:100%}}
 .sec-head{margin-bottom:16px}
-.sec-head h4{font-size:.92rem;color:var(--ac);margin:0 0 4px;font-weight:600}
-.sec-head p{font-size:.72rem;color:var(--tx-m);margin:0}
+.sec-head h4{font-size:.92rem;color:var(--ac-ink);margin:0 0 4px;font-weight:600}
+.sec-head p{font-size:.8rem;color:var(--tx-m);margin:0}
 .btn{padding:7px 16px;border-radius:6px;border:1px solid var(--bd);background:var(--card);color:var(--tx);font-family:inherit;font-size:.78rem;cursor:pointer;white-space:nowrap}
 .btn:hover{background:var(--card-h)}
-.btn.p{background:var(--ac);color:#fff;border-color:var(--ac);font-weight:600}
-.btn.p:hover{background:var(--ac-h)}
+.btn.p{background:var(--ac-ink);color:#fff;border-color:var(--ac-ink);font-weight:600}
+.btn.p:hover{background:#765710}
 .btn.s{padding:4px 10px;font-size:.7rem}
 .btn.d{color:var(--rd);border-color:var(--rd);background:rgba(199,84,80,.06)}
 .btn.d:hover{background:rgba(199,84,80,.12)}
@@ -208,7 +208,7 @@ function showPurDay(date){
 
     var h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
     h+='<h3 style="margin:0">'+dateLabel+' 采购明细</h3>';
-    h+='<span style="font-size:.95rem;font-weight:700;color:var(--ac)">¥'+fmtC(total)+'</span></div>';
+    h+='<span style="font-size:.95rem;font-weight:700;color:var(--ac-ink)">¥'+fmtC(total)+'</span></div>';
 
     // 按来源分组
     var groups={};allItems.forEach(function(item){
@@ -216,7 +216,7 @@ function showPurDay(date){
         groups[item.source].push(item)});
     Object.keys(groups).forEach(function(src){
         var srcTotal=groups[src].reduce(function(s,i){return s+i.total},0);
-        h+='<div style="font-size:.78rem;font-weight:600;color:var(--ac);margin:12px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--bd-l)">'+src+' · ¥'+fmtC(srcTotal)+'</div>';
+        h+='<div style="font-size:.78rem;font-weight:600;color:var(--ac-ink);margin:12px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--bd-l)">'+src+' · ¥'+fmtC(srcTotal)+'</div>';
         h+='<div class="tw" style="margin-bottom:8px"><table><tr><th>商品</th><th>区域</th><th class="nr">数量</th><th class="nr">单价</th><th class="nr">金额</th></tr>';
         groups[src].forEach(function(item){
             h+='<tr><td>'+item.name+'</td><td>'+item.section+'</td><td class="nr">'+item.qty+' '+(item.unit||'')+'</td><td class="nr">'+fmt(item.unitPrice)+'</td><td class="nr" style="font-weight:600">'+fmtC(item.total)+'</td></tr>'});

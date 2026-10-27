@@ -449,8 +449,9 @@ function initA11yEnhancements(root) {
     scope.querySelectorAll('button').forEach(function(button) {
         var text = (button.textContent || '').trim();
         if (!text && !button.getAttribute('aria-label')) button.setAttribute('aria-label', button.title || '操作按钮');
-        if (/^[×✕✕☰‹›◀▶]+$/.test(text) && !button.getAttribute('aria-label')) {
-            button.setAttribute('aria-label', text === '×' ? '删除' : text === '☰' ? '打开导航' : '切换');
+        if (/^[×✕☰‹›◀▶]+$/.test(text) && !button.getAttribute('aria-label')) {
+            var symbolLabel = text === '☰' ? '打开导航' : /^[‹◀]+$/.test(text) ? '上一个' : /^[›▶]+$/.test(text) ? '下一个' : '删除';
+            button.setAttribute('aria-label', symbolLabel);
         }
     });
 
