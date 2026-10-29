@@ -47,7 +47,7 @@ function defaultInventoryTypeDefinitions() {
     ].map(function(type) {
         return Object.assign(type, {
             archived: false, deleted: false, dailyLink: true,
-            actions: { add: true, inbound: true, sale: true, adjust: false, loss: false }
+            actions: { add: true, inbound: true, sale: true, return: true, adjust: false, loss: false }
         });
     });
 }
@@ -90,6 +90,7 @@ function normalizeInventoryTypeDefinitions(value, legacyTypes, legacyCustom) {
                 add: actions.add !== false,
                 inbound: actions.inbound !== false,
                 sale: actions.sale !== false,
+                return: actions.return !== false,
                 adjust: actions.adjust === true,
                 loss: actions.loss === true
             }

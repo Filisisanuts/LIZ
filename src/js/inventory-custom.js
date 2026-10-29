@@ -1,6 +1,6 @@
 // 账号自定义库存类型。旧四类由原库存页继续处理，新类型使用统一流水。
 var _inventoryCustomMonth = curYM();
-var INVENTORY_ACTION_LABELS = { add: '添加物品', inbound: '入库', sale: '销售', adjust: '盘点调整', loss: '报损' };
+var INVENTORY_ACTION_LABELS = { add: '添加物品', inbound: '入库', sale: '销售', return: '退货', adjust: '盘点调整', loss: '报损' };
 
 function inventoryHtml(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, function(char) {
@@ -128,7 +128,7 @@ function createInventoryType() {
     if (types.some(function(type) { return !type.deleted && type.name === name; })) { toast('类型名称已存在'); return; }
     var id = 'inv_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
     types.push({ id: id, name: name, preset: 'generic', legacyCategory: '', archived: false, deleted: false,
-        dailyLink: false, actions: { add: true, inbound: true, sale: true, adjust: false, loss: false } });
+        dailyLink: false, actions: { add: true, inbound: true, sale: true, return: true, adjust: false, loss: false } });
     if (!inventorySaveTypeDefinitions(types)) return;
     closeModal();
     goPage('inventory_type_' + id);
@@ -141,7 +141,7 @@ function editInventoryType(typeId) {
     h += '<div class="hrow"><label for="inventoryTypeName">名称</label><input id="inventoryTypeName" class="inp" maxlength="30" value="' + inventoryHtml(type.name) + '"></div>';
     h += '<div class="section-label">可用操作</div><div class="inventory-action-checks">';
     Object.keys(INVENTORY_ACTION_LABELS).filter(function(key) {
-        return type.preset === 'generic' || ['add', 'inbound', 'sale'].indexOf(key) >= 0;
+        return type.preset === 'generic' || ['add', 'inbound', 'sale', 'return'].indexOf(key) >= 0;
     }).forEach(function(key) {
         h += '<label><input type="checkbox" data-inventory-action="' + key + '"' + (type.actions[key] ? ' checked' : '') + '> ' + INVENTORY_ACTION_LABELS[key] + '</label>';
     });
@@ -255,6 +255,7 @@ function rCustomInventory(typeId) {
     h += '<div class="brow inventory-action-bar">';
     if (type.actions.inbound) h += '<button class="btn" onclick="showInventoryTransaction(\'' + typeId + '\',\'inbound\')">入库</button>';
     if (type.actions.sale) h += '<button class="btn p" onclick="showInventoryTransaction(\'' + typeId + '\',\'sale\')">销售</button>';
+    if (type.actions.return) h += '<button class="btn" onclick="showInventoryTransaction(\'' + typeId + '\',\'return\')">退货</button>';
     if (type.actions.adjust) h += '<button class="btn" onclick="showInventoryTransaction(\'' + typeId + '\',\'adjust\')">盘点调整</button>';
     if (type.actions.loss) h += '<button class="btn" onclick="showInventoryTransaction(\'' + typeId + '\',\'loss\')">报损</button>';
     h += '</div>';
@@ -262,7 +263,7 @@ function rCustomInventory(typeId) {
         h += '<div class="tw tw-viewport-scroll"><table><tr><th>日期</th><th>物品</th><th>类型</th><th>数量</th><th>金额</th><th>成本</th><th>毛利</th><th>操作</th></tr>';
         stats.rows.forEach(function(row) {
             var entry = row.entry;
-            var kind = { inbound: '入库', sale: '销售', adjust: '盘点调整', loss: '报损' }[entry.kind] || entry.kind;
+            var kind = { inbound: '入库', sale: '销售', return: '退货', adjust: '盘点调整', loss: '报损' }[entry.kind] || entry.kind;
             var rowActionName = inventoryHtml((row.item.name || '物品') + ' ' + (entry.date || '未知日期') + ' ' + kind);
             var qty = Number(entry.qty) || 0;
             var cost = entry.kind === 'sale' ? fmtC(row.result.cost) + (row.result.pendingQty ? ' · 待结转 ' + row.result.pendingQty + inventoryHtml(row.item.unit) : '') : '—';
@@ -379,24 +380,27 @@ function showInventoryTransaction(typeId, kind, itemId, transactionId) {
     var item = itemId ? items.find(function(entry) { return entry.id === itemId; }) : items[0];
     if (!item) return;
     var transaction = transactionId ? (item.transactions || []).find(function(entry) { return entry.id === transactionId; }) : null;
-    var title = { inbound: '入库', sale: '销售', adjust: '盘点调整', loss: '报损' }[kind];
+    var title = { inbound: '入库', sale: '销售', return: '退货', adjust: '盘点调整', loss: '报损' }[kind];
     if (!title) return;
     var h = '<h3>' + (transaction ? '编辑' : '') + title + '</h3><div class="hrow"><label for="inventoryTxnItem">物品</label>';
     if (transaction) h += '<span>' + inventoryHtml(item.name) + '</span>';
     else {
-        h += '<select class="inp" id="inventoryTxnItem" onchange="inventoryPrefillSaleAmount()">';
+        h += '<select class="inp" id="inventoryTxnItem" onchange="inventoryPrefillSaleAmount(); inventoryUpdateReturnUnit()">';
         items.forEach(function(option) { h += '<option value="' + option.id + '"' + (option.id === item.id ? ' selected' : '') + '>' + inventoryHtml(option.name) + '</option>'; });
         h += '</select>';
     }
     h += '</div><div class="hrow"><label for="inventoryTxnDate">日期</label><input class="inp" id="inventoryTxnDate" type="date" value="' + inventoryHtml(transaction && transaction.date || td()) + '"></div>';
     h += '<div class="hrow"><label for="inventoryTxnQty">数量' + (kind === 'adjust' ? '（正数增加，负数减少）' : '') + '</label>';
-    h += '<input class="inp" id="inventoryTxnQty" type="number" step="any" value="' + inventoryHtml(transaction && transaction.qty || '') + '" oninput="inventoryPrefillSaleAmount()"></div>';
+    h += '<input class="inp" id="inventoryTxnQty" type="number" step="any" value="' + inventoryHtml(transaction && transaction.qty || '') + '" oninput="inventoryPrefillSaleAmount()">';
+    if (kind === 'return') h += '<span id="inventoryReturnUnit">' + inventoryHtml(item.unit || '个') + '</span>';
+    h += '</div>';
     if (kind === 'inbound' || kind === 'adjust') {
         var transactionCost = transaction && transaction.unitCost != null ? transaction.unitCost : (item.openingUnitCost || 0);
         h += '<div class="hrow"><label for="inventoryTxnCost">入库单价</label><input class="inp" id="inventoryTxnCost" type="number" min="0" step="0.01" value="' + inventoryHtml(transactionCost) + '"></div>';
     }
     if (kind === 'sale') h += '<div class="hrow"><label for="inventoryTxnAmount">实际销售金额</label><input class="inp" id="inventoryTxnAmount" type="number" min="0" step="0.01" data-item-id="' + item.id + '" value="' + inventoryHtml(transaction && transaction.amount || 0) + '" oninput="this.dataset.edited=\'true\'"></div>';
-    h += '<div class="hrow"><label for="inventoryTxnNote">备注</label><input class="inp" id="inventoryTxnNote" value="' + inventoryHtml(transaction && transaction.note || '') + '"></div>';
+    h += '<div class="hrow"><label for="inventoryTxnNote">' + (kind === 'return' ? '退货原因' : '备注') + '</label><input class="inp" id="inventoryTxnNote" value="' + inventoryHtml(transaction && transaction.note || '') + '"></div>';
+    if (kind === 'return') h += '<p class="inventory-help">仅更新库存；如需登记采购退款，请到采购页另行录入退货。</p>';
     h += '<div class="brow"><button class="btn p" onclick="saveInventoryTransaction(\'' + typeId + '\',\'' + kind + '\',\'' + item.id + '\',\'' + (transactionId || '') + '\')">保存</button>';
     h += '<button class="btn" onclick="closeModal()">取消</button></div>';
     showModal(h);
@@ -411,6 +415,23 @@ function inventoryPrefillSaleAmount() {
     amountInput.value = (Math.round((Number($id('inventoryTxnQty').value) || 0) * (Number(item.pricePerUnit) || 0) * 100) / 100).toFixed(2);
 }
 
+function inventoryUpdateReturnUnit() {
+    var unit = $id('inventoryReturnUnit');
+    var select = $id('inventoryTxnItem');
+    if (!unit || !select) return;
+    var item = (DB.inventoryCustomItems || []).find(function(entry) { return entry.id === select.value; });
+    unit.textContent = item && item.unit || '个';
+}
+
+function inventoryCustomAvailableAt(item, date, excludedTransactionId) {
+    if (item.openingStock === undefined || item.openingStock === null || String(item.openingStock).trim() === '' ||
+        !Number.isFinite(Number(item.openingStock))) return null;
+    var transactions = (item.transactions || []).filter(function(entry) {
+        return entry.date && entry.date <= date && (!excludedTransactionId || entry.id !== excludedTransactionId);
+    });
+    return inventoryLedger(Object.assign({}, item, { transactions: transactions })).stock;
+}
+
 function saveInventoryTransaction(typeId, kind, initialItemId, transactionId) {
     if (typeof requireAuth === 'function' && !requireAuth()) return;
     if (!transactionId && !inventoryOperationEnabled(typeId, kind)) { toast('此操作已关闭'); return; }
@@ -423,9 +444,14 @@ function saveInventoryTransaction(typeId, kind, initialItemId, transactionId) {
     var qty = Number($id('inventoryTxnQty').value);
     var cost = $id('inventoryTxnCost') ? Number($id('inventoryTxnCost').value) : 0;
     var amount = $id('inventoryTxnAmount') ? Number($id('inventoryTxnAmount').value) : 0;
-    if (!item || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(qty) ||
+    if (!item || !inventoryValidDate(date) || !Number.isFinite(qty) ||
         (kind === 'adjust' ? qty === 0 : qty <= 0) || !Number.isFinite(cost) || cost < 0 || !Number.isFinite(amount) || amount < 0) {
         toast('请填写有效日期、数量和金额'); return;
+    }
+    if (kind === 'return') {
+        var available = inventoryCustomAvailableAt(item, date, transactionId);
+        if (available === null) { toast('无法确认退货日期的期初库存，请先补录'); return; }
+        if (qty > available + 0.000001) { toast('退货数量不能超过当日可用库存 ' + available + (item.unit || '个')); return; }
     }
     upd(function(db) {
         var target = db.inventoryCustomItems.find(function(entry) { return entry.id === itemId && entry.typeId === typeId; });

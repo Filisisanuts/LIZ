@@ -42,10 +42,10 @@ function inventoryLedger(item) {
         var result = { cost: 0, pendingQty: 0, amount: Number(entry.amount) || 0 };
         if (kind === 'inbound' || (kind === 'adjust' && qty > 0)) {
             receive(qty, Number(entry.unitCost) || 0);
-        } else if (kind === 'sale' || kind === 'loss' || (kind === 'adjust' && qty < 0)) {
+        } else if (kind === 'sale' || kind === 'return' || kind === 'loss' || (kind === 'adjust' && qty < 0)) {
             result = consume(Math.abs(qty));
-            result.amount = Number(entry.amount) || 0;
-            result.profit = result.pendingQty > 0 ? null : Math.round((result.amount - result.cost) * 100) / 100;
+            result.amount = kind === 'sale' ? Number(entry.amount) || 0 : 0;
+            if (kind === 'sale') result.profit = result.pendingQty > 0 ? null : Math.round((result.amount - result.cost) * 100) / 100;
         }
         results[entry.id] = result;
     });

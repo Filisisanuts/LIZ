@@ -57,7 +57,7 @@ export interface AppConfig {
     archived: boolean;
     deleted: boolean;
     dailyLink: boolean;
-    actions: { add: boolean; inbound: boolean; sale: boolean; adjust: boolean; loss: boolean };
+    actions: { add: boolean; inbound: boolean; sale: boolean; return: boolean; adjust: boolean; loss: boolean };
   }>;
 
   // 工资模板与部门

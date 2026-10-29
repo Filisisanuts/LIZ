@@ -111,6 +111,7 @@ function rInv(type, customCategory, displayName, unclassifiedOnly) {
     if (activeType && activeType.actions.add) h += '<button class="btn" onclick="showAddInv(\'' + type + '\')">+添加</button> ';
     if (activeType && activeType.actions.inbound) h += '<button class="btn" onclick="invMoveAll(\'' + type + '\',1)">入库</button> ';
     if (activeType && activeType.actions.sale) h += '<button class="btn" onclick="invMoveAll(\'' + type + '\',-1)">销售</button>';
+    if (activeType && activeType.actions.return) h += ' <button class="btn" onclick="showInvReturn(\'' + type + '\')">退货</button>';
     h += ' <button class="btn" onclick="showInventoryTypeManager()">类型设置</button>';
     if (type === 'other') h += ' <button class="btn p" onclick="showExchangeModal()">🎰兑换</button> <button class="btn" onclick="showExchangeList()">📋兑奖明细</button>';
     h += '</div>';
@@ -633,8 +634,7 @@ function invDetail(type, itemId) {
     var totalIn = 0, totalOut = 0;
     allRecords.forEach(function(r) {
         if (r.kind === 'sale') totalOut += r.actual;
-        else if (r.data.qty >= 0) totalIn += r.data.cost || 0;
-        else totalOut += r.data.cost || 0;
+        else if (r.kind === 'move' && r.data.qty >= 0) totalIn += r.data.cost || 0;
     });
 
     h += '<div style="display:flex;gap:8px;margin-bottom:10px">';
@@ -660,8 +660,8 @@ function invDetail(type, itemId) {
             }
             h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;margin-bottom:4px;background:var(--card-h);border:1px solid var(--bd-l);border-radius:6px">';
             h += '<div style="flex:1;min-width:0">';
-            h += '<span style="font-size:.72rem;font-weight:600;padding:1px 4px;border-radius:3px;background:' + (r.kind === 'sale' ? 'var(--ac)' : 'var(--gn)') + ';color:#fff;margin-right:4px">' + (r.kind === 'sale' ? '售' : '入') + '</span>';
-            h += '<span style="font-size:.6rem;color:var(--tx-m);background:var(--card);border:1px solid var(--bd-l);border-radius:3px;padding:1px 4px;margin-right:4px">' + (r.source || '') + '</span>';
+            h += '<span style="font-size:.72rem;font-weight:600;padding:1px 4px;border-radius:3px;background:' + (r.kind === 'return' ? 'var(--rd)' : r.kind === 'sale' ? 'var(--ac)' : 'var(--gn)') + ';color:#fff;margin-right:4px">' + (r.kind === 'return' ? '退' : r.kind === 'sale' ? '售' : '入') + '</span>';
+            h += '<span style="font-size:.6rem;color:var(--tx-m);background:var(--card);border:1px solid var(--bd-l);border-radius:3px;padding:1px 4px;margin-right:4px">' + axEscapeHtml(r.source || '') + '</span>';
             if (r.kind === 'sale') {
                 if (type === 'tea') h += '<span style="font-size:.72rem;color:var(--tx-m)">' + (r.data.cups || 0) + '杯 · ' + (r.data.pots || 0) + '壶</span>';
                 else h += '<span style="font-size:.72rem;color:var(--tx-m)">' + (r.data.qty || 0) + unit + '</span>';
@@ -670,9 +670,9 @@ function invDetail(type, itemId) {
             }
             h += '</div>';
             h += '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0">';
-            h += '<span style="font-size:.82rem;font-weight:700;color:' + (r.kind === 'sale' ? 'var(--ac)' : 'var(--gn)') + '">¥' + fmtC(r.kind === 'sale' ? r.actual : Math.abs(r.data.cost || 0)) + '</span>';
-            h += '<button class="btn s" style="font-size:.65rem;padding:2px 8px" onclick="editInvRow(\'' + type + '\',\'' + item.id + '\',\'' + r.kind + '\',' + r.idx + ',\'' + unit + '\')">编</button>';
-            h += '<button class="btn s d" style="font-size:.65rem;padding:2px 8px" onclick="delInvRow(\'' + type + '\',\'' + item.id + '\',\'' + r.kind + '\',' + r.idx + ')">删</button>';
+            if (r.kind !== 'return') h += '<span style="font-size:.82rem;font-weight:700;color:' + (r.kind === 'sale' ? 'var(--ac)' : 'var(--gn)') + '">¥' + fmtC(r.kind === 'sale' ? r.actual : Math.abs(r.data.cost || 0)) + '</span>';
+            h += '<button class="btn s" style="font-size:.65rem;padding:2px 8px" onclick="editInvRow(\'' + type + '\',\'' + item.id + '\',\'' + (r.kind === 'sale' ? 'sale' : 'move') + '\',' + r.idx + ',\'' + unit + '\')">编</button>';
+            h += '<button class="btn s d" style="font-size:.65rem;padding:2px 8px" onclick="delInvRow(\'' + type + '\',\'' + item.id + '\',\'' + (r.kind === 'sale' ? 'sale' : 'move') + '\',' + r.idx + ')">删</button>';
             h += '</div></div>';
         });
     }
@@ -690,7 +690,7 @@ function buildRecords(item, type, ym) {
     // 查找对应日期的手动出库备注
     var manualNotes = {};
     (item.purchases || []).forEach(function(p) {
-        if (p.qty < 0 && p.source !== '日报' && p.date.startsWith(ym)) {
+        if (p.qty < 0 && p.kind !== 'return' && p.source !== '日报' && p.date.startsWith(ym)) {
             manualNotes[p.date] = p.reason || p.source || '手动';
         }
     });
@@ -717,6 +717,8 @@ function buildRecords(item, type, ym) {
         if (m.source === '日报') return;
         if (m.qty >= 0) {
             allRecords.push({ date: m.date, kind: 'move', idx: idx, data: m, source: m.source || '', expected: 0, actual: m.cost || 0 });
+        } else if (m.kind === 'return') {
+            allRecords.push({ date: m.date, kind: 'return', idx: idx, data: m, source: m.reason || m.source || '退货', expected: 0, actual: 0 });
         } else if (!saleDates[m.date]) {
             allRecords.push({ date: m.date, kind: 'sale', idx: idx, data: { qty: Math.abs(m.qty), amount: 0 }, source: m.reason || m.source || '手动', expected: 0, actual: 0 });
         }
@@ -796,7 +798,7 @@ function renderBuyDetail(item, type, ym, unit) {
     // 合并出入库+销售记录
     var allRows = [];
     moves.forEach(function(m) {
-        allRows.push({ date: m.date, type: m.qty >= 0 ? '入库' : '出库', qty: Math.abs(m.qty), reason: m.source || '-', cost: m.cost || 0, amount: 0, rowType: 'move', ref: (item.purchases || []).indexOf(m) });
+        allRows.push({ date: m.date, type: m.qty >= 0 ? '入库' : m.kind === 'return' ? '退货' : '出库', qty: Math.abs(m.qty), reason: m.kind === 'return' ? m.reason || m.source || '退货' : m.source || '-', cost: m.cost || 0, amount: 0, rowType: 'move', ref: (item.purchases || []).indexOf(m) });
     });
     sales.forEach(function(s) {
         var qty = 0, exp = 0;
@@ -828,7 +830,7 @@ function renderBuyDetail(item, type, ym, unit) {
         h += '<tr><td>' + r.date + '</td>';
         h += '<td><span class="badge ' + color + '">' + r.type + '</span></td>';
         h += '<td class="nr">' + r.qty + u + '</td>';
-        h += '<td style="font-size:.72rem">' + r.reason + '</td>';
+        h += '<td style="font-size:.72rem">' + axEscapeHtml(r.reason) + '</td>';
         if (r.type === '销售') {
             h += '<td class="nr">' + fmtC(r.expected || 0) + '</td>';
             h += '<td class="nr" style="color:var(--gn)">' + fmtC(r.amount || 0) + '</td>';
@@ -840,7 +842,7 @@ function renderBuyDetail(item, type, ym, unit) {
         h += '<button class="btn s d" onclick="delInvRow(\'' + type + '\',\'' + item.id + '\',\'' + r.rowType + '\',' + r.ref + ')">×</button></td></tr>';
 
         if (r.type === '入库') totalIn += r.qty;
-        else if (r.type === '出库') totalOut += r.qty;
+        else if (r.type === '出库' || r.type === '退货') totalOut += r.qty;
         else if (r.type === '销售') { totalSale += r.qty; totalExp += (r.expected || 0); totalAmt += (r.amount || 0); }
     });
 
@@ -863,14 +865,20 @@ function editInvRow(type, itemId, rowType, idx, unit) {
         // 编辑出入库
         var m = item.purchases[idx];
         if (!m) return;
-        var h = '<h3>编辑出入库</h3>';
+        if (m.kind === 'return' && inventoryLegacyReturnMonthClosed(item, m.date)) { toast('该月已结转，请先核对盘存，不能直接改动退货流水'); return; }
+        var isReturn = m.kind === 'return';
+        var h = '<h3>' + (isReturn ? '编辑退货' : '编辑出入库') + '</h3>';
         h += '<div class="hrow"><label>日期</label><input class="inp" id="eir_date" type="text" readonly placeholder="选择日期" value="' + m.date + '" onclick="_dpOpen(\'eir_date\')" style="max-width:150px;cursor:pointer">';
-        h += '<label>类型</label><select class="inp" id="eir_dir" style="max-width:80px">';
-        h += '<option' + (m.qty >= 0 ? ' selected' : '') + '>入库</option>';
-        h += '<option' + (m.qty < 0 ? ' selected' : '') + '>出库</option></select></div>';
+        if (isReturn) h += '<label>类型</label><span>退货</span><input type="hidden" id="eir_dir" value="return"></div>';
+        else {
+            h += '<label>类型</label><select class="inp" id="eir_dir" style="max-width:80px">';
+            h += '<option' + (m.qty >= 0 ? ' selected' : '') + '>入库</option>';
+            h += '<option' + (m.qty < 0 ? ' selected' : '') + '>出库</option></select></div>';
+        }
         h += '<div class="hrow"><label>数量</label><input class="inp" id="eir_qty" type="number" step="any" style="max-width:100px" value="' + Math.abs(m.qty) + '">' + unit + '</div>';
-        h += '<div class="hrow"><label>来源</label><input class="inp" id="eir_src" value="' + (m.source || '') + '" style="max-width:160px">';
-        h += '<label>单价</label><input class="inp" id="eir_cost" type="number" step="0.01" value="' + (m.cost || 0) + '" style="max-width:100px">元</div>';
+        h += '<div class="hrow"><label>' + (isReturn ? '退货原因' : '来源') + '</label><input class="inp" id="eir_src" value="' + axEscapeHtml(isReturn ? m.reason || '' : m.source || '') + '" style="max-width:160px">';
+        if (!isReturn) h += '<label>单价</label><input class="inp" id="eir_cost" type="number" step="0.01" value="' + (m.cost || 0) + '" style="max-width:100px">元';
+        h += '</div>';
         h += '<div class="brow" style="margin-top:14px;justify-content:flex-end"><button class="btn p" onclick="doEditInvMove(\'' + type + '\',\'' + itemId + '\',' + idx + ')">保存</button>';
         h += '<button class="btn" onclick="closeModal()">取消</button></div>';
         showModal(h);
@@ -911,16 +919,28 @@ function calcEditTeaExp(itemId) {
 function doEditInvMove(type, itemId, idx) {
     var item = DB[INV[type].key].find(function(i) { return i.id === itemId; });
     if (!item || !item.purchases[idx]) return;
-    var qty = parseFloat($id('eir_qty').value) || 0;
+    var move = item.purchases[idx];
+    var qty = Number($id('eir_qty').value);
+    var date = $id('eir_date').value || td();
+    if (!Number.isFinite(qty) || qty <= 0 || !inventoryValidDate(date)) { toast('请填写有效日期和数量'); return; }
+    if (move.kind === 'return') {
+        if (inventoryLegacyReturnMonthClosed(item, move.date) || inventoryLegacyReturnMonthClosed(item, date)) { toast('该月已结转，请先核对盘存'); return; }
+        var available = inventoryLegacyAvailableAt(item, type, date, move.id);
+        if (available === null) { toast('无法确认退货日期的期初库存，请先补录'); return; }
+        if (qty > available + 0.000001) { toast('退货数量不能超过当日可用库存 ' + available); return; }
+    }
     var dir = $id('eir_dir').value === '入库' ? 1 : -1;
     upd(function(db) {
         var it = db[INV[type].key].find(function(i) { return i.id === itemId; });
         if (it && it.purchases[idx]) {
             it.purchases[idx].qty = qty * dir;
-            it.purchases[idx].date = $id('eir_date').value || td();
-            it.purchases[idx].source = $id('eir_src').value.trim();
-            var cost = parseFloat($id('eir_cost').value);
-            if (cost > 0) it.purchases[idx].cost = cost;
+            it.purchases[idx].date = date;
+            if (move.kind === 'return') it.purchases[idx].reason = $id('eir_src').value.trim();
+            else {
+                it.purchases[idx].source = $id('eir_src').value.trim();
+                var cost = parseFloat($id('eir_cost').value);
+                if (cost > 0) it.purchases[idx].cost = cost;
+            }
         }
     });
     closeModal();
@@ -979,6 +999,7 @@ function doEditInvSale(type, itemId, idx) {
 function delInvRow(type, itemId, rowType, idx) {
     var item = DB[INV[type].key].find(function(i) { return i.id === itemId; });
     if (!item) return;
+    if (rowType === 'move' && item.purchases[idx] && item.purchases[idx].kind === 'return' && inventoryLegacyReturnMonthClosed(item, item.purchases[idx].date)) { toast('该月已结转，请先核对盘存，不能直接删除退货流水'); return; }
     if (!confirm('删除此条记录？')) return;
 
     if (rowType === 'move') {
@@ -1087,6 +1108,138 @@ function detBuyRefresh(type, itemId) {
 }
 
 // ------ 入库/销售操作 ------
+
+function inventoryValidDate(date) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+    var parsed = new Date(date + 'T00:00:00Z');
+    return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
+}
+
+function inventoryLegacyReturnMonthClosed(item, date) {
+    var month = String(date || '').slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(month)) return true;
+    var lastRollover = DB.settings && DB.settings._lastRollover || '';
+    return hasInventoryMonthValue(item.monthClosingStock, month) ||
+        hasInventoryMonthKey(item.monthOpeningStock, inventoryMonthShift(month, 1)) ||
+        !!(lastRollover && month < lastRollover);
+}
+
+function inventoryLegacyAvailableAt(item, type, date, excludedReturnId) {
+    var month = date.slice(0, 7);
+    var previousMonth = inventoryMonthShift(month, -1);
+    var opening = null;
+    if (hasInventoryMonthKey(item.monthOpeningStock, month)) {
+        if (hasInventoryMonthValue(item.monthOpeningStock, month)) opening = Number(item.monthOpeningStock[month]);
+    } else if (month === curYM() && item.openingStock !== undefined && item.openingStock !== null &&
+        String(item.openingStock).trim() !== '' && Number.isFinite(Number(item.openingStock))) {
+        opening = Number(item.openingStock);
+    } else if (hasInventoryMonthValue(item.monthClosingStock, previousMonth)) {
+        opening = Number(item.monthClosingStock[previousMonth]);
+    }
+    if (opening === null) return null;
+    var stock = opening;
+    (item.purchases || []).forEach(function(entry) {
+        if (entry.date && entry.date.slice(0, 7) === month && entry.date <= date &&
+            (!excludedReturnId || entry.id !== excludedReturnId)) {
+            stock += Number(entry.qty) || 0;
+        }
+    });
+    (item.sales || []).forEach(function(entry) {
+        if (!entry.date || entry.date.slice(0, 7) !== month || entry.date > date) return;
+        if (type === 'tea' || (type === 'other' && item.calcMode)) {
+            var pack = item.calcMode === 'pack';
+            stock -= (Number(entry.cups) || 0) * (pack ? Number(item.packsPerCup) || 0 : Number(item.gramsPerCup) || 0);
+            stock -= (Number(entry.pots) || 0) * (pack ? Number(item.packsPerPot) || 0 : Number(item.gramsPerPot) || 0);
+        } else stock -= Number(entry.qty) || 0;
+    });
+    return Math.round(stock * 1000000) / 1000000;
+}
+
+function inventoryLegacyReturnUnit(type, item) {
+    if (type === 'tea') return item.calcMode === 'pack' ? '包' : '克';
+    if (type === 'cig') return '包';
+    if (type === 'alc') return '瓶';
+    return item.unit || (item.calcMode === 'pack' ? '包' : item.calcMode === 'gram' ? '克' : '个');
+}
+
+function inventoryLegacyReturnQuantity(type, item, qty, unit) {
+    var converted = qty;
+    if (type === 'tea' && item.calcMode !== 'pack' && unit === '斤') converted *= 500;
+    if (type === 'cig' && unit === '条') converted *= Number(item.purchaseConvRatio) || 10;
+    if (type === 'alc' && unit === '箱') converted *= Number(item.purchaseConvRatio) || 12;
+    return Math.round(converted * 1000000) / 1000000;
+}
+
+function showInvReturn(type) {
+    var currentType = inventoryCurrentLegacyType(type);
+    if (!currentType || !inventoryOperationEnabled(currentType.id, 'return')) { toast('此操作已关闭'); return; }
+    var items = (DB[INV[type].key] || []).filter(function(item) {
+        if (type === 'other' && _curPage === 'inventory_unclassified' && inventoryUnclassifiedLegacyItems().indexOf(item) < 0) return false;
+        if (type === 'other' && currentType.preset === 'other-category' && item.category !== currentType.legacyCategory) return false;
+        return inventoryLegacyActionEnabled(type, item, 'return');
+    });
+    if (!items.length) { toast('请先添加可退货的物品'); return; }
+    var h = '<h3>库存退货</h3><div class="hrow"><label for="irItem">物品</label><select class="inp" id="irItem" onchange="updateInvReturnFields(\'' + type + '\')">';
+    items.forEach(function(item) { h += '<option value="' + axEscapeHtml(item.id) + '">' + axEscapeHtml(item.name) + '</option>'; });
+    h += '</select></div><div class="hrow"><label for="irDate">退货日期</label><input class="inp" id="irDate" type="text" readonly value="' + td() + '" onclick="_dpOpen(\'irDate\')" onchange="updateInvReturnFields(\'' + type + '\')" style="max-width:150px;cursor:pointer"></div>';
+    h += '<div class="hrow"><label for="irQty">退货数量</label><input class="inp" id="irQty" type="number" min="0" step="any" style="max-width:120px"><span id="irUnitArea"></span></div>';
+    h += '<div class="hrow"><label for="irReason">退货原因</label><input class="inp" id="irReason" maxlength="200"></div>';
+    h += '<p class="inventory-help" id="irAvailable"></p><p class="inventory-help">仅更新库存；如需登记采购退款，请到采购页另行录入退货。</p>';
+    h += '<div class="brow" style="justify-content:flex-end"><button class="btn p" onclick="saveInvReturn(\'' + type + '\')">确认退货</button><button class="btn" onclick="closeModal()">取消</button></div>';
+    showModal(h);
+    updateInvReturnFields(type);
+}
+
+function updateInvReturnFields(type) {
+    var itemId = $id('irItem') && $id('irItem').value;
+    var item = (DB[INV[type].key] || []).find(function(entry) { return entry.id === itemId; });
+    if (!item) return;
+    var unit = inventoryLegacyReturnUnit(type, item);
+    var options = [unit];
+    if (type === 'tea' && unit === '克') options.push('斤');
+    if (type === 'cig') options.push('条');
+    if (type === 'alc') options.push('箱');
+    $id('irUnitArea').innerHTML = options.length === 1 ? axEscapeHtml(unit) :
+        '<select class="inp" id="irUnit" aria-label="退货单位" style="max-width:80px">' +
+        options.map(function(option) { return '<option value="' + option + '">' + option + '</option>'; }).join('') + '</select>';
+    var date = $id('irDate').value;
+    var available = inventoryValidDate(date) && !inventoryLegacyReturnMonthClosed(item, date) ? inventoryLegacyAvailableAt(item, type, date) : null;
+    $id('irAvailable').textContent = inventoryLegacyReturnMonthClosed(item, date) ? '该月已结转，请先核对盘存' :
+        available === null ? '该日期的期初库存无法确认，请先补录' : '当日可用库存：' + available + unit;
+}
+
+function saveInvReturn(type) {
+    if (typeof requireAuth === 'function' && !requireAuth()) return;
+    var currentType = inventoryCurrentLegacyType(type);
+    var itemId = $id('irItem') && $id('irItem').value;
+    var item = (DB[INV[type].key] || []).find(function(entry) { return entry.id === itemId; });
+    if (!item || !currentType || !inventoryOperationEnabled(currentType.id, 'return') || !inventoryLegacyActionEnabled(type, item, 'return') ||
+        (type === 'other' && currentType.preset === 'other-category' && item.category !== currentType.legacyCategory) ||
+        (type === 'other' && _curPage === 'inventory_unclassified' && inventoryUnclassifiedLegacyItems().indexOf(item) < 0)) { toast('此操作已关闭'); return; }
+    var date = $id('irDate').value;
+    var rawQty = Number($id('irQty').value);
+    if (!inventoryValidDate(date) || !Number.isFinite(rawQty) || rawQty <= 0) { toast('请填写有效日期和退货数量'); return; }
+    if (inventoryLegacyReturnMonthClosed(item, date)) { toast('该月已结转，请先核对盘存，不能直接新增退货流水'); return; }
+    var unit = $id('irUnit') ? $id('irUnit').value : inventoryLegacyReturnUnit(type, item);
+    var baseUnit = inventoryLegacyReturnUnit(type, item);
+    if (unit !== baseUnit && !(type === 'tea' && baseUnit === '克' && unit === '斤') &&
+        !(type === 'cig' && unit === '条') && !(type === 'alc' && unit === '箱')) { toast('退货单位无效'); return; }
+    var qty = inventoryLegacyReturnQuantity(type, item, rawQty, unit);
+    if (!Number.isFinite(qty) || qty <= 0) { toast('请填写有效退货数量'); return; }
+    var available = inventoryLegacyAvailableAt(item, type, date);
+    if (available === null) { toast('无法确认退货日期的期初库存，请先补录'); return; }
+    if (qty > available + 0.000001) { toast('退货数量不能超过当日可用库存 ' + available + inventoryLegacyReturnUnit(type, item)); return; }
+    var reason = String($id('irReason').value || '').trim();
+    upd(function(db) {
+        var target = (db[INV[type].key] || []).find(function(entry) { return entry.id === itemId; });
+        if (!target.purchases) target.purchases = [];
+        target.purchases.push({ id: 'iret_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7),
+            kind: 'return', date: date, qty: -qty, source: '库存退货', reason: reason });
+    });
+    closeModal();
+    toast('已登记库存退货 ' + rawQty + unit);
+    rInv(type);
+}
 
 // 批量入库/销售弹窗（选择物品+填写数量）
 function invMoveAll(type, dir) {
