@@ -13,14 +13,14 @@ function goPage(name) {
     localStorage.setItem('ax_lastPage', name);
     document.querySelectorAll('.toolbar-btn').forEach(function(b) {
         b.classList.toggle('active', b.dataset.page === name);
+        if (b.dataset.page === name) b.setAttribute('aria-current', 'page');
+        else b.removeAttribute('aria-current');
     });
 
     // 移动端自动收起侧边栏
     var toolbar = $id('toolbar');
     if (toolbar && toolbar.classList.contains('open')) {
-        toolbar.classList.remove('open');
-        $id('toolbarMask').classList.remove('open');
-        document.body.style.overflow = '';
+        setToolbarOpen(false, true);
     }
 
     if (name.startsWith('inventory_type_')) {
@@ -82,8 +82,20 @@ var _salaryDetailPeriod = '';
 var _salaryImageImportState = null;
 var _salaryImagePasteHandler = null;
 var SALARY_TRASH_RETENTION_DAYS = 30;
+var _salaryCalculationFields = null;
+var _salarySummaryRows = new Map();
+var _salarySummarySchema = '';
+
+// 配置快照仅在一次同步计算中有效，结束即释放，避免配置编辑后读取旧值。
+function withSalaryCalculationFields(callback) {
+    if (_salaryCalculationFields) return callback();
+    _salaryCalculationFields = salaryFieldDefinitions();
+    try { return callback(); }
+    finally { _salaryCalculationFields = null; }
+}
 
 function salaryFieldDefinitions() {
+    if (_salaryCalculationFields) return _salaryCalculationFields;
     return (getAppConfig().salaryFieldDefinitions || []).map(function(field) {
         return Object.assign({}, field, { key: field.id, numeric: field.type === 'number' });
     }).sort(function(a, b) { return a.order - b.order; });
@@ -181,9 +193,13 @@ function normalizeSalaryRow(row) {
     return result;
 }
 
-function cacheSalaryDraft() {
+function cacheSalaryDraft(changedRow) {
     if (!_salaryPeriod) return;
-    _salaryDrafts[_salaryPeriod] = cloneSalaryRows(_salaryTableData);
+    var draft = _salaryDrafts[_salaryPeriod];
+    var index = changedRow && draft && draft.length === _salaryTableData.length
+        ? draft.findIndex(function(row) { return row.id === changedRow.id; }) : -1;
+    if (index >= 0) draft[index] = Object.assign({}, changedRow);
+    else _salaryDrafts[_salaryPeriod] = cloneSalaryRows(_salaryTableData);
     _salaryDirtyPeriods[_salaryPeriod] = true;
 }
 
@@ -404,14 +420,42 @@ function renderSalaryTable() {
     if (window.axUI && window.axUI.initSelects) window.axUI.initSelects(body);
 }
 
-function updateSalarySummaries() {
+function updateSalarySummaries(changedRow) {
+    return withSalaryCalculationFields(function() {
+        updateSalarySummariesWithFields(changedRow);
+    });
+}
+
+function updateSalarySummariesWithFields(changedRow) {
+    var schema = JSON.stringify(salaryFieldDefinitions());
+    if (!changedRow || schema !== _salarySummarySchema) {
+        _salarySummaryRows.clear();
+        changedRow = null;
+    }
+    _salarySummarySchema = schema;
+    var numericFields = salaryAllNumericFields();
     _salaryTableData.forEach(function(row) {
+        if (row !== changedRow && _salarySummaryRows.has(row)) return;
+        var values = {};
+        numericFields.forEach(function(field) {
+            values[field.key] = field.category === 'computed' ? salaryCalculatedValue(row, field.key) : Number(row[field.key]) || 0;
+        });
+        _salarySummaryRows.set(row, values);
         document.querySelectorAll('[data-salary-computed="' + CSS.escape(row.id) + '"]').forEach(function(cell) {
-            cell.textContent = fmtC(salaryCalculatedValue(row, cell.dataset.salaryField));
+            cell.textContent = fmtC(values[cell.dataset.salaryField] || 0);
         });
     });
+    function cachedTotals(rows) {
+        var totals = {};
+        rows.forEach(function(row) {
+            var values = _salarySummaryRows.get(row);
+            numericFields.forEach(function(field) { totals[field.key] = (totals[field.key] || 0) + values[field.key]; });
+        });
+        return totals;
+    }
     salaryDepartments().forEach(function(department) {
-        var totals = calcSalaryTotals(salaryDepartmentRows(department));
+        if (changedRow && (String(changedRow.department || '').trim() || '未分部门') !== department) return;
+        var totals = cachedTotals(salaryDepartmentRows(department));
         document.querySelectorAll('[data-salary-subtotal="' + CSS.escape(department) + '"]').forEach(function(cell) {
             var field = cell.dataset.salaryField;
             cell.textContent = fmtC(totals[field] || 0);
@@ -419,7 +463,13 @@ function updateSalarySummaries() {
     });
     var foot = $id('salTableFoot');
     if (!foot) return;
-    var totals = calcSalaryTotals(_salaryTableData);
+    var totals = cachedTotals(_salaryTableData);
+    if (changedRow && foot.querySelector('[data-salary-total]')) {
+        foot.querySelectorAll('[data-salary-total]').forEach(function(cell) {
+            cell.textContent = fmtC(totals[cell.dataset.salaryTotal] || 0);
+        });
+        return;
+    }
     foot.replaceChildren();
     var tr = document.createElement('tr');
     tr.className = 'salary-grand-total';
@@ -435,6 +485,7 @@ function updateSalarySummaries() {
         var cell = document.createElement('td');
         if (field.numeric) {
             cell.className = 'nr';
+            cell.dataset.salaryTotal = field.key;
             cell.textContent = fmtC(totals[field.key]);
         } else {
             cell.className = 'salary-summary-spacer';
@@ -2077,11 +2128,11 @@ function updateSalaryRow(rowId, field, value) {
     var fieldDefinition = salaryInputFields(true).find(function(item) { return item.key === field; });
     if (!row || !fieldDefinition) return;
     row[field] = fieldDefinition.numeric ? (parseFloat(value) || 0) : value;
-    cacheSalaryDraft();
+    cacheSalaryDraft(row);
     if (field === 'department') {
         renderSalaryTable();
     } else {
-        updateSalarySummaries();
+        updateSalarySummaries(row);
         updateSalaryDraftState();
     }
 }
@@ -2897,7 +2948,7 @@ function renderNav() {
     if (isModuleEnabled('report')) reportPages.push({ id: 'report', icon: 'chart', label: '报表' });
     if (isModuleEnabled('brief')) reportPages.push({ id: 'gen', icon: 'send', label: '汇报' });
 
-    function renderGroup(pages, containerId) {
+    function renderGroup(pages, containerId, label) {
         var el = $id(containerId);
         if (!el) return;
         if (pages.length === 0) {
@@ -2906,22 +2957,31 @@ function renderNav() {
             return;
         }
         el.style.display = '';
+        el.setAttribute('role', 'group');
+        el.setAttribute('aria-label', label);
         el.innerHTML = pages.map(function(p) {
-            return '<button class="toolbar-btn" data-page="' + p.id + '" onclick="' + (p.action || ('goPage(\'' + p.id + '\')')) + '" title="' + inventoryHtml(p.label) + '">' +
+            return '<button type="button" class="toolbar-btn' + (p.action ? ' toolbar-btn-action' : '') + '" data-page="' + p.id + '" onclick="' + (p.action || ('goPage(\'' + p.id + '\')')) + '" title="' + inventoryHtml(p.label) + '" aria-label="' + inventoryHtml(p.label) + '">' +
                 '<span class="ticon">' + axIcon(p.icon, 'ax-icon--nav') + '</span>' +
-                '<span class="tlabel">' + inventoryHtml(p.label) + '</span>' +
+                '<span class="tlabel">' + inventoryHtml(p.id === 'inventory_add' ? '添加' : p.label) + '</span>' +
                 '</button>';
         }).join('');
     }
 
-    renderGroup(mainPages, 'toolbarMain');
-    renderGroup(invPages, 'toolbarInv');
-    renderGroup(whPages, 'toolbarWh');
-    renderGroup(reportPages, 'toolbarReport');
+    renderGroup(mainPages, 'toolbarMain', '日常经营');
+    renderGroup(invPages, 'toolbarInv', '物品库存');
+    renderGroup(whPages, 'toolbarWh', '仓库管理');
+    renderGroup(reportPages, 'toolbarReport', '数据分析');
+    $id('toolbar').setAttribute('aria-label', '主导航');
+    $id('toolbar').setAttribute('role', 'navigation');
+    $id('toolbar').inert = window.innerWidth <= 768 && !$id('toolbar').classList.contains('open');
+    $id('hamburger').setAttribute('aria-controls', 'toolbar');
+    $id('hamburger').setAttribute('aria-expanded', $id('toolbar').classList.contains('open') ? 'true' : 'false');
 
     var currentPage = localStorage.getItem('ax_lastPage') || _curPage || 'dash';
     document.querySelectorAll('.toolbar-btn').forEach(function(button) {
         button.classList.toggle('active', button.dataset.page === currentPage);
+        if (button.dataset.page === currentPage) button.setAttribute('aria-current', 'page');
+        else button.removeAttribute('aria-current');
     });
 }
 
@@ -2935,12 +2995,45 @@ function switchNav(btn) {
 
 // 切换侧边栏展开/收起
 function toggleToolbar() {
+    setToolbarOpen(!$id('toolbar').classList.contains('open'), true);
+}
+
+function setToolbarOpen(open, restoreFocus) {
     var toolbar = $id('toolbar');
     var mask = $id('toolbarMask');
-    toolbar.classList.toggle('open');
-    mask.classList.toggle('open');
-    document.body.style.overflow = toolbar.classList.contains('open') ? 'hidden' : '';
+    if (!toolbar || !mask) return;
+    toolbar.classList.toggle('open', open);
+    toolbar.inert = window.innerWidth <= 768 && !open;
+    mask.classList.toggle('open', open);
+    document.body.style.overflow = open ? 'hidden' : '';
+    var trigger = $id('hamburger');
+    if (trigger) {
+        trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+        trigger.setAttribute('aria-label', open ? '关闭导航菜单' : '打开导航菜单');
+    }
+    if (open) {
+        var selected = toolbar.querySelector('.toolbar-btn.active') || toolbar.querySelector('.toolbar-btn');
+        if (selected) selected.focus();
+    } else if (restoreFocus && trigger) trigger.focus();
 }
+
+document.addEventListener('keydown', function(event) {
+    var toolbar = $id('toolbar');
+    if (!toolbar || !toolbar.classList.contains('open')) return;
+    if ($id('modal') && $id('modal').classList.contains('show')) return;
+    if (event.key === 'Escape') { event.preventDefault(); setToolbarOpen(false, true); }
+    if (event.key !== 'Tab') return;
+    var buttons = Array.from(toolbar.querySelectorAll('button')).filter(function(button) { return button.getClientRects().length && !button.disabled; });
+    if (!buttons.length) return;
+    var first = buttons[0], last = buttons[buttons.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+});
+
+if (typeof window.addEventListener === 'function') window.addEventListener('resize', function() {
+    if (window.innerWidth > 768 && $id('toolbar') && $id('toolbar').classList.contains('open')) setToolbarOpen(false, false);
+    if ($id('toolbar')) $id('toolbar').inert = window.innerWidth <= 768 && !$id('toolbar').classList.contains('open');
+});
 
 // ---------- 刷新当前页面（同步后调用）----------
 function renderPage(page) {

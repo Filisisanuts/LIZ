@@ -1551,3 +1551,18 @@ html {
   .price-comparison-actions { justify-content:flex-start; }
   .price-comparison-actions .btn { flex:1; min-height:44px; }
 }
+
+/* 侧边导航回调：保留原分组卡片，修正文字空间与滚动条。 */
+.toolbar{scrollbar-width:none;-ms-overflow-style:none}
+.toolbar::-webkit-scrollbar{display:none;width:0;height:0}
+.toolbar-btn:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+.toolbar-btn.active{border-right:0}
+.toolbar-btn[data-page="inventory_add"]{justify-content:center;color:var(--tx-m)}
+.toolbar-btn[data-page="inventory_add"] .tlabel{font-weight:500}
+@media(max-width:768px){
+ .toolbar{width:140px;max-width:calc(100vw - 48px);overscroll-behavior:contain}
+ .toolbar-btn .tlabel{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .toolbar-btn .ticon{flex-shrink:0}
+ .toolbar-btn[data-page="inventory_add"]{justify-content:flex-start}
+}
+@media(prefers-reduced-motion:reduce){.toolbar,.toolbar-btn{transition:none}}
